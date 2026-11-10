@@ -230,11 +230,12 @@ void App::paletteDraw() {
         ImGui::SetKeyboardFocusHere();
     }
     const float addWidth = browsing ? 90.0f : 0.0f;
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - addWidth -
-                            (browsing ? ImGui::GetStyle().ItemSpacing.x : 0));
     const std::string before = p.query;
     bool enter = ui::TextField("##query", p.query,
-                               {.placeholder = hint, .flags = ImGuiInputTextFlags_EnterReturnsTrue});
+                               {.placeholder = hint,
+                                .width = ImGui::GetContentRegionAvail().x - addWidth -
+                                         (browsing ? ImGui::GetStyle().ItemSpacing.x : 0),
+                                .flags = ImGuiInputTextFlags_EnterReturnsTrue});
     if (p.query != before) {
         p.selected = 0;
     }

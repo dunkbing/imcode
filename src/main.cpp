@@ -13,6 +13,7 @@
 #include "mydear/themes.hpp"
 #include "mydear/title_bar.hpp"
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <ctime>
 #include <format>
@@ -219,7 +220,7 @@ void App::frame() {
         ImGui::TextColored(colors.subtext0, "%s  /",
                            std::filesystem::path(t.cwd).filename().string().c_str());
         ImGui::SameLine();
-        ImGui::TextUnformatted(t.title.empty() ? "New thread" : t.title.substr(0, 70).c_str());
+        ImGui::TextUnformatted(t.title.empty() ? "New thread" : t.title.substr(0, narrow ? 22 : 70).c_str());
         // at the right end, before the os's own buttons
         ImGui::SameLine();
         ImGui::SetCursorScreenPos(ImVec2(bar.pos.x + bar.size.x - bar.rightInset - 40,
@@ -297,6 +298,10 @@ void App::frame() {
             data.threads[current]->send(all.substr(at + 6, all.find(';', at + 1) - at - 6));
         }
         devOpenModels = frames == 40 && (all.find(";models;") != std::string::npos);
+        if (frames == 40 && all.find(";browse;") != std::string::npos) {
+            paletteOpen();
+            paletteGo("", data.projects.empty() ? "" : data.projects.front().cwd);
+        }
         if (frames == 40 && all.find(";term;") != std::string::npos) {
             toggleTerminal();
         }
@@ -316,6 +321,10 @@ int main() {
     config.title = "imcode";
     config.appName = "imcode";
     config.titleBar = true;
+    // IMCODE_WINDOW=<width>x<height>: the first window size (ui checks of narrow layouts)
+    if (const char* size = std::getenv("IMCODE_WINDOW")) {
+        std::sscanf(size, "%dx%d", &config.width, &config.height);
+    }
     static App app;
     // not mydear::Run: the app needs the shell for its texture upload (mydear#47)
     static mydear::App shell;
