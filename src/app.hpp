@@ -7,13 +7,14 @@
 #include "mydear/app.hpp"
 #include "ssh.hpp"
 #include "store.hpp"
+#include "terminal.hpp"
 #include <filesystem>
 #include <map>
 #include <string>
 #include <vector>
 
 // the window: onboarding, then a sidebar of threads and the open thread. one file per
-// screen part (onboarding.cpp, palette.cpp, sidebar.cpp, thread_view.cpp)
+// screen part (onboarding.cpp, palette.cpp, sidebar.cpp, thread_view.cpp, terminal_view.cpp)
 struct App : mydear::Delegate {
     mydear::App* shell = nullptr; // the window: uploads textures
     Store::Data data;
@@ -27,6 +28,11 @@ struct App : mydear::Delegate {
     bool sidebarOpen = false; // narrow windows (phones): the thread list covers the thread
     bool devOpenModels = false; // ui checks: open the model popup once
     std::string switchAgentTo; // picked in the model popup: applied after the frame's ui
+    // a shell per thread in its folder, started when its panel is first shown
+    std::map<const Thread*, std::unique_ptr<Terminal>> terminals;
+    bool terminalOpen = false;
+    bool focusTerminal = false;
+    float terminalSplit = 0.62f; // share of the height the chat keeps above the terminal
 
     // what is on this machine, looked up off the ui thread (the login shell is slow)
     struct Scan {
@@ -93,6 +99,9 @@ struct App : mydear::Delegate {
     void threadView(Thread& t);
     void transcriptItem(Thread& t, Item& item, int index, float width);
     void composer(Thread& t, float width);
+
+    void toggleTerminal();
+    void terminalPanel(Thread& t);
 };
 
 // "now", "5m", "2h", "3d"

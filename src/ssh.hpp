@@ -1,5 +1,6 @@
 #pragma once
 
+#include "pty.hpp"
 #include <acp/transport.hpp>
 #include <functional>
 #include <memory>
@@ -27,6 +28,8 @@ namespace Ssh {
         std::unique_ptr<acp::Transport> exec(const std::string& command,
                                              std::function<void(const std::string&)> onStderr,
                                              std::string& error);
+        // the login shell in a pty of that size, started in cwd (an absolute folder on the host)
+        std::unique_ptr<Pty> shell(int cols, int rows, const std::string& cwd, std::string& error);
         struct Impl;
         std::unique_ptr<Impl> impl;
     };

@@ -7,6 +7,7 @@
 #include "mydear/embedded.hpp"
 #include "mydear/fonts.hpp"
 #include "mydear/image.hpp"
+#include "mydear/splitter.hpp"
 #include "mydear/frames.hpp"
 #include "mydear/themes.hpp"
 #include "mydear/title_bar.hpp"
@@ -120,6 +121,7 @@ std::vector<const AcpAgentDef*> App::agentsOn() const {
 
 void App::dropDraft() {
     if (current >= 0 && data.threads[current]->title.empty()) {
+        terminals.erase(data.threads[current].get());
         data.threads.erase(data.threads.begin() + current); // stops its agent
         current = -1;
         save();
@@ -203,7 +205,7 @@ void App::frame() {
 
     const auto& colors = Theme::Current()->colors;
     const bool narrow = mydear::ContentRect().size.x < 720; // one pane at a time
-    mydear::BeginTitleBar();
+    const mydear::TitleBar bar = mydear::BeginTitleBar();
     if (data.onboarded && narrow) {
         if (mydear::SmallButton(ICON_FA_BARS)) {
             sidebarOpen = !sidebarOpen;
@@ -217,6 +219,17 @@ void App::frame() {
                            std::filesystem::path(t.cwd).filename().string().c_str());
         ImGui::SameLine();
         ImGui::TextUnformatted(t.title.empty() ? "New thread" : t.title.c_str());
+        // at the right end, before the os's own buttons
+        ImGui::SameLine();
+        ImGui::SetCursorScreenPos(ImVec2(bar.pos.x + bar.size.x - bar.rightInset - 40,
+                                         ImGui::GetCursorScreenPos().y));
+        if (mydear::SmallButton(ICON_FA_TERMINAL, terminalOpen ? mydear::ButtonVariant::Primary
+                                                               : mydear::ButtonVariant::Secondary)) {
+            toggleTerminal();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Terminal (Ctrl+`)");
+        }
     } else {
         ImGui::TextColored(colors.subtext0, "imcode"); // an empty bar asserts (mydear#45)
     }
@@ -239,7 +252,15 @@ void App::frame() {
         ImGui::BeginChild("thread", ImVec2(0, 0), 0,
                           narrow && list ? ImGuiWindowFlags_NoInputs : 0);
         if (current >= 0) {
-            threadView(*data.threads[current]);
+            Thread& t = *data.threads[current];
+            const float height = ImGui::GetContentRegionAvail().y;
+            ImGui::BeginChild("chat", ImVec2(0, terminalOpen ? height * terminalSplit : 0));
+            threadView(t);
+            ImGui::EndChild();
+            if (terminalOpen) {
+                mydear::Splitter("##terminal", &terminalSplit, height, 160, 80);
+                terminalPanel(t);
+            }
         } else if (ui::EmptyState(data.projects.empty() ? "No project yet" : "No thread open",
                                   data.projects.empty()
                                       ? "Add a folder on this machine, or on another one over ssh."
@@ -254,6 +275,11 @@ void App::frame() {
     if (data.onboarded && (io.KeySuper || io.KeyCtrl) && io.KeyShift &&
         ImGui::IsKeyPressed(ImGuiKey_P, false)) {
         paletteOpen(true);
+    }
+    // ctrl+`: the terminal of the open thread
+    if (data.onboarded && current >= 0 && (io.KeySuper || io.KeyCtrl) &&
+        ImGui::IsKeyPressed(ImGuiKey_GraveAccent, false)) {
+        toggleTerminal();
     }
     // ui checks: IMCODE_DEV="new;palette;actions;models;send:<text>" (any of them), each once
     if (const char* dev = std::getenv("IMCODE_DEV"); dev && data.onboarded) {
@@ -295,7 +321,8 @@ int main() {
     }
     shell.run();
     app.icons.clear();
-    // stop the agents while the loop they wake still exists, not during static teardown
+    // stop the shells and the agents while the loop they wake still exists, not during static teardown
+    app.terminals.clear();
     app.data.threads.clear();
     AcpHost::setWake(nullptr);
     shell.destroy();

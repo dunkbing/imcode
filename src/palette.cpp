@@ -4,6 +4,7 @@
 #include "mydear/components.hpp"
 #include "mydear/themes.hpp"
 #include <algorithm>
+#include <climits>
 #include <cstdlib>
 
 namespace Theme = mydear::Theme;
@@ -140,6 +141,7 @@ void App::paletteDraw() {
     const char* hint = "Search...";
     const char* heading = "Sources";
     std::vector<int> targets; // Actions: a project (>= 0) or thread (-2 - index) per row
+    constexpr int terminalRow = INT_MIN; // or the terminal toggle
     if (p.step == Palette::Step::Actions) {
         hint = "Search commands, projects, and threads...";
         heading = "Actions";
@@ -150,6 +152,9 @@ void App::paletteDraw() {
             }
         };
         offer({ICON_FA_FOLDER_PLUS, "Add project", "A folder here or on another machine"}, -1);
+        if (current >= 0) {
+            offer({ICON_FA_TERMINAL, "Toggle terminal", "A shell in this thread's folder"}, terminalRow);
+        }
         for (int i = 0; i < static_cast<int>(data.projects.size()); ++i) {
             const auto& project = data.projects[i];
             offer({ICON_FA_PEN_TO_SQUARE,
@@ -316,7 +321,9 @@ void App::paletteDraw() {
             p.focus = true;
         } else if (picked >= 0) {
             close = true;
-            if (targets[picked] >= 0) {
+            if (targets[picked] == terminalRow) {
+                toggleTerminal();
+            } else if (targets[picked] >= 0) {
                 newThread(targets[picked]);
             } else {
                 select(-2 - targets[picked]);

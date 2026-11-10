@@ -1,7 +1,8 @@
 // manual check against a real ssh server:
 //   imcode-ssh-check <host> <folder> <path of acp-echo-agent on the host>
-// connects, lists the folder over sftp, then runs one turn of a remote thread
+// connects, lists the folder over sftp, opens a shell there, then runs one turn of a remote thread
 #include "../src/ssh.hpp"
+#include "../src/terminal.hpp"
 #include "../src/thread.hpp"
 #include <chrono>
 #include <cstdio>
@@ -26,6 +27,22 @@ int main(int argc, char** argv) {
         std::printf("  %s\n", d.c_str());
     }
     if (dir.empty() || !err.empty()) {
+        return 1;
+    }
+
+    // a shell in a pty on the host: it starts in the folder and takes what is typed
+    Terminal shell([&](int c, int r, std::string& e) { return session->shell(c, r, dir, e); }, 200, 24);
+    shell.write("echo at:$PWD\r");
+    bool there = false;
+    for (int i = 0; i < 1000 && !there && !shell.ended(); ++i) {
+        shell.poll();
+        for (int y = 0; y < 24; ++y) {
+            there |= shell.rowText(y) == "at:" + dir;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    std::printf("shell in the folder: %s\n", there ? "yes" : "no");
+    if (!there) {
         return 1;
     }
 

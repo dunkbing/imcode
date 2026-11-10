@@ -106,7 +106,7 @@ One host per machine owns the agents and the threads; every screen is a client o
 - [ ] Diff view: what a turn changed, and the working tree against its base
 - [ ] Checkpoints as hidden git refs; revert the files of a turn
 - [ ] Commit, push, open a pull request
-- [ ] Terminal in the thread's folder, local or remote (libghostty)
+- [~] Terminal in the thread's folder, local or remote (libghostty); no selection or copy yet
 - [ ] File viewer with search
 - [~] Add project: a local folder, a new git repo, a clone from a URL or a forge; the clone runs in the background
 - [ ] Publish a local repo to a forge

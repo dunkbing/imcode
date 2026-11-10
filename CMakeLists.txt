@@ -8,6 +8,27 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(libssh2 CONFIG REQUIRED)
 set(IMCODE_SSH $<IF:$<TARGET_EXISTS:libssh2::libssh2_shared>,libssh2::libssh2_shared,libssh2::libssh2_static>)
 
+# libghostty-vt 1.0.0 (terminal emulation). apple: the official prebuilt static library.
+# elsewhere there is none: its release source, whose own cmake runs `zig build` (zig >= 0.17)
+# and defines the same ghostty-vt-static target. hashes from the release's SHA256SUMS
+include(FetchContent)
+set(GHOSTTY_VT_RELEASE https://release.files.ghostty.org/libghostty-vt/1.0.0)
+if(APPLE)
+    FetchContent_Declare(ghostty_vt URL ${GHOSTTY_VT_RELEASE}/ghostty-vt-1.0.0.xcframework.zip
+        URL_HASH SHA256=2c32b7409b2b6c2ef6cfd606526de357762ad458bdc27134ad074e86506a8bc2)
+    FetchContent_MakeAvailable(ghostty_vt)
+    # shortcut: the macos slice; an ios build picks ios-arm64 or ios-arm64-simulator here
+    add_library(ghostty-vt-static STATIC IMPORTED)
+    set_target_properties(ghostty-vt-static PROPERTIES
+        IMPORTED_LOCATION ${ghostty_vt_SOURCE_DIR}/macos-arm64_x86_64/libghostty-vt.a
+        INTERFACE_INCLUDE_DIRECTORIES ${ghostty_vt_SOURCE_DIR}/macos-arm64_x86_64/Headers
+        INTERFACE_COMPILE_DEFINITIONS GHOSTTY_STATIC)
+else()
+    FetchContent_Declare(ghostty_vt URL ${GHOSTTY_VT_RELEASE}/libghostty-vt-1.0.0.tar.gz
+        URL_HASH SHA256=4a6ef758be721923e1969e7b81b443dcc92d8dd3fb5a39600c03a8817a753676)
+    FetchContent_MakeAvailable(ghostty_vt)
+endif()
+
 # imgui's core is compiled here, once; mydear only adds the backends it uses
 set(MYDEAR_IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui)
 add_subdirectory(external/mydear)
@@ -24,9 +45,10 @@ mydear_embed_images(${CMAKE_CURRENT_SOURCE_DIR}/assets/images) # none yet: both 
 
 add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sidebar.cpp src/thread_view.cpp
                src/history.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp
+               src/terminal.cpp src/terminal_view.cpp
                ${EMBEDDED_FONTS_FILE} ${EMBEDDED_IMAGES_FILE} ${IMGUI_CORE})
 target_include_directories(imcode PRIVATE external/IconFontCppHeaders)
-target_link_libraries(imcode PRIVATE mydear::mydear mydear::components acp::host ${IMCODE_SSH})
+target_link_libraries(imcode PRIVATE mydear::mydear mydear::components acp::host ${IMCODE_SSH} ghostty-vt-static)
 
 # ctest: configure with -DIMCODE_BUILD_TESTS=ON (turns on the echo agent it talks to)
 if(IMCODE_BUILD_TESTS)
@@ -37,7 +59,11 @@ if(IMCODE_BUILD_TESTS)
     add_executable(imcode-thread-test tests/thread_test.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp)
     target_link_libraries(imcode-thread-test PRIVATE acp::host ${IMCODE_SSH})
     # manual: a real ssh server is needed (see the file)
-    add_executable(imcode-ssh-check tests/ssh_check.cpp src/thread.cpp src/remote.cpp src/ssh.cpp src/ssh_config.cpp)
-    target_link_libraries(imcode-ssh-check PRIVATE acp::host ${IMCODE_SSH})
+    add_executable(imcode-ssh-check tests/ssh_check.cpp src/thread.cpp src/remote.cpp src/ssh.cpp src/ssh_config.cpp
+                   src/terminal.cpp)
+    target_link_libraries(imcode-ssh-check PRIVATE acp::host ${IMCODE_SSH} ghostty-vt-static)
+    add_executable(imcode-terminal-test tests/terminal_test.cpp src/terminal.cpp)
+    target_link_libraries(imcode-terminal-test PRIVATE ghostty-vt-static)
+    add_test(NAME imcode-terminal COMMAND imcode-terminal-test)
     add_test(NAME imcode-thread COMMAND imcode-thread-test $<TARGET_FILE:acp-echo-agent>)
 endif()

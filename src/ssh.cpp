@@ -444,6 +444,78 @@ namespace Ssh {
             std::atomic<bool> closed_{false};
         };
 
+        // a channel with a pty: the bytes of a remote shell
+        class ChannelPty : public Pty {
+        public:
+            ChannelPty(std::shared_ptr<Session> session, LIBSSH2_CHANNEL* channel)
+                : session_(std::move(session)), channel_(channel) {}
+
+            ~ChannelPty() override {
+                close();
+                retry(*session_->impl, [&] { return libssh2_channel_close(channel_); }, 2000);
+                retry(*session_->impl, [&] { return libssh2_channel_free(channel_); }, 2000);
+            }
+
+            long read(char* buf, size_t size) override {
+                Session::Impl& i = *session_->impl;
+                while (!closed_) {
+                    long n = 0;
+                    bool eof = false;
+                    {
+                        std::lock_guard lock(i.mutex);
+                        n = libssh2_channel_read(channel_, buf, size);
+                        eof = libssh2_channel_eof(channel_) != 0;
+                        int next = 0;
+                        libssh2_keepalive_send(i.session, &next);
+                    }
+                    if (n > 0) {
+                        return n;
+                    }
+                    if (n < 0 && n != LIBSSH2_ERROR_EAGAIN) {
+                        if (n != LIBSSH2_ERROR_CHANNEL_CLOSED) {
+                            i.dead = true; // the connection itself went away
+                        }
+                        return n;
+                    }
+                    if (eof) {
+                        return 0;
+                    }
+                    waitSocket(i.sock);
+                }
+                return 0;
+            }
+
+            bool write(const char* data, size_t size) override {
+                size_t sent = 0;
+                while (sent < size && !closed_) {
+                    const long n = retry(*session_->impl, [&] {
+                        return static_cast<long>(
+                            libssh2_channel_write(channel_, data + sent, size - sent));
+                    });
+                    if (n < 0) {
+                        return false;
+                    }
+                    sent += static_cast<size_t>(n);
+                }
+                return sent == size;
+            }
+
+            void resize(int cols, int rows) override {
+                retry(*session_->impl, [&] {
+                    return static_cast<long>(libssh2_channel_request_pty_size(channel_, cols, rows));
+                });
+            }
+
+            void close() override {
+                closed_ = true;
+            }
+
+        private:
+            std::shared_ptr<Session> session_;
+            LIBSSH2_CHANNEL* channel_;
+            std::atomic<bool> closed_{false};
+        };
+
         LIBSSH2_SFTP* sftp(Session::Impl& i, std::string& error) {
             if (!i.sftp) {
                 i.sftp = retry(i, [&] { return libssh2_sftp_init(i.session); });
@@ -561,6 +633,38 @@ namespace Ssh {
             return nullptr;
         }
         return std::make_unique<ChannelTransport>(shared_from_this(), channel, std::move(onStderr));
+    }
+
+    std::unique_ptr<Pty> Session::shell(int cols, int rows, const std::string& cwd,
+                                        std::string& error) {
+        LIBSSH2_CHANNEL* channel =
+            retry(*impl, [&] { return libssh2_channel_open_session(impl->session); });
+        if (!channel) {
+            std::lock_guard lock(impl->mutex);
+            error = "Could not open an ssh channel: " + lastError(impl->session);
+            impl->dead = true;
+            return nullptr;
+        }
+        std::string dir = "'";
+        for (const char c : cwd) {
+            dir += c == '\'' ? std::string("'\\''") : std::string(1, c);
+        }
+        // ';' not '&&': a folder that is gone still gets a shell
+        const std::string command = "cd " + dir + "'; exec $SHELL -l";
+        const char term[] = "xterm-256color";
+        const long pty = retry(*impl, [&] {
+            return static_cast<long>(libssh2_channel_request_pty_ex(
+                channel, term, sizeof(term) - 1, nullptr, 0, cols, rows, 0, 0));
+        });
+        const long rc = pty != 0 ? pty : retry(*impl, [&] {
+            return static_cast<long>(libssh2_channel_exec(channel, command.c_str()));
+        });
+        if (rc != 0) {
+            error = "Could not start a shell on the host";
+            retry(*impl, [&] { return libssh2_channel_free(channel); }, 2000);
+            return nullptr;
+        }
+        return std::make_unique<ChannelPty>(shared_from_this(), channel);
     }
 
     std::shared_ptr<Session> session(const std::string& host, const std::string& secret,

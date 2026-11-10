@@ -112,6 +112,7 @@ void App::sidebar() {
 
     if (remove >= 0) {
         const bool wasCurrent = remove == current;
+        terminals.erase(data.threads[remove].get());
         data.threads.erase(data.threads.begin() + remove); // stops its agent
         current = wasCurrent ? -1 : current - (remove < current ? 1 : 0);
         save();
