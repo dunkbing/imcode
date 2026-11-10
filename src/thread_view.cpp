@@ -217,11 +217,11 @@ void App::composer(Thread& t, float width) {
                        ImVec2(labelWidth, 0))) {
         ImGui::OpenPopup("models");
     }
-    ImGui::SetNextWindowSize(ImVec2(600, 0));
+    ImGui::SetNextWindowSize(ImVec2(std::min(600.0f, ImGui::GetMainViewport()->WorkSize.x - 16), 0));
     if (ImGui::BeginPopup("models")) {
         static char filter[64] = {};
         // agents; models of this thread's agent; its other settings
-        ImGui::BeginChild("agents", ImVec2(160, 300));
+        ImGui::BeginChild("agents", ImVec2(ImGui::GetContentRegionAvail().x * 0.27f, 300));
         ImGui::TextColored(colors.subtext0, "Agent");
         for (const AcpAgentDef* agent : agentsOn()) {
             if (ImGui::Selectable(agent->name.c_str(), agent->id == t.agentId,
@@ -233,7 +233,7 @@ void App::composer(Thread& t, float width) {
         }
         ImGui::EndChild();
         ImGui::SameLine();
-        ImGui::BeginChild("models", ImVec2(250, 300));
+        ImGui::BeginChild("models", ImVec2(ImGui::GetContentRegionAvail().x * 0.58f, 300));
         ImGui::SetNextItemWidth(-FLT_MIN);
         ImGui::InputTextWithHint("##filter", ICON_FA_MAGNIFYING_GLASS "  Search models", filter,
                                  sizeof(filter));
@@ -280,7 +280,7 @@ void App::threadView(Thread& t) {
     const auto& colors = Theme::Current()->colors;
     const AcpAgentDef* def = AcpAgents::find(t.agentId);
     const ImVec2 avail = ImGui::GetContentRegionAvail();
-    const float width = std::min(760.0f, avail.x - 2 * Theme::Spacing::XL); // the reading column
+    const float width = std::min(760.0f, avail.x - 2 * Theme::Spacing::M); // the reading column
     const float left = (avail.x - width) * 0.5f;
     const float composerHeight = ImGui::GetTextLineHeight() * 3 + ImGui::GetFrameHeight() + 34;
 

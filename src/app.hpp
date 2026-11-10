@@ -22,6 +22,7 @@ struct App : mydear::Delegate {
     char search[128] = {};
     int shownRevision = -1; // of the current thread: scroll down when it moves on
     bool focusInput = false;
+    bool sidebarOpen = false; // narrow windows (phones): the thread list covers the thread
     std::string switchAgentTo; // picked in the model popup: applied after the frame's ui
 
     // what is on this machine, looked up off the ui thread (the login shell is slow)

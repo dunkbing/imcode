@@ -1,6 +1,7 @@
 #include "app.hpp"
 
 #include "mydear/alert.hpp"
+#include "mydear/button.hpp"
 #include "mydear/components.hpp"
 #include "mydear/embedded.hpp"
 #include "mydear/fonts.hpp"
@@ -108,6 +109,7 @@ void App::select(int index) {
         }
     }
     current = index;
+    sidebarOpen = false;
     shownRevision = -1;
     focusInput = true;
     if (index >= 0) {
@@ -171,7 +173,14 @@ void App::frame() {
     pollInstall();
 
     const auto& colors = Theme::Current()->colors;
+    const bool narrow = mydear::ContentRect().size.x < 720; // one pane at a time
     mydear::BeginTitleBar();
+    if (data.onboarded && narrow) {
+        if (mydear::SmallButton(ICON_FA_BARS)) {
+            sidebarOpen = !sidebarOpen;
+        }
+        ImGui::SameLine();
+    }
     if (data.onboarded && current >= 0) {
         const Thread& t = *data.threads[current];
         ImGui::TextColored(colors.subtext0, "%s  /",
@@ -190,11 +199,15 @@ void App::frame() {
     if (!data.onboarded) {
         onboarding();
     } else {
-        ImGui::BeginChild("sidebar", ImVec2(264, 0), ImGuiChildFlags_Borders);
-        sidebar();
-        ImGui::EndChild();
-        ImGui::SameLine();
-        ImGui::BeginChild("thread");
+        const bool list = !narrow || sidebarOpen || current < 0;
+        if (list) {
+            ImGui::BeginChild("sidebar", ImVec2(narrow ? 0 : 264, 0), ImGuiChildFlags_Borders);
+            sidebar();
+            ImGui::EndChild();
+            ImGui::SameLine();
+        }
+        ImGui::BeginChild("thread", ImVec2(0, 0), 0,
+                          narrow && list ? ImGuiWindowFlags_NoInputs : 0);
         if (current >= 0) {
             threadView(*data.threads[current]);
         } else if (ui::EmptyState(data.projects.empty() ? "No project yet" : "No thread open",
