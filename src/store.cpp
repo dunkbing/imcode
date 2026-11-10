@@ -19,6 +19,8 @@ namespace Store {
                 out.projects.push_back(std::move(p));
             }
         };
+        out.onboarded = root.value("onboarded", false);
+        out.agents = root.value("agents", std::vector<std::string>{});
         for (const auto& row : root.value("projects", json::array())) {
             addProject({row.value("host", ""), row.value("cwd", "")});
         }
@@ -27,6 +29,7 @@ namespace Store {
                                                    row.value("host", ""));
             thread->title = row.value("title", "");
             thread->sessionId = row.value("session", "");
+            thread->updatedAt = row.value("updated", 0LL);
             addProject({thread->host, thread->cwd}); // a thread is never without its folder
             out.threads.push_back(std::move(thread));
         }
@@ -44,11 +47,15 @@ namespace Store {
                                {"agent", t->agentId},
                                {"host", t->host},
                                {"title", t->title},
-                               {"session", t->sessionId}});
+                               {"session", t->sessionId},
+                               {"updated", t->updatedAt}});
         }
         // written beside and renamed: a crash mid-write must not lose the list
         const auto tmp = std::filesystem::path(file).concat(".tmp");
-        std::ofstream(tmp) << json{{"projects", projects}, {"threads", threads}}.dump(2) << "\n";
+        std::ofstream(tmp) << json{{"onboarded", data.onboarded},
+                                   {"agents", data.agents},
+                                   {"projects", projects},
+                                   {"threads", threads}}.dump(2) << "\n";
         std::error_code ec;
         std::filesystem::rename(tmp, file, ec);
     }

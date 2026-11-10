@@ -5,6 +5,7 @@
 #include "ssh.hpp"
 #include <algorithm>
 #include <cstdlib>
+#include <ctime>
 #include <utility>
 
 using json = nlohmann::json;
@@ -115,8 +116,9 @@ void Thread::send(const std::string& text) {
     queued_ = starting() || !acp_;
     if (title.empty()) {
         title = text.substr(0, text.find('\n'));
-        changed_ = true;
     }
+    updatedAt = std::time(nullptr);
+    changed_ = true;
     if (!ensureStarted()) {
         return;
     }
@@ -265,6 +267,8 @@ void Thread::poll() {
             break;
         }
         case AcpEvent::Type::TurnEnded:
+            updatedAt = std::time(nullptr);
+            changed_ = true;
             if (ev.text != "end_turn" && ev.text != "cancelled" && !ev.text.empty()) {
                 add({.kind = Item::Kind::Info, .text = "Turn stopped: " + ev.text});
             }

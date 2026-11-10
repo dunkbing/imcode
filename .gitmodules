@@ -11,3 +11,6 @@
 [submodule "external/acp-host"]
 	path = external/acp-host
 	url = https://github.com/dunkbing/acp-host
+[submodule "external/IconFontCppHeaders"]
+	path = external/IconFontCppHeaders
+	url = https://github.com/juliettef/IconFontCppHeaders

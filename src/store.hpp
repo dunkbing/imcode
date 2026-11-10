@@ -15,6 +15,8 @@ namespace Store {
         bool operator==(const Project&) const = default;
     };
     struct Data {
+        bool onboarded = false;
+        std::vector<std::string> agents; // ids turned on: what the pickers offer
         std::vector<Project> projects;
         std::vector<std::unique_ptr<Thread>> threads;
     };

@@ -22,8 +22,10 @@ file(GLOB IMGUI_CORE ${MYDEAR_IMGUI_DIR}/imgui*.cpp)
 mydear_embed_fonts(${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts)
 mydear_embed_images(${CMAKE_CURRENT_SOURCE_DIR}/assets/images) # none yet: both lookups must exist
 
-add_executable(imcode src/main.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp
+add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sidebar.cpp src/thread_view.cpp
+               src/history.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp
                ${EMBEDDED_FONTS_FILE} ${EMBEDDED_IMAGES_FILE} ${IMGUI_CORE})
+target_include_directories(imcode PRIVATE external/IconFontCppHeaders)
 target_link_libraries(imcode PRIVATE mydear::mydear mydear::components acp::host ${IMCODE_SSH})
 
 # ctest: configure with -DIMCODE_BUILD_TESTS=ON (turns on the echo agent it talks to)

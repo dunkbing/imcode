@@ -34,6 +34,7 @@ public:
     std::string title;     // first prompt, shortened
     std::string cwd;       // absolute, on the host
     std::string sessionId; // the agent's id for this conversation: what a restart resumes
+    long long updatedAt = 0; // unix seconds of the last prompt or reply
     const std::string agentId;
     const std::string host;
     std::vector<Item> items;
