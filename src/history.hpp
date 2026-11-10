@@ -3,13 +3,14 @@
 #include <string>
 #include <vector>
 
-// conversations an agent's own cli left on this machine, to offer as projects and threads
+// conversations the agents' own clis left on this machine, to offer as projects and threads
 namespace History {
     struct Found {
         std::string agentId, cwd, sessionId, title;
         long long updatedAt = 0;
     };
-    // Claude Code: ~/.claude/projects/<folder>/<session>.jsonl; the newest few per folder,
-    // only for folders that still exist
-    std::vector<Found> claudeCode(int perFolder = 5);
+    // the newest few sessions per folder and agent, only for folders that still exist:
+    // Claude Code (~/.claude/projects/<folder>/<session>.jsonl) and
+    // Codex (~/.codex/sessions/<y>/<m>/<d>/rollout-*.jsonl)
+    std::vector<Found> scan(int perFolder = 5);
 } // namespace History

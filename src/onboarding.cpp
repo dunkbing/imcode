@@ -143,7 +143,7 @@ void App::onboarding() {
     } else {
         ImGui::Checkbox(std::format("Import {} projects and their threads", folders.size()).c_str(),
                         &importHistory);
-        ImGui::TextColored(colors.subtext0, "From your Claude Code history");
+        ImGui::TextColored(colors.subtext0, "From your Claude Code and Codex history");
     }
     endSection();
 

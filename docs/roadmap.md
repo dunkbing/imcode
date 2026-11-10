@@ -20,7 +20,7 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly.
 - [~] Rename, archive, search threads
 - [~] Detect installed agents: turn on, install, sign in, update; browse the ACP registry
 - [ ] Add a local ACP command as an agent; several accounts or configs of one agent
-- [~] Import projects and recent threads from agent CLI history (Claude Code, Codex, Pi)
+- [~] Import projects and recent threads from agent CLI history (Claude Code and Codex done, Pi)
 - [ ] Custom models per agent; model, effort and mode remembered for new threads
 - [ ] Permission mode per thread: supervised, auto-accept edits, auto, full access; a default for new threads
 - [ ] Approve or reject requests in the transcript; a subagent's requests asked in the parent
