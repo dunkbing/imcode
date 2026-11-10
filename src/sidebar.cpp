@@ -82,14 +82,19 @@ void App::sidebar() {
         ImGui::PopTextWrapPos();
         ImGui::SetCursorPos(ImVec2(at.x + 8, at.y + 4 + 2 * (line + 3)));
         const AcpAgentDef* def = AcpAgents::find(t.agentId);
-        ImGui::TextColored(colors.overlay1, "%s%s%s", t.host.c_str(), t.host.empty() ? "" : "  ",
-                           def ? def->name.c_str() : t.agentId.c_str());
+        ImGui::PushStyleColor(ImGuiCol_Text, colors.overlay1);
+        agentIcon(t.agentId, 13);
+        ImGui::SameLine(0, 6);
+        ImGui::Text("%s%s%s", def ? def->name.c_str() : t.agentId.c_str(),
+                    t.host.empty() ? "" : "  on ", t.host.c_str());
+        ImGui::PopStyleColor();
         if (t.needsAnswer() || t.busy()) {
             ImGui::SameLine();
             ui::Badge(t.needsAnswer() ? "needs you" : "working",
                       t.needsAnswer() ? ui::Tone::Warning : ui::Tone::Info);
         }
         ImGui::SetCursorPos(next);
+        ImGui::Dummy(ImVec2(0, 0)); // imgui wants an item after a cursor move
         ImGui::PopID();
     }
     if (order.empty()) {

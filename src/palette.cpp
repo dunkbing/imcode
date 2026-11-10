@@ -103,9 +103,18 @@ void App::paletteDraw() {
     ImGui::SetNextWindowPos(ImVec2(vp->GetCenter().x, vp->WorkPos.y + 90), ImGuiCond_Always,
                             ImVec2(0.5f, 0.0f));
     ImGui::SetNextWindowSize(ImVec2(std::min(580.0f, vp->WorkSize.x - 32), 0));
-    if (!ImGui::BeginPopupModal("##palette", nullptr,
-                                ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-                                    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
+    // darker than a row's highlight, so the selected row shows
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
+    ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14, 14));
+    const bool shown = ImGui::BeginPopupModal(
+        "##palette", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoSavedSettings);
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
+    if (!shown) {
         return;
     }
     p.op.check([&](Palette::Listing got) {
@@ -259,7 +268,9 @@ void App::paletteDraw() {
     ImGui::BeginChild("rows", ImVec2(0, 300));
     for (int i = 0; i < static_cast<int>(rows.size()); ++i) {
         ImGui::PushID(i);
-        const float height = rows[i].detail.empty() ? 0 : ImGui::GetTextLineHeight() * 2 + 6;
+        const float height = rows[i].detail.empty()
+                                 ? 0
+                                 : ImGui::GetTextLineHeight() * 2 + ImGui::GetStyle().ItemSpacing.y + 6;
         const ImVec2 at = ImGui::GetCursorPos();
         if (ImGui::Selectable("##row", i == p.selected, ImGuiSelectableFlags_DontClosePopups,
                               ImVec2(0, height))) {
@@ -277,6 +288,7 @@ void App::paletteDraw() {
             ImGui::TextColored(colors.overlay1, "%s", rows[i].detail.c_str());
         }
         ImGui::SetCursorPos(next);
+        ImGui::Dummy(ImVec2(0, 0)); // imgui wants an item after a cursor move
         ImGui::PopID();
     }
     ImGui::EndChild();

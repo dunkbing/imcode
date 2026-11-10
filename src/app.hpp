@@ -8,12 +8,14 @@
 #include "ssh.hpp"
 #include "store.hpp"
 #include <filesystem>
+#include <map>
 #include <string>
 #include <vector>
 
 // the window: onboarding, then a sidebar of threads and the open thread. one file per
 // screen part (onboarding.cpp, palette.cpp, sidebar.cpp, thread_view.cpp)
 struct App : mydear::Delegate {
+    mydear::App* shell = nullptr; // the window: uploads textures
     Store::Data data;
     std::filesystem::path dataFile;
     int current = -1; // index into data.threads
@@ -23,6 +25,7 @@ struct App : mydear::Delegate {
     int shownRevision = -1; // of the current thread: scroll down when it moves on
     bool focusInput = false;
     bool sidebarOpen = false; // narrow windows (phones): the thread list covers the thread
+    bool devOpenModels = false; // ui checks: open the model popup once
     std::string switchAgentTo; // picked in the model popup: applied after the frame's ui
 
     // what is on this machine, looked up off the ui thread (the login shell is slow)
@@ -36,6 +39,7 @@ struct App : mydear::Delegate {
     bool scanned = false;
     bool importHistory = true;
     AcpRegistryClient registry;
+    std::map<std::string, ImTextureID> icons;
     std::string installing; // agent id whose runtime or binary is being downloaded
 
     // "Add project": sources, then a host for a remote one, then a folder browser
@@ -82,6 +86,9 @@ struct App : mydear::Delegate {
     void paletteDraw();
 
     void sidebar();
+
+    // the agent's own mark, tinted like text; a generic one when there is none
+    void agentIcon(const std::string& agentId, float size = 16);
 
     void threadView(Thread& t);
     void transcriptItem(Thread& t, Item& item, int index, float width);

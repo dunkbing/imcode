@@ -1,14 +1,17 @@
 #include "app.hpp"
 
+#include "imgui_internal.h"
 #include "mydear/alert.hpp"
 #include "mydear/button.hpp"
 #include "mydear/components.hpp"
 #include "mydear/embedded.hpp"
 #include "mydear/fonts.hpp"
+#include "mydear/image.hpp"
 #include "mydear/frames.hpp"
 #include "mydear/themes.hpp"
 #include "mydear/title_bar.hpp"
 #include <algorithm>
+#include <cstdlib>
 #include <ctime>
 #include <format>
 
@@ -35,12 +38,38 @@ void App::setup() {
                         15.0f);
     }
     AcpHost::setWake([] { mydear::requestFrames(); });
-    const std::filesystem::path dir = mydear::DataDir("imcode");
+    // IMCODE_DATA_DIR: another folder for the saved data (a second profile, ui checks)
+    const char* dataDir = std::getenv("IMCODE_DATA_DIR");
+    const std::filesystem::path dir = dataDir ? dataDir : mydear::DataDir("imcode");
     AcpRegistry::setInstallRoot(dir / "agents");
     dataFile = dir / "threads.json";
     data = Store::load(dataFile);
     project = data.projects.empty() ? -1 : 0;
     startScan();
+}
+
+void App::agentIcon(const std::string& agentId, float size) {
+    auto it = icons.find(agentId);
+    if (it == icons.end()) {
+        const EmbeddedImage* image = findEmbeddedImage(("agent-" + agentId).c_str());
+        const ImTextureID texture =
+            image && shell ? mydear::LoadTexture(image->data, image->size,
+                                                 [this](const uint8_t* rgba, int w, int h) {
+                                                     return shell->createTexture(rgba, w, h);
+                                                 })
+                           : ImTextureID{};
+        it = icons.emplace(agentId, texture).first;
+    }
+    if (it->second == ImTextureID{}) {
+        ImGui::TextUnformatted(ICON_FA_ROBOT);
+        return;
+    }
+    // centred on the text of the line it sits in (which a frame-height row pushes down)
+    const float line = ImGui::GetTextLineHeight();
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() +
+                         ImGui::GetCurrentWindow()->DC.CurrLineTextBaseOffset + (line - size) * 0.5f);
+    ImGui::ImageWithBg(it->second, ImVec2(size, size), ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0),
+                       ImGui::GetStyleColorVec4(ImGuiCol_Text));
 }
 
 void App::startScan() {
@@ -181,6 +210,7 @@ void App::frame() {
         }
         ImGui::SameLine();
     }
+    ImGui::AlignTextToFramePadding();
     if (data.onboarded && current >= 0) {
         const Thread& t = *data.threads[current];
         ImGui::TextColored(colors.subtext0, "%s  /",
@@ -225,6 +255,23 @@ void App::frame() {
         ImGui::IsKeyPressed(ImGuiKey_P, false)) {
         paletteOpen(true);
     }
+    // ui checks: IMCODE_DEV="new;palette;actions;models;send:<text>" (any of them), each once
+    if (const char* dev = std::getenv("IMCODE_DEV"); dev && data.onboarded) {
+        static int frames = 0;
+        ++frames;
+        const std::string all = std::string(";") + dev + ";";
+        if (frames == 5 && (all.find(";new;") != std::string::npos)) {
+            newThread(project);
+        }
+        if (frames == 40 && ((all.find(";palette;") != std::string::npos) || (all.find(";actions;") != std::string::npos))) {
+            paletteOpen((all.find(";actions;") != std::string::npos));
+        }
+        if (const auto at = all.find(";send:"); frames == 40 && at != std::string::npos && current >= 0) {
+            data.threads[current]->send(all.substr(at + 6, all.find(';', at + 1) - at - 6));
+        }
+        devOpenModels = frames == 40 && (all.find(";models;") != std::string::npos);
+        mydear::requestFrames();
+    }
     paletteDraw();
     if (!switchAgentTo.empty()) {
         newThread(project, std::exchange(switchAgentTo, {}));
@@ -240,9 +287,17 @@ int main() {
     config.appName = "imcode";
     config.titleBar = true;
     static App app;
-    const int code = mydear::Run(config, app);
+    // not mydear::Run: the app needs the shell for its texture upload (mydear#47)
+    static mydear::App shell;
+    app.shell = &shell;
+    if (!shell.create(config, app)) {
+        return 1;
+    }
+    shell.run();
+    app.icons.clear();
     // stop the agents while the loop they wake still exists, not during static teardown
     app.data.threads.clear();
     AcpHost::setWake(nullptr);
-    return code;
+    shell.destroy();
+    return 0;
 }

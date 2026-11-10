@@ -183,18 +183,23 @@ void App::composer(Thread& t, float width) {
     const float button = ImGui::GetFrameHeight();
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 14);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, colors.mantle);
+    ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
     ImGui::BeginChild("composer", ImVec2(width, inputHeight + button + 34),
-                      ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding);
+                      ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     if (std::exchange(focusInput, false)) {
         ImGui::SetKeyboardFocusHere();
     }
     // enter sends, ctrl+enter is a new line
+    // the box around it is the frame: none of its own
     ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_NavCursor, ImVec4(0, 0, 0, 0));
     const ImVec2 inputAt = ImGui::GetCursorPos();
     bool send = ImGui::InputTextMultiline(
         "##input", input, sizeof(input), ImVec2(-FLT_MIN, inputHeight),
         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CtrlEnterForNewLine);
-    ImGui::PopStyleColor();
+    ImGui::PopStyleColor(3);
     if (!input[0]) {
         const ImVec2 after = ImGui::GetCursorPos();
         const ImVec2 pad = ImGui::GetStyle().FramePadding;
@@ -211,19 +216,37 @@ void App::composer(Thread& t, float width) {
         label += "  " + currentName(effort);
     }
     const float labelWidth = ImGui::CalcTextSize(label.c_str()).x + 24;
-    ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - labelWidth - button -
+    ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - labelWidth - button - 16 - 6 -
                          ImGui::GetStyle().ItemSpacing.x);
+    ImGui::AlignTextToFramePadding();
+    agentIcon(t.agentId);
+    ImGui::SameLine(0, 6);
     if (mydear::Button((label + "##models").c_str(), mydear::ButtonVariant::Secondary,
                        ImVec2(labelWidth, 0))) {
         ImGui::OpenPopup("models");
     }
+    if (std::exchange(devOpenModels, false)) {
+        ImGui::OpenPopup("models");
+    }
+    // above the button, right edges aligned; plain panes, not the composer's rounded box
     ImGui::SetNextWindowSize(ImVec2(std::min(600.0f, ImGui::GetMainViewport()->WorkSize.x - 16), 0));
-    if (ImGui::BeginPopup("models")) {
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetItemRectMax().x, ImGui::GetItemRectMin().y - 8),
+                            ImGuiCond_Always, ImVec2(1, 1));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12, 12));
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 12);
+    const bool modelsOpen = ImGui::BeginPopup("models");
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor();
+    if (modelsOpen) {
         static char filter[64] = {};
         // agents; models of this thread's agent; its other settings
         ImGui::BeginChild("agents", ImVec2(ImGui::GetContentRegionAvail().x * 0.27f, 300));
         ImGui::TextColored(colors.subtext0, "Agent");
         for (const AcpAgentDef* agent : agentsOn()) {
+            agentIcon(agent->id);
+            ImGui::SameLine(0, 8);
             if (ImGui::Selectable(agent->name.c_str(), agent->id == t.agentId,
                                   ImGuiSelectableFlags_DontClosePopups) &&
                 agent->id != t.agentId) {
@@ -257,6 +280,7 @@ void App::composer(Thread& t, float width) {
         ImGui::EndChild();
         ImGui::EndPopup();
     }
+    ImGui::PopStyleColor();
     ImGui::SameLine();
     if (t.busy()) {
         if (mydear::IconButton(ICON_FA_STOP, mydear::ButtonVariant::Danger, ImVec2(button, button))) {
@@ -267,7 +291,7 @@ void App::composer(Thread& t, float width) {
                                    ImVec2(button, button));
     }
     ImGui::EndChild();
-    ImGui::PopStyleColor();
+    ImGui::PopStyleColor(2);
     ImGui::PopStyleVar();
     if (send && !t.busy() && input[0]) {
         t.send(input);

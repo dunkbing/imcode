@@ -4,6 +4,7 @@
 #include "mydear/components.hpp"
 #include "mydear/themes.hpp"
 #include <algorithm>
+#include <cstring>
 #include <format>
 #include <set>
 #include <unistd.h>
@@ -26,7 +27,8 @@ namespace {
     }
     // the next item ends at the right edge of the column
     void alignRight(float itemWidth) {
-        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - itemWidth);
+        ImGui::SameLine(); // then by cursor: SameLine's own offset counts from the group
+        ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - itemWidth);
     }
 } // namespace
 
@@ -78,6 +80,9 @@ void App::onboarding() {
 
     char hostName[256] = "this machine";
     gethostname(hostName, sizeof(hostName));
+    if (char* dot = std::strchr(hostName, '.')) {
+        *dot = 0; // "name.local"
+    }
     ImGui::PushFont(nullptr, 24.0f);
     ImGui::TextUnformatted("Welcome to imcode");
     ImGui::PopFont();
@@ -93,6 +98,8 @@ void App::onboarding() {
         const AcpAgentDef& def = catalog[i];
         ImGui::PushID(static_cast<int>(i));
         ImGui::AlignTextToFramePadding();
+        agentIcon(def.id);
+        ImGui::SameLine(0, 10);
         ImGui::TextUnformatted(def.name.c_str());
         const bool on = agentOn(def.id);
         if (installing == def.id) {
