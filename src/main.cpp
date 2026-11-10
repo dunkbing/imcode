@@ -1,6 +1,7 @@
 #include "app.hpp"
 
 #include "markdown.hpp"
+#include "notify.hpp"
 #include "imgui_internal.h"
 #include "mydear/alert.hpp"
 #include "mydear/button.hpp"
@@ -13,6 +14,7 @@
 #include "mydear/themes.hpp"
 #include "mydear/title_bar.hpp"
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -40,7 +42,10 @@ void App::setup() {
         mydear::AddFont({{text->data, text->size}, {icons->data, icons->size, iconRanges, true}},
                         15.0f);
     }
-    AcpHost::setWake([] { mydear::requestFrames(); });
+    AcpHost::setWake([this] {
+        mydear::requestFrames();
+        hostWake.notify_one();
+    });
     // IMCODE_DATA_DIR: another folder for the saved data (a second profile, ui checks)
     const char* dataDir = std::getenv("IMCODE_DATA_DIR");
     const std::filesystem::path dir = dataDir ? dataDir : mydear::DataDir("imcode");
@@ -49,6 +54,13 @@ void App::setup() {
     data = Store::load(dataFile);
     project = data.projects.empty() ? -1 : 0;
     startScan();
+    // ui checks: IMCODE_DEV_SEND=<text> starts a thread in the first project before any frame
+    if (const char* text = std::getenv("IMCODE_DEV_SEND"); text && !data.projects.empty()) {
+        const Store::Project& p = data.projects.front();
+        data.threads.push_back(std::make_unique<Thread>(p.cwd, agentsOn().front()->id, p.host));
+        data.threads.back()->send(text);
+    }
+    host = std::thread([this] { hostLoop(); });
 }
 
 void App::agentIcon(const std::string& agentId, float size) {
@@ -98,6 +110,11 @@ void App::startScan() {
 }
 
 bool App::wantsFrames() {
+    // called by the loop, outside a frame: the host may be changing the threads
+    std::unique_lock lock(hostMutex, std::try_to_lock);
+    if (!lock) {
+        return true;
+    }
     return scanOp.isRunning() || palette.op.isRunning() || registry.isBusy() ||
            files.listOp.isRunning() || files.indexOp.isRunning() || files.readOp.isRunning() ||
            std::ranges::any_of(data.threads,
@@ -182,15 +199,59 @@ void App::newThread(int projectIndex, std::string agentId) {
     select(static_cast<int>(data.threads.size()) - 1);
 }
 
+namespace {
+    long long nowMs() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::steady_clock::now().time_since_epoch())
+            .count();
+    }
+} // namespace
+
+void App::hostLoop() {
+    struct Seen {
+        bool busy = false, needsAnswer = false;
+    };
+    std::map<const Thread*, Seen> seen;
+    std::unique_lock lock(hostMutex);
+    while (!hostStop) {
+        bool changed = false;
+        const bool watched = nowMs() - lastFrameMs < 1500;
+        std::map<const Thread*, Seen> now;
+        for (auto& t : data.threads) {
+            t->poll(); // every thread, shown or not
+            changed |= t->takeChanged();
+            const Seen state{t->busy(), t->needsAnswer()};
+            const auto before = seen.find(t.get());
+            // tell the user what they did not see happen
+            if (!watched && before != seen.end() && !t->title.empty()) {
+                if (state.needsAnswer && !before->second.needsAnswer) {
+                    notify("Needs your answer", t->title);
+                } else if (before->second.busy && !state.busy && !state.needsAnswer) {
+                    notify("Finished", t->title);
+                }
+            }
+            now[t.get()] = state;
+        }
+        seen = std::move(now);
+        if (changed) {
+            save();
+            mydear::requestFrames();
+        }
+        hostWake.wait_for(lock, std::chrono::milliseconds(250));
+    }
+}
+
+void App::stopHost() {
+    hostStop = true;
+    hostWake.notify_one();
+    if (host.joinable()) {
+        host.join();
+    }
+}
+
 void App::frame() {
-    bool changed = false;
-    for (auto& t : data.threads) {
-        t->poll(); // every thread, shown or not
-        changed |= t->takeChanged();
-    }
-    if (changed) {
-        save();
-    }
+    std::lock_guard lock(hostMutex);
+    lastFrameMs = nowMs();
     scanOp.check([this](Scan got) {
         scan = std::move(got);
         // first launch: the agents whose cli is here start turned on
@@ -371,6 +432,7 @@ int main() {
     app.icons.clear();
     Markdown::shutdown();
     // stop the shells and the agents while the loop they wake still exists, not during static teardown
+    app.stopHost();
     app.terminals.clear();
     app.data.threads.clear();
     AcpHost::setWake(nullptr);

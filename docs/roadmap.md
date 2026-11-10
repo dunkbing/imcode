@@ -80,7 +80,7 @@ The agent runs on the remote machine in the remote folder; nothing is installed 
 
 One host per machine owns the agents and the threads; every screen is a client of it.
 
-- [ ] Agent logic off the frame loop (today a background window delays a sign-in restart)
+- [x] Agent logic off the frame loop: a host thread polls the agents, also while the window is in the background
 - [ ] Commands in, events out, as JSON; in-process on desktop
 - [ ] Thread entries in SQLite with row versions; a client that reconnects fetches what changed
 - [ ] `imcode --serve`: the host without a window, on a Linux box or a Mac
@@ -164,7 +164,7 @@ One host per machine owns the agents and the threads; every screen is a client o
 ## 6. Many agents
 
 - [ ] Inbox: what needs an answer, what finished, across hosts
-- [ ] Desktop notifications and a dock badge
+- [~] Desktop notifications when a thread finishes or needs an answer unseen (done, through the os helper); a dock badge
 - [ ] One prompt to several agents or worktrees, results side by side
 - [ ] Subagent threads shown under their parent
 - [ ] MCP servers per project, passed to `session/new`

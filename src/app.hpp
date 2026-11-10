@@ -8,7 +8,11 @@
 #include "ssh.hpp"
 #include "store.hpp"
 #include "terminal.hpp"
+#include <atomic>
+#include <condition_variable>
 #include <filesystem>
+#include <mutex>
+#include <thread>
 #include <map>
 #include <set>
 #include <string>
@@ -102,6 +106,17 @@ struct App : mydear::Delegate {
         std::vector<std::string> dirs;
         AcpHost::AsyncOp<Listing> op;
     } palette;
+
+    // the host: agents are polled here, between frames and while the window is in the
+    // background (frames stop then). one lock for the threads; a frame holds it throughout.
+    // shortcut: a thread inside the app; its own process with the sync protocol later
+    std::mutex hostMutex;
+    std::condition_variable_any hostWake;
+    std::thread host;
+    std::atomic<bool> hostStop{false};
+    std::atomic<long long> lastFrameMs{0}; // no frame for a while = nobody is looking
+    void hostLoop();
+    void stopHost();
 
     // mydear::Delegate
     void setup() override;
