@@ -10,7 +10,7 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly.
 - [x] Transcript: messages, thoughts, tool calls, plans; permission and sign-in prompts
 - [x] Model, mode and effort pickers from the agent's config options, there before the first message
 - [ ] Markdown and highlighted code blocks (imgui_rich_md, as DearSQL)
-- [ ] Fonts and icons (JetBrains Mono, an icon font, CJK)
+- [~] Fonts and icons: JetBrains Mono with the system CJK font (done), an icon font
 - [ ] Slash commands and `@file` mentions in the composer
 - [ ] Tool call details: diffs for edits, output for commands, file links
 - [ ] Agents install themselves: managed Bun and registry binaries, with progress

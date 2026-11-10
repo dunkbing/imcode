@@ -4,7 +4,9 @@
 #include "mydear/app.hpp"
 #include "mydear/button.hpp"
 #include "mydear/components.hpp"
+#include "mydear/embedded.hpp"
 #include "mydear/file_dialog.hpp"
+#include "mydear/fonts.hpp"
 #include "mydear/frames.hpp"
 #include "mydear/menu.hpp"
 #include "mydear/themes.hpp"
@@ -91,6 +93,9 @@ struct T3 : mydear::Delegate {
     void setup() override {
         Theme::Current() = &Theme::themeById("tokyo-night");
         Theme::ApplyTheme(Theme::Current()->colors);
+        if (const EmbeddedFont* font = findEmbeddedFont("JetBrainsMono-Medium")) {
+            mydear::AddFont({{font->data, font->size}}, 15.0f);
+        }
         AcpHost::setWake([] { mydear::requestFrames(); });
         const std::filesystem::path dir = mydear::DataDir("imcode");
         AcpRegistry::setInstallRoot(dir / "agents");
