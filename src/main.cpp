@@ -92,13 +92,14 @@ void App::startScan() {
             out.detected.push_back(cli != std::end(clis) &&
                                    AcpAgents::locateExecutable(cli->second).has_value());
         }
-        out.history = History::claudeCode();
+        out.history = History::scan();
         return out;
     });
 }
 
 bool App::wantsFrames() {
     return scanOp.isRunning() || palette.op.isRunning() || registry.isBusy() ||
+           files.listOp.isRunning() || files.indexOp.isRunning() || files.readOp.isRunning() ||
            std::ranges::any_of(data.threads,
                                [](const auto& t) { return t->busy() || t->starting(); });
 }
@@ -204,6 +205,7 @@ void App::frame() {
         scanned = true;
     });
     pollInstall();
+    filesPoll();
 
     const auto& colors = Theme::Current()->colors;
     const bool narrow = mydear::ContentRect().size.x < 720; // one pane at a time
@@ -223,7 +225,7 @@ void App::frame() {
         ImGui::TextUnformatted(t.title.empty() ? "New thread" : t.title.substr(0, narrow ? 22 : 70).c_str());
         // at the right end, before the os's own buttons
         ImGui::SameLine();
-        ImGui::SetCursorScreenPos(ImVec2(bar.pos.x + bar.size.x - bar.rightInset - 40,
+        ImGui::SetCursorScreenPos(ImVec2(bar.pos.x + bar.size.x - bar.rightInset - 84,
                                          ImGui::GetCursorScreenPos().y));
         if (mydear::SmallButton(ICON_FA_TERMINAL, terminalOpen ? mydear::ButtonVariant::Primary
                                                                : mydear::ButtonVariant::Secondary)) {
@@ -231,6 +233,14 @@ void App::frame() {
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Terminal (Ctrl+`)");
+        }
+        ImGui::SameLine(0, 6);
+        if (mydear::SmallButton(ICON_FA_FOLDER_TREE, files.open ? mydear::ButtonVariant::Primary
+                                                                : mydear::ButtonVariant::Secondary)) {
+            files.open = !files.open;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Files (Ctrl+B)");
         }
     } else {
         ImGui::TextColored(colors.subtext0, "imcode"); // an empty bar asserts (mydear#45)
@@ -255,13 +265,22 @@ void App::frame() {
                           narrow && list ? ImGuiWindowFlags_NoInputs : 0);
         if (current >= 0) {
             Thread& t = *data.threads[current];
-            const float height = ImGui::GetContentRegionAvail().y;
-            ImGui::BeginChild("chat", ImVec2(0, terminalOpen ? height * terminalSplit : 0));
-            threadView(t);
-            ImGui::EndChild();
-            if (terminalOpen) {
-                mydear::Splitter("##terminal", &terminalSplit, height, 160, 80);
-                terminalPanel(t);
+            const ImVec2 area = ImGui::GetContentRegionAvail();
+            // the files beside the chat; alone where there is no room for both
+            const bool beside = files.open && !narrow;
+            if (!files.open || beside) {
+                ImGui::BeginChild("work", ImVec2(beside ? area.x * files.split : 0, 0));
+                ImGui::BeginChild("chat", ImVec2(0, terminalOpen ? area.y * terminalSplit : 0));
+                threadView(t);
+                ImGui::EndChild();
+                if (terminalOpen) {
+                    mydear::Splitter("##terminal", &terminalSplit, area.y, 160, 80);
+                    terminalPanel(t);
+                }
+                ImGui::EndChild();
+            }
+            if (files.open) {
+                filesPanel(t, beside ? area.x : 0);
             }
         } else if (ui::EmptyState(data.projects.empty() ? "No project yet" : "No thread open",
                                   data.projects.empty()
@@ -282,6 +301,11 @@ void App::frame() {
     if (data.onboarded && current >= 0 && (io.KeySuper || io.KeyCtrl) &&
         ImGui::IsKeyPressed(ImGuiKey_GraveAccent, false)) {
         toggleTerminal();
+    }
+    // ctrl+b: the files of the open thread
+    if (data.onboarded && current >= 0 && (io.KeySuper || io.KeyCtrl) &&
+        ImGui::IsKeyPressed(ImGuiKey_B, false)) {
+        files.open = !files.open;
     }
     // ui checks: IMCODE_DEV="new;palette;actions;models;send:<text>" (any of them), each once
     if (const char* dev = std::getenv("IMCODE_DEV"); dev && data.onboarded) {
@@ -304,6 +328,17 @@ void App::frame() {
         }
         if (frames == 40 && all.find(";term;") != std::string::npos) {
             toggleTerminal();
+        }
+        if (frames == 40 && all.find(";files;") != std::string::npos) {
+            files.open = !files.open;
+        }
+        if (const auto at = all.find(";file:"); frames == 40 && at != std::string::npos) {
+            showFile(all.substr(at + 6, all.find(';', at + 1) - at - 6));
+        }
+        // later: the panel's first frame starts with an empty filter
+        if (const auto at = all.find(";filter:"); frames == 45 && at != std::string::npos) {
+            std::snprintf(files.filter, sizeof(files.filter), "%s",
+                          all.substr(at + 8, all.find(';', at + 1) - at - 8).c_str());
         }
         mydear::requestFrames();
     }

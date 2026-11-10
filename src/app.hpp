@@ -10,11 +10,13 @@
 #include "terminal.hpp"
 #include <filesystem>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
 // the window: onboarding, then a sidebar of threads and the open thread. one file per
-// screen part (onboarding.cpp, palette.cpp, sidebar.cpp, thread_view.cpp, terminal_view.cpp)
+// screen part (onboarding.cpp, palette.cpp, sidebar.cpp, thread_view.cpp, terminal_view.cpp,
+// files_view.cpp)
 struct App : mydear::Delegate {
     mydear::App* shell = nullptr; // the window: uploads textures
     Store::Data data;
@@ -33,6 +35,38 @@ struct App : mydear::Delegate {
     bool terminalOpen = false;
     bool focusTerminal = false;
     float terminalSplit = 0.62f; // share of the height the chat keeps above the terminal
+
+    // the open thread's folder beside the chat: a tree and one file, read-only. loaded off
+    // the ui thread: the folder may be on another machine
+    struct Files {
+        struct Listing {
+            int epoch = 0;
+            std::string dir, error;
+            std::vector<Ssh::Entry> entries;
+        };
+        struct Doc {
+            int epoch = 0;
+            std::string path, text, note; // note: why nothing, or not all of it, is shown
+            std::vector<int> lines;       // where each line starts in text, then text's size
+            std::vector<bool> carry;      // per line: it starts inside a block comment
+            int widest = 0;               // index of the longest line
+        };
+        bool open = false;
+        bool treeOver = true; // narrow windows: the tree covers the file
+        bool toTop = false;   // a new file: scroll back
+        float split = 0.42f;  // share of the width the chat keeps
+        int epoch = 0;        // bumps with the folder: what was loading for the old one is dropped
+        std::string host, cwd;
+        std::map<std::string, Listing> dirs; // by path under cwd, "" = cwd itself
+        std::set<std::string> expanded;
+        char filter[128] = {};
+        Listing index; // every file under cwd, for the filter
+        bool indexed = false;
+        Doc doc;
+        std::string want; // the file to read next
+        AcpHost::AsyncOp<Listing> listOp, indexOp;
+        AcpHost::AsyncOp<Doc> readOp;
+    } files;
 
     // what is on this machine, looked up off the ui thread (the login shell is slow)
     struct Scan {
@@ -102,6 +136,11 @@ struct App : mydear::Delegate {
 
     void toggleTerminal();
     void terminalPanel(Thread& t);
+
+    void filesPoll(); // once per frame: results in, the next load out
+    void showFile(const std::string& path); // under the thread's folder
+    // splitWidth: the width shared with the chat on its left; 0 = the panel is alone
+    void filesPanel(Thread& t, float splitWidth);
 };
 
 // "now", "5m", "2h", "3d"

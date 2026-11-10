@@ -16,6 +16,11 @@ namespace Ssh {
         bool needsSecret = false; // a password or key passphrase would let it through
     };
 
+    struct Entry {
+        std::string name;
+        bool dir = false;
+    };
+
     class Session : public std::enable_shared_from_this<Session> {
     public:
         ~Session();
@@ -24,6 +29,10 @@ namespace Ssh {
         std::string realpath(const std::string& path, std::string& error);
         // names of the folders in path, sorted
         std::vector<std::string> listDirs(const std::string& path, std::string& error);
+        // everything in path: folders first, then by name
+        std::vector<Entry> list(const std::string& path, std::string& error);
+        // the first `cap` bytes of a file
+        std::string read(const std::string& path, size_t cap, std::string& error);
         // runs command; its stdin and stdout are the transport, stderr goes to onStderr
         std::unique_ptr<acp::Transport> exec(const std::string& command,
                                              std::function<void(const std::string&)> onStderr,

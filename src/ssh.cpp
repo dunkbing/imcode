@@ -567,8 +567,8 @@ namespace Ssh {
         return std::string(buf, static_cast<size_t>(n));
     }
 
-    std::vector<std::string> Session::listDirs(const std::string& path, std::string& error) {
-        std::vector<std::string> out;
+    std::vector<Entry> Session::list(const std::string& path, std::string& error) {
+        std::vector<Entry> out;
         LIBSSH2_SFTP* s = sftp(*impl, error);
         if (!s) {
             return out;
@@ -604,12 +604,52 @@ namespace Ssh {
                         }) == 0 &&
                         LIBSSH2_SFTP_S_ISDIR(target.permissions);
             }
-            if (isDir) {
-                out.push_back(entry);
-            }
+            out.push_back({entry, isDir});
         }
         retry(*impl, [&] { return static_cast<long>(libssh2_sftp_closedir(dir)); });
-        std::ranges::sort(out);
+        std::ranges::sort(out, [](const Entry& a, const Entry& b) {
+            return a.dir != b.dir ? a.dir : a.name < b.name;
+        });
+        return out;
+    }
+
+    std::vector<std::string> Session::listDirs(const std::string& path, std::string& error) {
+        std::vector<std::string> out;
+        for (auto& entry : list(path, error)) {
+            if (entry.dir) {
+                out.push_back(std::move(entry.name));
+            }
+        }
+        return out;
+    }
+
+    std::string Session::read(const std::string& path, size_t cap, std::string& error) {
+        std::string out;
+        LIBSSH2_SFTP* s = sftp(*impl, error);
+        if (!s) {
+            return out;
+        }
+        LIBSSH2_SFTP_HANDLE* file =
+            retry(*impl, [&] { return libssh2_sftp_open(s, path.c_str(), LIBSSH2_FXF_READ, 0); });
+        if (!file) {
+            error = "Could not open " + path;
+            return out;
+        }
+        while (out.size() < cap) {
+            char buf[32768];
+            const long n = retry(*impl, [&] {
+                return static_cast<long>(
+                    libssh2_sftp_read(file, buf, std::min(sizeof(buf), cap - out.size())));
+            });
+            if (n < 0) {
+                error = "Could not read " + path;
+            }
+            if (n <= 0) {
+                break;
+            }
+            out.append(buf, static_cast<size_t>(n));
+        }
+        retry(*impl, [&] { return static_cast<long>(libssh2_sftp_close(file)); });
         return out;
     }
 

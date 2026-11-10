@@ -51,7 +51,7 @@ mydear_embed_images(${CMAKE_CURRENT_SOURCE_DIR}/assets/images) # none yet: both 
 add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sidebar.cpp src/thread_view.cpp
                src/markdown.cpp
                src/history.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp
-               src/terminal.cpp src/terminal_view.cpp
+               src/terminal.cpp src/terminal_view.cpp src/files_view.cpp src/syntax.cpp
                ${EMBEDDED_FONTS_FILE} ${EMBEDDED_IMAGES_FILE} ${IMGUI_CORE})
 target_include_directories(imcode PRIVATE external/IconFontCppHeaders)
 target_link_libraries(imcode PRIVATE mydear::mydear mydear::components acp::host imgui_rich_md ${IMCODE_SSH} ghostty-vt-static)
@@ -59,6 +59,9 @@ target_link_libraries(imcode PRIVATE mydear::mydear mydear::components acp::host
 # ctest: configure with -DIMCODE_BUILD_TESTS=ON (turns on the echo agent it talks to)
 if(IMCODE_BUILD_TESTS)
     enable_testing()
+    add_executable(imcode-history-test tests/history_test.cpp src/history.cpp)
+    target_link_libraries(imcode-history-test PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME imcode-history COMMAND imcode-history-test)
     add_executable(imcode-remote-test tests/remote_test.cpp src/remote.cpp)
     target_link_libraries(imcode-remote-test PRIVATE acp::host)
     add_test(NAME imcode-remote COMMAND imcode-remote-test)
@@ -71,5 +74,7 @@ if(IMCODE_BUILD_TESTS)
     add_executable(imcode-terminal-test tests/terminal_test.cpp src/terminal.cpp)
     target_link_libraries(imcode-terminal-test PRIVATE ghostty-vt-static)
     add_test(NAME imcode-terminal COMMAND imcode-terminal-test)
+    add_executable(imcode-syntax-test tests/syntax_test.cpp src/syntax.cpp)
+    add_test(NAME imcode-syntax COMMAND imcode-syntax-test)
     add_test(NAME imcode-thread COMMAND imcode-thread-test $<TARGET_FILE:acp-echo-agent>)
 endif()

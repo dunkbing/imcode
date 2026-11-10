@@ -107,7 +107,7 @@ One host per machine owns the agents and the threads; every screen is a client o
 - [ ] Checkpoints as hidden git refs; revert the files of a turn
 - [ ] Commit, push, open a pull request
 - [~] Terminal in the thread's folder, local or remote (libghostty); no selection or copy yet
-- [ ] File viewer with search
+- [~] File viewer: read-only, line numbers, simple syntax colours; no selection or search in the file yet
 - [~] Add project: a local folder, a new git repo, a clone from a URL or a forge; the clone runs in the background
 - [ ] Publish a local repo to a forge
 - [ ] Forge accounts: GitHub, GitLab, Forgejo/Gitea, Bitbucket, Azure DevOps; a token or the forge's CLI login
@@ -130,7 +130,7 @@ One host per machine owns the agents and the threads; every screen is a client o
 - [ ] Stacked pull requests: move between layers, merge or rebase the stack
 - [ ] Several terminals per thread, splits, scrollback kept on the host and restored on reconnect
 - [ ] A terminal selection as context in the composer; terminal links open in the browser panel
-- [ ] File browser: tree, breadcrumbs, quick open, text search across the project
+- [~] File browser: tree, breadcrumbs, filter by file name (done; over sftp untested); quick open, text search across the project
 - [ ] Edit and save files; previews of markdown, HTML, images, PDF, CSV, notebooks, office files, fonts
 - [ ] Drag a file from the tree into the composer
 - [ ] Browser panel: tabs, local servers found by port, zoom, a floating mini view
