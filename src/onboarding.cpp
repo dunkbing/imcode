@@ -14,11 +14,14 @@ namespace ui = mydear::ui;
 
 namespace {
     // a section: its name in the left column, the rows to the right of it
-    void beginSection(const char* name) {
+    // (a narrow window stacks them: the name above its rows)
+    void beginSection(const char* name, bool narrow) {
         ImGui::Separator();
         ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
         ImGui::TextColored(Theme::Current()->colors.subtext0, "%s", name);
-        ImGui::SameLine(140);
+        if (!narrow) {
+            ImGui::SameLine(140);
+        }
         ImGui::BeginGroup();
     }
     void endSection() {
@@ -29,6 +32,13 @@ namespace {
     void alignRight(float itemWidth) {
         ImGui::SameLine(); // then by cursor: SameLine's own offset counts from the group
         ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - itemWidth);
+    }
+    void wrapped(const ImVec4& color, const std::string& text) {
+        ImGui::PushStyleColor(ImGuiCol_Text, color);
+        ImGui::PushTextWrapPos(ImGui::GetWindowContentRegionMax().x);
+        ImGui::TextUnformatted(text.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
     }
 } // namespace
 
@@ -74,8 +84,9 @@ void App::pollInstall() {
 
 void App::onboarding() {
     const auto& colors = Theme::Current()->colors;
+    const bool narrow = ImGui::GetContentRegionAvail().x < 560;
     const float width = std::min(720.0f, ImGui::GetContentRegionAvail().x - 2 * Theme::Spacing::XL);
-    ImGui::SetCursorPos(ImVec2((ImGui::GetWindowWidth() - width) * 0.5f, 72));
+    ImGui::SetCursorPos(ImVec2((ImGui::GetWindowWidth() - width) * 0.5f, narrow ? 24 : 72));
     ImGui::BeginChild("onboarding", ImVec2(width, 0));
 
     char hostName[256] = "this machine";
@@ -89,7 +100,7 @@ void App::onboarding() {
     ImGui::TextColored(colors.subtext0, "Setting up %s.", hostName);
     ImGui::Dummy(ImVec2(0, Theme::Spacing::XL));
 
-    beginSection("Agents");
+    beginSection("Agents", narrow);
     if (!scanned) {
         ui::Progress(-1, "Looking for agents");
     }
@@ -112,8 +123,8 @@ void App::onboarding() {
             }
         } else {
             if (on) {
-                alignRight(90 + 80);
-                ImGui::TextColored(colors.green, ICON_FA_CHECK " Ready");
+                alignRight(narrow ? 90 + 28 : 90 + 80);
+                ImGui::TextColored(colors.green, narrow ? ICON_FA_CHECK : ICON_FA_CHECK " Ready");
             }
             alignRight(90);
             if (mydear::Button(on ? "Turn off" : "Turn on", mydear::ButtonVariant::Secondary,
@@ -135,20 +146,23 @@ void App::onboarding() {
     for (const auto& found : scan.history) {
         folders.insert(found.cwd);
     }
-    beginSection("Projects");
+    beginSection("Projects", narrow);
     if (folders.empty()) {
         ImGui::TextColored(colors.subtext0, "%s",
                            scanned ? "No earlier agent sessions found on this machine."
                                    : "Looking for earlier sessions");
     } else {
-        ImGui::Checkbox(std::format("Import {} projects and their threads", folders.size()).c_str(),
+        ImGui::Checkbox((std::format("Import {} projects", folders.size()) +
+                         (narrow ? "" : " and their threads"))
+                            .c_str(),
                         &importHistory);
-        ImGui::TextColored(colors.subtext0, "From your Claude Code and Codex history");
+        wrapped(colors.subtext0, narrow ? "And their threads, from your Claude Code and Codex history"
+                                        : "From your Claude Code and Codex history");
     }
     endSection();
 
-    beginSection("Phone");
-    ImGui::TextColored(colors.subtext0, ICON_FA_MOBILE_SCREEN "  Use imcode on your phone: not yet");
+    beginSection("Phone", narrow);
+    wrapped(colors.subtext0, ICON_FA_MOBILE_SCREEN "  Use imcode on your phone: not yet");
     endSection();
     ImGui::Separator();
     ImGui::Dummy(ImVec2(0, Theme::Spacing::L));

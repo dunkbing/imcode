@@ -309,8 +309,10 @@ void App::paletteDraw() {
         ui::Callout(p.askSecret ? "Sign in" : "Could not open", p.error.c_str(),
                     p.askSecret ? ui::Tone::Warning : ui::Tone::Danger);
     }
-    ImGui::Separator();
-    ImGui::TextColored(colors.overlay1, "Up/Down navigate    Enter select    Backspace back    Esc close");
+    if (vp->WorkSize.x >= 560) { // a phone has no keys to hint at
+        ImGui::Separator();
+        ImGui::TextColored(colors.overlay1, "Up/Down navigate    Enter select    Backspace back    Esc close");
+    }
 
     // act on what was chosen
     bool close = ImGui::IsKeyPressed(ImGuiKey_Escape);
