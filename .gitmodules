@@ -14,3 +14,6 @@
 [submodule "external/IconFontCppHeaders"]
 	path = external/IconFontCppHeaders
 	url = https://github.com/juliettef/IconFontCppHeaders
+[submodule "external/imgui_rich_md"]
+	path = external/imgui_rich_md
+	url = https://github.com/pthom/imgui_rich_md

@@ -1,5 +1,6 @@
 #include "app.hpp"
 
+#include "markdown.hpp"
 #include "imgui_internal.h"
 #include "mydear/alert.hpp"
 #include "mydear/button.hpp"
@@ -218,7 +219,7 @@ void App::frame() {
         ImGui::TextColored(colors.subtext0, "%s  /",
                            std::filesystem::path(t.cwd).filename().string().c_str());
         ImGui::SameLine();
-        ImGui::TextUnformatted(t.title.empty() ? "New thread" : t.title.c_str());
+        ImGui::TextUnformatted(t.title.empty() ? "New thread" : t.title.substr(0, 70).c_str());
         // at the right end, before the os's own buttons
         ImGui::SameLine();
         ImGui::SetCursorScreenPos(ImVec2(bar.pos.x + bar.size.x - bar.rightInset - 40,
@@ -296,6 +297,9 @@ void App::frame() {
             data.threads[current]->send(all.substr(at + 6, all.find(';', at + 1) - at - 6));
         }
         devOpenModels = frames == 40 && (all.find(";models;") != std::string::npos);
+        if (frames == 40 && all.find(";term;") != std::string::npos) {
+            toggleTerminal();
+        }
         mydear::requestFrames();
     }
     paletteDraw();
@@ -321,6 +325,7 @@ int main() {
     }
     shell.run();
     app.icons.clear();
+    Markdown::shutdown();
     // stop the shells and the agents while the loop they wake still exists, not during static teardown
     app.terminals.clear();
     app.data.threads.clear();

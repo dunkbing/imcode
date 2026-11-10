@@ -9,7 +9,7 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly.
 - [x] Threads: an agent in a folder, several running at once, saved across launches and resumed with `session/load`
 - [x] Transcript: messages, thoughts, tool calls, plans; permission and sign-in prompts
 - [x] Model, mode and effort pickers from the agent's config options, there before the first message
-- [ ] Markdown and highlighted code blocks (imgui_rich_md, as DearSQL)
+- [~] Markdown (done, imgui_rich_md) and highlighted code blocks
 - [x] Fonts and icons: JetBrains Mono, an icon font, the system CJK font
 - [ ] Slash commands and `@file` mentions in the composer
 - [ ] Tool call details: diffs for edits, output for commands, file links

@@ -1,5 +1,6 @@
 #include "app.hpp"
 
+#include "markdown.hpp"
 #include "mydear/button.hpp"
 #include "mydear/components.hpp"
 #include "mydear/themes.hpp"
@@ -77,8 +78,10 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         break;
     }
     case Item::Kind::Assistant:
-        // shortcut: plain text; markdown (imgui_rich_md, as in DearSQL) comes next
-        ImGui::TextWrapped("%s", it.text.c_str());
+        // in a child: the renderer fills the window it is in, not the reading column
+        ImGui::BeginChild("md", ImVec2(width, 0), ImGuiChildFlags_AutoResizeY);
+        Markdown::render(it.text, std::format("m{}", index));
+        ImGui::EndChild();
         break;
     case Item::Kind::Thought:
         ImGui::PushStyleColor(ImGuiCol_Text, colors.overlay1);
