@@ -60,6 +60,12 @@ namespace {
 void App::transcriptItem(Thread& t, Item& it, int index, float width) {
     const auto& colors = Theme::Current()->colors;
     ImGui::PushID(index);
+    // everything but the user's bubble sits in the reading column: cards and the markdown
+    // renderer fill the window they are in
+    const bool boxed = it.kind != Item::Kind::User;
+    if (boxed) {
+        ImGui::BeginChild("item", ImVec2(width, 0), ImGuiChildFlags_AutoResizeY);
+    }
     switch (it.kind) {
     case Item::Kind::User: {
         // a bubble at the right, as wide as its text up to most of the column
@@ -78,10 +84,7 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         break;
     }
     case Item::Kind::Assistant:
-        // in a child: the renderer fills the window it is in, not the reading column
-        ImGui::BeginChild("md", ImVec2(width, 0), ImGuiChildFlags_AutoResizeY);
         Markdown::render(it.text, std::format("m{}", index));
-        ImGui::EndChild();
         break;
     case Item::Kind::Thought:
         ImGui::PushStyleColor(ImGuiCol_Text, colors.overlay1);
@@ -93,7 +96,9 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
             ImGui::TreeNodeEx("tool", it.toolOutput.empty() ? ImGuiTreeNodeFlags_Leaf : 0, "%s",
                               it.toolTitle.empty() ? "Tool" : it.toolTitle.c_str());
         ImGui::SameLine();
-        ui::Badge(it.toolStatus.empty() ? "pending" : it.toolStatus.c_str(),
+        ui::Badge(it.toolStatus.empty()            ? "pending"
+                  : it.toolStatus == "in_progress" ? "running"
+                                                   : it.toolStatus.c_str(),
                   it.toolStatus == "failed"      ? ui::Tone::Danger
                   : it.toolStatus == "completed" ? ui::Tone::Success
                                                  : ui::Tone::Info);
@@ -110,10 +115,14 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
     case Item::Kind::Plan:
         ui::BeginCard("plan", "Plan");
         for (const auto& entry : it.plan) {
-            const char* box = entry.status == "completed"     ? "[x]"
-                              : entry.status == "in_progress" ? "[~]"
-                                                              : "[ ]";
-            ImGui::TextWrapped("%s %s", box, entry.content.c_str());
+            const bool done = entry.status == "completed";
+            const bool doing = entry.status == "in_progress";
+            ImGui::TextColored(done ? colors.green : doing ? colors.yellow : colors.overlay0, "%s",
+                               done ? ICON_FA_CIRCLE_CHECK : doing ? ICON_FA_CIRCLE_HALF_STROKE : ICON_FA_CIRCLE);
+            ImGui::SameLine(0, 10);
+            ImGui::PushStyleColor(ImGuiCol_Text, done ? colors.subtext0 : colors.text);
+            ImGui::TextWrapped("%s", entry.content.c_str());
+            ImGui::PopStyleColor();
         }
         ui::EndCard();
         break;
@@ -129,9 +138,8 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
                 ImGui::SameLine(0, Theme::Spacing::S);
             }
             if (mydear::SmallButton(std::format("{}##p{}", option.name, i).c_str(),
-                                    option.kind.starts_with("allow")
-                                        ? mydear::ButtonVariant::Primary
-                                        : mydear::ButtonVariant::Secondary)) {
+                                    option.kind == "allow_once" ? mydear::ButtonVariant::Primary
+                                                                : mydear::ButtonVariant::Secondary)) {
                 t.answerPermission(it, option);
             }
         }
@@ -173,6 +181,9 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
     case Item::Kind::Error:
         ui::Callout("Error", it.text.c_str(), ui::Tone::Danger);
         break;
+    }
+    if (boxed) {
+        ImGui::EndChild();
     }
     ImGui::PopID();
     ImGui::Spacing();

@@ -398,6 +398,35 @@ void App::frame() {
             data.threads[current]->send(all.substr(at + 6, all.find(';', at + 1) - at - 6));
         }
         devOpenModels = frames == 40 && (all.find(";models;") != std::string::npos);
+        if (frames == 40 && all.find(";hosts;") != std::string::npos) {
+            paletteOpen();
+            palette.step = Palette::Step::Host;
+        }
+        // one of each kind of transcript item
+        if (frames == 40 && all.find(";demo;") != std::string::npos && current >= 0) {
+            Thread& t = *data.threads[current];
+            t.title = "Rename the config loader";
+            t.items.push_back({.kind = Item::Kind::User, .text = "Rename the config loader and update its callers."});
+            t.items.push_back({.kind = Item::Kind::Thought, .text = "The loader is used in three files; the tests name it too."});
+            Item plan{.kind = Item::Kind::Plan};
+            plan.plan = {{"Find the callers", "high", "completed", {}},
+                         {"Rename the function", "medium", "in_progress", {}},
+                         {"Run the tests", "medium", "pending", {}}};
+            t.items.push_back(plan);
+            t.items.push_back({.kind = Item::Kind::Tool, .toolId = "1", .toolTitle = "grep -rn loadConfig src",
+                               .toolStatus = "completed", .toolOutput = "src/a.cpp:12\nsrc/b.cpp:40"});
+            t.items.push_back({.kind = Item::Kind::Tool, .toolId = "2", .toolTitle = "Edit src/config.cpp",
+                               .toolStatus = "in_progress"});
+            Item ask{.kind = Item::Kind::Permission};
+            ask.permission.title = "Run `ctest --test-dir build`";
+            ask.permission.options = {{"a", "Allow once", "allow_once", {}},
+                                      {"b", "Always allow", "allow_always", {}},
+                                      {"c", "Reject", "reject_once", {}}};
+            t.items.push_back(ask);
+            t.items.push_back({.kind = Item::Kind::Assistant, .text = "Renamed `loadConfig` to `readConfig` in **3 files**."});
+            t.items.push_back({.kind = Item::Kind::Info, .text = "Turn stopped: max_tokens"});
+            t.items.push_back({.kind = Item::Kind::Error, .text = "The agent exited: connection reset"});
+        }
         if (frames == 40 && all.find(";browse;") != std::string::npos) {
             paletteOpen();
             paletteGo("", data.projects.empty() ? "" : data.projects.front().cwd);
