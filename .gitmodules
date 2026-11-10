@@ -1,0 +1,13 @@
+[submodule "external/imgui"]
+	path = external/imgui
+	url = https://github.com/ocornut/imgui
+	branch = docking
+[submodule "external/mydear"]
+	path = external/mydear
+	url = https://github.com/dunkbing/mydear
+[submodule "external/acp-cpp"]
+	path = external/acp-cpp
+	url = https://github.com/dunkbing/acp-cpp
+[submodule "external/acp-host"]
+	path = external/acp-host
+	url = https://github.com/dunkbing/acp-host

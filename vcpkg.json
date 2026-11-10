@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "imcode",
+  "version": "0.0.1",
+  "builtin-baseline": "39a6cc0e44641977a7ccdfdb01a14eaf832aa330",
+  "dependencies": [
+    "nlohmann-json",
+    "openssl",
+    { "name": "libssh2", "default-features": false, "features": ["openssl", "zlib"] },
+    { "name": "cpp-httplib", "features": ["openssl"] },
+    { "name": "glfw3", "platform": "!linux & !ios & !android" },
+    { "name": "nativefiledialog-extended", "platform": "!ios & !android" }
+  ]
+}
