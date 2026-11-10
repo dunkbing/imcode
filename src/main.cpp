@@ -23,6 +23,8 @@
 namespace Theme = mydear::Theme;
 namespace ui = mydear::ui;
 
+int runHeadless(App& app, const char* out, int width, int height, int frames); // headless.cpp
+
 std::string ago(long long unixSeconds) {
     const long long s = std::max(0LL, static_cast<long long>(std::time(nullptr)) - unixSeconds);
     return unixSeconds == 0 ? ""
@@ -68,11 +70,7 @@ void App::agentIcon(const std::string& agentId, float size) {
     if (it == icons.end()) {
         const EmbeddedImage* image = findEmbeddedImage(("agent-" + agentId).c_str());
         const ImTextureID texture =
-            image && shell ? mydear::LoadTexture(image->data, image->size,
-                                                 [this](const uint8_t* rgba, int w, int h) {
-                                                     return shell->createTexture(rgba, w, h);
-                                                 })
-                           : ImTextureID{};
+            image && upload ? mydear::LoadTexture(image->data, image->size, upload) : ImTextureID{};
         it = icons.emplace(agentId, texture).first;
     }
     if (it->second == ImTextureID{}) {
@@ -269,8 +267,22 @@ void App::frame() {
     filesPoll();
 
     const auto& colors = Theme::Current()->colors;
-    const bool narrow = mydear::ContentRect().size.x < 720; // one pane at a time
-    const mydear::TitleBar bar = mydear::BeginTitleBar();
+    // without a window the bar is a plain strip, with room where the os buttons would be
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    const mydear::Rect content = headless ? mydear::Rect{ImVec2(0, 28), ImVec2(display.x, display.y - 28)}
+                                          : mydear::ContentRect();
+    const bool narrow = content.size.x < 720; // one pane at a time
+    mydear::TitleBar bar{ImVec2(0, 0), ImVec2(display.x, 28), 78, 0};
+    if (headless) {
+        ImGui::SetNextWindowPos(bar.pos);
+        ImGui::SetNextWindowSize(bar.size);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 2));
+        ImGui::Begin("##bar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
+        ImGui::PopStyleVar();
+        ImGui::SetCursorPosX(bar.leftInset);
+    } else {
+        bar = mydear::BeginTitleBar();
+    }
     if (data.onboarded && narrow) {
         if (mydear::SmallButton(ICON_FA_BARS)) {
             sidebarOpen = !sidebarOpen;
@@ -306,9 +318,12 @@ void App::frame() {
     } else {
         ImGui::TextColored(colors.subtext0, "imcode"); // an empty bar asserts (mydear#45)
     }
-    mydear::EndTitleBar();
+    if (headless) {
+        ImGui::End();
+    } else {
+        mydear::EndTitleBar();
+    }
 
-    const mydear::Rect content = mydear::ContentRect();
     ImGui::SetNextWindowPos(content.pos);
     ImGui::SetNextWindowSize(content.size);
     ImGui::Begin("main", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
@@ -422,9 +437,20 @@ int main() {
         std::sscanf(size, "%dx%d", &config.width, &config.height);
     }
     static App app;
+    // IMCODE_SHOT=<file.ppm>: no window; the ui after IMCODE_SHOT_FRAMES frames (240) as a picture
+    if (const char* shot = std::getenv("IMCODE_SHOT")) {
+        const char* frames = std::getenv("IMCODE_SHOT_FRAMES");
+        const int code = runHeadless(app, shot, config.width, config.height, frames ? std::atoi(frames) : 240);
+        app.stopHost();
+        app.terminals.clear();
+        app.data.threads.clear();
+        AcpHost::setWake(nullptr);
+        return code;
+    }
     // not mydear::Run: the app needs the shell for its texture upload (mydear#47)
     static mydear::App shell;
     app.shell = &shell;
+    app.upload = [](const uint8_t* rgba, int w, int h) { return shell.createTexture(rgba, w, h); };
     if (!shell.create(config, app)) {
         return 1;
     }

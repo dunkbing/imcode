@@ -1,9 +1,12 @@
 #include "app.hpp"
 
+#include "acp_host/agents.hpp"
+#include "acp_host/process_runner.hpp"
 #include "mydear/button.hpp"
 #include "mydear/themes.hpp"
 #include "syntax.hpp"
 #include <algorithm>
+#include <chrono>
 #include <deque>
 #include <format>
 #include <fstream>
@@ -94,12 +97,61 @@ namespace {
         return doc;
     }
 
-    // every file under cwd, nearest first
-    // shortcut: no ignore rules and the first 20000 files only, so build output can crowd
-    // out deep sources; read .gitignore when quick open or text search is added
+    // what git tracks or would track: the project's own ignore rules, for free. nullopt
+    // when the folder is not a repository or git is not there
+    std::optional<std::vector<std::string>> gitFiles(const std::string& host, const std::string& cwd) {
+        const std::vector<std::string> args = {"ls-files", "--cached", "--others", "--exclude-standard"};
+        std::vector<std::string> out;
+        if (host.empty()) {
+            const auto git = AcpAgents::locateExecutable("git");
+            if (!git) {
+                return std::nullopt;
+            }
+            std::vector<std::string> argv = {*git, "-C", cwd};
+            argv.insert(argv.end(), args.begin(), args.end());
+            const ProcessResult res = ProcessRunner::run({.args = argv, .timeout = std::chrono::seconds(15)});
+            if (!res.success) {
+                return std::nullopt;
+            }
+            for (size_t at = 0; at < res.output.size() && out.size() < maxIndexed;) {
+                const size_t end = std::min(res.output.find('\n', at), res.output.size());
+                if (end > at) {
+                    out.push_back(res.output.substr(at, end - at));
+                }
+                at = end + 1;
+            }
+            return out;
+        }
+        Ssh::Error sshError;
+        const auto session = Ssh::session(host, "", sshError);
+        std::string quoted = "'";
+        for (const char c : cwd) {
+            quoted += c == '\'' ? std::string("'\\''") : std::string(1, c);
+        }
+        std::string error;
+        auto lines = session ? session->exec("cd " + quoted + "' && git ls-files --cached --others --exclude-standard",
+                                             nullptr, error)
+                             : nullptr;
+        if (!lines) {
+            return std::nullopt;
+        }
+        for (std::string line; out.size() < maxIndexed && lines->readLine(line);) {
+            out.push_back(line);
+        }
+        return out.empty() ? std::nullopt : std::optional(out); // not a repository: nothing printed
+    }
+
+    // every file under cwd: git's list when there is one, else a walk, nearest first
+    // shortcut: the walk has no ignore rules and stops at 20000 files
     Files::Listing index(const std::string& host, const std::string& cwd, int epoch) {
         Files::Listing out;
         out.epoch = epoch;
+        if (auto tracked = gitFiles(host, cwd)) {
+            for (auto& path : *tracked) {
+                out.entries.push_back({std::move(path), false});
+            }
+            return out;
+        }
         std::deque<std::string> todo{""};
         // counted too: links can make a loop of folders with no file in it
         for (size_t seen = 0; !todo.empty() && out.entries.size() < maxIndexed && seen < maxIndexed; ++seen) {
@@ -320,7 +372,7 @@ void App::filesPoll() {
         f.indexed = false;
         f.doc = {};
         f.filter[0] = 0;
-        f.treeOver = true;
+        f.treeOver = f.want.empty(); // a file asked for as the panel opens stays in front
     }
     // one at a time of each kind: a running one cannot be replaced
     if (!f.listOp.isRunning()) {

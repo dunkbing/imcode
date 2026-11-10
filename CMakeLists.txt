@@ -49,7 +49,7 @@ mydear_embed_fonts(${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts)
 mydear_embed_images(${CMAKE_CURRENT_SOURCE_DIR}/assets/images) # none yet: both lookups must exist
 
 add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sidebar.cpp src/thread_view.cpp
-               src/markdown.cpp src/notify.cpp
+               src/markdown.cpp src/notify.cpp src/headless.cpp
                src/history.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp
                src/terminal.cpp src/terminal_view.cpp src/files_view.cpp src/syntax.cpp
                ${EMBEDDED_FONTS_FILE} ${EMBEDDED_IMAGES_FILE} ${IMGUI_CORE})

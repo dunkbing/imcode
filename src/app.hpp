@@ -11,6 +11,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <filesystem>
+#include <functional>
 #include <mutex>
 #include <thread>
 #include <map>
@@ -23,6 +24,8 @@
 // files_view.cpp)
 struct App : mydear::Delegate {
     mydear::App* shell = nullptr; // the window: uploads textures
+    bool headless = false;        // no window (headless.cpp): frames are drawn into memory
+    std::function<ImTextureID(const uint8_t* rgba, int width, int height)> upload;
     Store::Data data;
     std::filesystem::path dataFile;
     int current = -1; // index into data.threads
