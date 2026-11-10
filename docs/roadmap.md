@@ -10,17 +10,17 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly.
 - [x] Transcript: messages, thoughts, tool calls, plans; permission and sign-in prompts
 - [x] Model, mode and effort pickers from the agent's config options, there before the first message
 - [ ] Markdown and highlighted code blocks (imgui_rich_md, as DearSQL)
-- [~] Fonts and icons: JetBrains Mono with the system CJK font (done), an icon font
+- [x] Fonts and icons: JetBrains Mono, an icon font, the system CJK font
 - [ ] Slash commands and `@file` mentions in the composer
 - [ ] Tool call details: diffs for edits, output for commands, file links
 - [ ] Agents install themselves: managed Bun and registry binaries, with progress
 - [ ] Queue a message while a turn runs; edit and resend the last one
 - [ ] Images and files as attachments (paste, drop)
 - [ ] Context and cost from `usage_update`; compaction notices
-- [ ] Rename, archive, search threads
-- [ ] Detect installed agents: turn on, install, sign in, update; browse the ACP registry
+- [~] Rename, archive, search threads
+- [~] Detect installed agents: turn on, install, sign in, update; browse the ACP registry
 - [ ] Add a local ACP command as an agent; several accounts or configs of one agent
-- [ ] Import projects and recent threads from agent CLI history (Claude Code, Codex, Pi)
+- [~] Import projects and recent threads from agent CLI history (Claude Code, Codex, Pi)
 - [ ] Custom models per agent; model, effort and mode remembered for new threads
 - [ ] Permission mode per thread: supervised, auto-accept edits, auto, full access; a default for new threads
 - [ ] Approve or reject requests in the transcript; a subagent's requests asked in the parent
@@ -108,7 +108,7 @@ One host per machine owns the agents and the threads; every screen is a client o
 - [ ] Commit, push, open a pull request
 - [ ] Terminal in the thread's folder, local or remote (libghostty)
 - [ ] File viewer with search
-- [ ] Add project: a local folder, a new git repo, a clone from a URL or a forge; the clone runs in the background
+- [~] Add project: a local folder, a new git repo, a clone from a URL or a forge; the clone runs in the background
 - [ ] Publish a local repo to a forge
 - [ ] Forge accounts: GitHub, GitLab, Forgejo/Gitea, Bitbucket, Azure DevOps; a token or the forge's CLI login
 - [ ] Project name and icon (image, emoji, monogram); pin, archive, remove
@@ -193,8 +193,8 @@ One host per machine owns the agents and the threads; every screen is a client o
 - [ ] ACP log view (every line in and out)
 - [ ] App bundle, icon, installers; CI on macOS, Windows, Linux
 - [ ] Auto-update (mydear's updater)
-- [ ] Welcome page on first run: agents found, projects to import, phone setup
-- [ ] Command palette: threads, projects, actions, themes, add project
+- [~] Welcome page on first run: agents found, projects to import, phone setup
+- [~] Command palette: threads, projects, actions, themes, add project
 - [ ] Keybindings editor: rules with when-conditions, a config file, conflicts warned
 - [ ] Keyboard focus moves between sidebar, transcript, composer and panels; keys in the thread list
 - [ ] Themes: a light and dark pair, a theme editor, import, a theme per host
