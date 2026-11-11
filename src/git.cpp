@@ -113,6 +113,95 @@ namespace Git {
         }
     } // namespace
 
+    std::vector<Change> parseChanges(std::string_view porcelain, std::string_view numstat) {
+        std::vector<Change> out;
+        const auto eachLine = [](std::string_view text, auto&& fn) {
+            for (size_t at = 0; at < text.size();) {
+                const size_t end = std::min(text.find('\n', at), text.size());
+                fn(text.substr(at, end - at));
+                at = end + 1;
+            }
+        };
+        eachLine(porcelain, [&](std::string_view line) {
+            if (line.size() < 4 || line.starts_with("## ")) {
+                return;
+            }
+            Change c;
+            const char x = line[0], y = line[1];
+            c.kind = x == '?' ? '?' : (x == 'R' || y == 'R') ? 'R' : (x == 'A' || y == 'A') ? 'A'
+                                    : (x == 'D' || y == 'D') ? 'D' : 'M';
+            std::string_view path = line.substr(3);
+            if (const size_t arrow = path.find(" -> "); arrow != std::string_view::npos) {
+                path = path.substr(arrow + 4); // a rename: its new name
+            }
+            if (path.size() >= 2 && path.front() == '"' && path.back() == '"') {
+                path = path.substr(1, path.size() - 2); // quoted by git (spaces and such)
+            }
+            c.path = std::string(path);
+            out.push_back(std::move(c));
+        });
+        // "<added>\t<removed>\t<path>", "-" for binary files
+        eachLine(numstat, [&](std::string_view line) {
+            const size_t t1 = line.find('\t'), t2 = line.find('\t', t1 + 1);
+            if (t1 == std::string_view::npos || t2 == std::string_view::npos) {
+                return;
+            }
+            std::string path(line.substr(t2 + 1));
+            if (const size_t arrow = path.find(" => "); arrow != std::string::npos) {
+                path = path.substr(arrow + 4);
+            }
+            for (Change& c : out) {
+                if (c.path == path && line[0] != '-') {
+                    c.added = std::atoi(std::string(line.substr(0, t1)).c_str());
+                    c.removed = std::atoi(std::string(line.substr(t1 + 1, t2 - t1 - 1)).c_str());
+                }
+            }
+        });
+        return out;
+    }
+
+    std::vector<Diff::Line> parseDiff(std::string_view unified) {
+        std::vector<Diff::Line> out;
+        bool body = false; // past the file's headers
+        for (size_t at = 0; at < unified.size();) {
+            const size_t end = std::min(unified.find('\n', at), unified.size());
+            const std::string_view line = unified.substr(at, end - at);
+            at = end + 1;
+            if (line.starts_with("@@")) {
+                if (!out.empty()) {
+                    out.push_back({'~', ""});
+                }
+                body = true;
+            } else if (line.starts_with("diff --git")) {
+                body = false;
+            } else if (body && !line.empty() && (line[0] == '+' || line[0] == '-' || line[0] == ' ')) {
+                out.push_back({line[0], std::string(line.substr(1))});
+            } else if (body && line.empty()) {
+                out.push_back({' ', ""});
+            }
+        }
+        return out;
+    }
+
+    std::vector<Change> changes(const std::string& host, const std::string& cwd) {
+        // both in one run, split by a marker line
+        const std::string out = run(host, "cd " + quote(cwd) + " && git status --porcelain=v1 -uall && echo __imcode__ && "
+                                          "git diff HEAD --numstat 2>/dev/null");
+        const size_t mark = out.find("__imcode__\n");
+        if (mark == std::string::npos) {
+            return {};
+        }
+        return parseChanges(std::string_view(out).substr(0, mark), std::string_view(out).substr(mark + 10));
+    }
+
+    std::vector<Diff::Line> fileDiff(const std::string& host, const std::string& cwd, const Change& change) {
+        // shortcut: one file's whole diff in memory; a huge one is cut at 4000 lines
+        const std::string script =
+            change.kind == '?' ? "cd " + quote(cwd) + " && git diff --no-index -- /dev/null " + quote(change.path) + " | head -4000"
+                               : "cd " + quote(cwd) + " && git diff HEAD -- " + quote(change.path) + " | head -4000";
+        return parseDiff(run(host, script));
+    }
+
     std::string addWorktree(const std::string& host, const std::string& repo, const std::string& name,
                             std::string& error) {
         const std::string repoName = repo.substr(repo.find_last_of('/') + 1);

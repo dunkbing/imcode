@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <algorithm>
 
 int main() {
     const Git::Status a = Git::parse("## main...origin/main [ahead 1]\n M src/a.cpp\n?? new.txt\n");
@@ -43,6 +44,40 @@ int main() {
     std::string kept;
     const bool refusedDirty = !Git::removeWorktree("", repo.string(), made, kept) && !kept.empty();
     fs::remove(fs::path(made) / "new.txt");
+
+    // what changed, and one file's diff: a tracked file edited, a file not tracked yet
+    std::ofstream(repo / "a.txt") << "one\ntwo\nthree\n";
+    const std::string commit = "cd '" + home.string() + "/it'\\''s a repo' && git add a.txt && "
+                               "git -c user.email=t@t -c user.name=t commit -q -m a";
+    ok = ok && std::system(commit.c_str()) == 0;
+    std::ofstream(repo / "a.txt") << "one\n2\nthree\nfour\n";
+    std::ofstream(repo / "b c.txt") << "new\n";
+    const auto found = Git::changes("", repo.string());
+    const auto edit = std::ranges::find(found, std::string("a.txt"), &Git::Change::path);
+    const auto fresh = std::ranges::find(found, std::string("b c.txt"), &Git::Change::path);
+    const bool listed = found.size() == 2 && edit != found.end() && edit->kind == 'M' && edit->added == 2 &&
+                        edit->removed == 1 && fresh != found.end() && fresh->kind == '?';
+    const auto lines = listed ? Git::fileDiff("", repo.string(), *edit) : std::vector<Diff::Line>{};
+    const auto added = listed ? Git::fileDiff("", repo.string(), *fresh) : std::vector<Diff::Line>{};
+    const bool diffed = lines.size() == 5 && lines[1].kind == '-' && lines[1].text == "two" && lines[2].kind == '+' &&
+                        lines[2].text == "2" && lines[4].text == "four" && added.size() == 1 && added[0].kind == '+' &&
+                        added[0].text == "new";
+    if (!listed || !diffed) {
+        std::printf("FAILED: changes %zu, diff %zu, new %zu\n", found.size(), lines.size(), added.size());
+        for (const auto& l : lines) {
+            std::printf("  %c%s\n", l.kind, l.text.c_str());
+        }
+        ok = false;
+    }
+    fs::remove(repo / "a.txt");
+    fs::remove(repo / "b c.txt");
+    // parsers: renames, quoted paths, binary files, hunk breaks
+    const auto parsed = Git::parseChanges("R  old.txt -> new.txt\n?? \"has space.txt\"\n D gone\n",
+                                          "3\t1\tnew.txt\n-\t-\tpic.png\n");
+    ok = ok && parsed.size() == 3 && parsed[0].kind == 'R' && parsed[0].path == "new.txt" && parsed[0].added == 3 &&
+         parsed[1].kind == '?' && parsed[1].path == "has space.txt" && parsed[2].kind == 'D' && parsed[2].added == -1;
+    const auto hunks = Git::parseDiff("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n@@ -9 +9 @@\n c\n");
+    ok = ok && hunks.size() == 4 && hunks[0].kind == '-' && hunks[2].kind == '~' && hunks[3].kind == ' ';
     std::string gone;
     ok = ok && refusedDirty && Git::removeWorktree("", repo.string(), made, gone) && !fs::exists(made);
     fs::remove_all(home);

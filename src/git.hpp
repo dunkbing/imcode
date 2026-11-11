@@ -2,6 +2,9 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
+
+#include "diff.hpp"
 
 // what a folder's repository says about itself, for the line under the composer
 namespace Git {
@@ -23,6 +26,21 @@ namespace Git {
     // are not committed: false with git's own words; blocks
     bool removeWorktree(const std::string& host, const std::string& repo, const std::string& path,
                         std::string& error);
+    // a file that differs from the last commit
+    struct Change {
+        std::string path;   // under the repository
+        char kind = 'M';    // 'M' modified, 'A' added, 'D' deleted, 'R' renamed, '?' not tracked
+        int added = -1, removed = -1; // lines; -1: not counted (binary, not tracked)
+    };
+    // from `git status --porcelain=v1 -z`-less output and `git diff HEAD --numstat`
+    std::vector<Change> parseChanges(std::string_view porcelain, std::string_view numstat);
+    // the changes of a folder's repository, here or on an ssh host; blocks
+    std::vector<Change> changes(const std::string& host, const std::string& cwd);
+    // a unified diff as lines to show: hunk headers become '~', file headers are dropped
+    std::vector<Diff::Line> parseDiff(std::string_view unified);
+    // one file's diff against the last commit (all added when it is not tracked); blocks
+    std::vector<Diff::Line> fileDiff(const std::string& host, const std::string& cwd, const Change& change);
+
     // a branch-safe name from a prompt: its first words, and a few characters to keep it unique
     std::string slug(const std::string& text);
 } // namespace Git
