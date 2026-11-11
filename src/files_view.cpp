@@ -4,7 +4,7 @@
 #include "acp_host/process_runner.hpp"
 #include "imshell/button.hpp"
 #include "imshell/themes.hpp"
-#include "syntax.hpp"
+#include "code_colors.hpp"
 #include <algorithm>
 #include <chrono>
 #include <deque>
@@ -267,25 +267,7 @@ namespace {
             const Syntax::Lang lang = Syntax::langOf(fs::path(f.doc.path).filename().string());
             f.editor.SetReadOnly(true);
             f.editor.SetShowLineNumbers(true);
-            // our line tokenizer, a line at a time over the whole text
-            f.editor.SetHighlighter([lang](std::string_view text, std::span<imshell::TextEditor::Token> tokens,
-                                           const imshell::TextEditor::Edit&) {
-                using Token = imshell::TextEditor::Token;
-                static const Token kinds[] = {Token::Text, Token::Comment, Token::String, Token::Number,
-                                              Token::Keyword};
-                std::vector<Syntax::Span> spans;
-                bool carry = false;
-                for (size_t at = 0; at < text.size();) {
-                    const size_t end = std::min(text.find('\n', at), text.size());
-                    Syntax::line(lang, text.substr(at, end - at), carry, spans);
-                    for (const auto& span : spans) {
-                        std::fill(tokens.begin() + static_cast<long>(at) + span.begin,
-                                  tokens.begin() + static_cast<long>(at) + span.end,
-                                  kinds[static_cast<int>(span.kind)]);
-                    }
-                    at = end + 1;
-                }
-            });
+            f.editor.SetHighlighter(codeColors(lang));
             f.editor.SetText(f.doc.text);
             f.shownPath = f.doc.path;
             f.shownSize = f.doc.text.size();

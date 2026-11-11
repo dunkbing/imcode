@@ -536,7 +536,9 @@ void App::frame() {
                                       {"b", "Always allow", "allow_always", {}},
                                       {"c", "Reject", "reject_once", {}}};
             t.items.push_back(ask);
-            t.items.push_back({.kind = Item::Kind::Assistant, .text = "Renamed `loadConfig` to `readConfig` in **3 files**."});
+            t.items.push_back({.kind = Item::Kind::Assistant, .text = "Renamed `loadConfig` to `readConfig` in **3 files**.\n\n```cpp\n"
+                                        "// was loadConfig\nConfig readConfig(const std::string& path);\n"
+                                        "const int retries = 3;\n```"});
             Item auth{.kind = Item::Kind::Auth};
             auth.authMethods.resize(2);
             auth.authMethods[0].name = "Log in with your account";
