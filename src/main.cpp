@@ -57,6 +57,7 @@ std::string ago(long long unixSeconds) {
 void App::setup() {
     Theme::Current() = &Theme::themeById("tokyo-night");
     Theme::ApplyTheme(Theme::Current()->colors);
+    ImGui::GetStyle().ScrollbarSize = 8; // thin: the lists are narrow and many
     static const ImWchar iconRanges[] = {ICON_MIN_FA, ICON_MAX_16_FA, 0};
     const EmbeddedFont* text = findEmbeddedFont("JetBrainsMono-Medium");
     const EmbeddedFont* icons = findEmbeddedFont("fa-solid-900");
