@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "text.hpp"
 
 #include "clipboard.hpp"
 #include <fstream>
@@ -1177,7 +1178,7 @@ void App::threadBody(Thread& t) {
         ImGui::PopID();
         ImGui::SameLine();
         ImGui::TextColored(colors.overlay1, "Queued: %s",
-                           t.queue[i].text.substr(0, std::min(t.queue[i].text.find('\n'), size_t{90})).c_str());
+                           cut(t.queue[i].text.substr(0, t.queue[i].text.find('\n')), 90).c_str());
     }
     if (drop >= 0) {
         t.queue.erase(t.queue.begin() + drop);

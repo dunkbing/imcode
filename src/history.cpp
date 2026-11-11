@@ -1,4 +1,5 @@
 #include "history.hpp"
+#include "text.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -34,7 +35,7 @@ namespace History {
             if (text.empty() || text.front() == '<' || text.front() == '#') {
                 return false;
             }
-            out.title = text.substr(0, std::min(text.find('\n'), size_t{80}));
+            out.title = cut(text.substr(0, text.find('\n')), 80);
             return true;
         }
 
@@ -155,7 +156,7 @@ namespace History {
                                              : p.contains("input") && p["input"].is_string()       ? p["input"].get<std::string>()
                                                                                                    : "";
                     if (!args.empty()) {
-                        title += " " + args.substr(0, std::min(args.find('\n'), size_t{120}));
+                        title += " " + cut(args.substr(0, args.find('\n')), 120);
                     }
                     out.push_back({Entry::Kind::Tool, title});
                 }
@@ -183,7 +184,7 @@ namespace History {
                         for (const char* key : {"command", "file_path", "path", "pattern", "description"}) {
                             if (input.contains(key) && input[key].is_string()) {
                                 const std::string v = input[key].get<std::string>();
-                                title += " " + v.substr(0, std::min(v.find('\n'), size_t{120}));
+                                title += " " + cut(v.substr(0, v.find('\n')), 120);
                                 break;
                             }
                         }

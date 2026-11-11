@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "text.hpp"
 
 #include "code_colors.hpp"
 #include "imshell/markdown.hpp"
@@ -435,7 +436,7 @@ void App::hostLoop() {
             }
             auto thread = std::make_unique<Thread>(from->cwd, from->agentId, from->host);
             thread->root = from->root;
-            thread->title = session.title.substr(0, 80);
+            thread->title = cut(session.title, 80);
             thread->sessionId = session.sessionId;
             // "2026-11-11T02:07:30.123Z": to the second is enough to sort by
             std::tm when{};
@@ -567,7 +568,7 @@ void App::frame() {
         const float room = bar.pos.x + bar.size.x - bar.rightInset - 76 - 12 - ImGui::GetCursorScreenPos().x;
         const size_t fits = static_cast<size_t>(std::max(0.0f, room / ImGui::CalcTextSize("0").x));
         const std::string title = t.title.empty() ? "New thread" : t.title;
-        ImGui::TextUnformatted(title.size() > fits ? (title.substr(0, fits > 2 ? fits - 2 : 0) + "..").c_str()
+        ImGui::TextUnformatted(title.size() > fits ? (cut(title, fits > 2 ? fits - 2 : 0) + "..").c_str()
                                                    : title.c_str());
         // at the right end, before the os's own buttons
         ImGui::SameLine();

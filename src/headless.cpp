@@ -217,7 +217,8 @@ namespace {
 
 // `frames` frames at 60 a second (agents and hooks get real time), the last one to `out`
 int runHeadless(App& app, const char* out, int width, int height, int frames) {
-    const float scale = 2; // as a retina window: crisp text
+    // as a retina window (crisp text); IMCODE_SCALE=1: as a plain one
+    const float scale = std::getenv("IMCODE_SCALE") ? static_cast<float>(std::atof(std::getenv("IMCODE_SCALE"))) : 2.0f;
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;

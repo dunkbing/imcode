@@ -37,6 +37,8 @@ endif()
 
 # dear imgui and imgui_rich_md are imshell's submodules (git submodule update --init
 # --recursive). imgui's core is compiled here, once; imshell only adds the backends it uses
+# emoji past U+FFFF in the ui: imgui with 32-bit characters (imshell passes it to everything)
+set(IMSHELL_WCHAR32 ON CACHE BOOL "" FORCE)
 add_subdirectory(external/imshell)
 option(IMCODE_BUILD_TESTS "Build the tests" OFF)
 if(IMCODE_BUILD_TESTS)

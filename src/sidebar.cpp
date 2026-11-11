@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "text.hpp"
 #include "ssh.hpp"
 
 #include "imshell/button.hpp"
@@ -208,7 +209,7 @@ void App::sidebar() {
             }
         } else {
             ImGui::PushTextWrapPos(at.x + width - 8);
-            ImGui::TextUnformatted(t.title.substr(0, 34).c_str());
+            ImGui::TextUnformatted(cut(t.title, 34).c_str());
             ImGui::PopTextWrapPos();
         }
         ImGui::SetCursorPos(ImVec2(at.x + 8, at.y + 4 + 2 * (line + 3)));
@@ -243,7 +244,7 @@ void App::sidebar() {
         ImGui::PopID();
     }
     if (renamed >= 0) {
-        data.threads[renamed]->title = renameText.substr(0, 80);
+        data.threads[renamed]->title = cut(renameText, 80);
         data.threads[renamed]->renamed = true;
         renaming = -1;
         save();

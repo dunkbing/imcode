@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "text.hpp"
 
 #include "imshell/button.hpp"
 #include "imshell/components.hpp"
@@ -168,7 +169,7 @@ void App::paletteDraw() {
         for (int i = 0; i < static_cast<int>(data.threads.size()); ++i) {
             const Thread& t = *data.threads[i];
             if (!t.title.empty()) {
-                offer({ICON_FA_ARROW_UP, t.title.substr(0, 60),
+                offer({ICON_FA_ARROW_UP, cut(t.title, 60),
                        fs::path(t.projectDir()).filename().string()},
                       -2 - i);
             }

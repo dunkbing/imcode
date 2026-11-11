@@ -1,4 +1,5 @@
 #include "thread.hpp"
+#include "text.hpp"
 
 #include "acp_host/registry.hpp"
 #include "git.hpp"
@@ -693,7 +694,7 @@ void Thread::poll() {
             break;
         case AcpEvent::Type::Title: // the agent's summary reads better than the first prompt
             if (!renamed) {
-                title = ev.text.substr(0, 80);
+                title = cut(ev.text, 80);
                 changed_ = true;
             }
             break;
