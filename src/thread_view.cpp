@@ -598,7 +598,9 @@ void App::composer(Thread& t, float width) {
     if (effort) {
         label += "  " + currentName(effort);
     }
-    const float labelWidth = ImGui::CalcTextSize(label.c_str()).x + 24;
+    // the model button: its padding, the agent's mark, a gap, the label
+    constexpr float chipPad = 7, chipIcon = 16, chipGap = 6;
+    const float labelWidth = ImGui::CalcTextSize(label.c_str()).x + 2 * chipPad + chipIcon + chipGap;
     // the permission mode, beside the picker: it decides what the agent may do unasked.
     // the ones that let it do anything stand out
     const acp::ConfigOption* mode = optionOf(t, "mode");
@@ -612,7 +614,7 @@ void App::composer(Thread& t, float width) {
     }
     const float modeWidth = modeLabel.empty() ? 0 : ImGui::CalcTextSize(modeLabel.c_str()).x + 8 +
                                                         ImGui::GetStyle().ItemSpacing.x;
-    ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - labelWidth - button - 16 - 6 -
+    ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - labelWidth - button -
                          ImGui::GetStyle().ItemSpacing.x - modeWidth);
     if (!modeLabel.empty()) {
         // level with the buttons beside it: the text drawn in the middle of a button-high
@@ -657,17 +659,17 @@ void App::composer(Thread& t, float width) {
     }
     // the agent's mark and the model: plain until hovered (or open), then a rounded background
     {
-        const ImVec2 chip(labelWidth + 16 + 6, button);
+        const ImVec2 chip(labelWidth, button);
         const bool clicked = ImGui::InvisibleButton("##models", chip);
         const ImVec2 at = ImGui::GetItemRectMin();
         const bool lit = ImGui::IsItemHovered() || ImGui::IsPopupOpen("models");
         ImDrawList* draw = ImGui::GetWindowDrawList();
         if (lit) {
             draw->AddRectFilled(at, ImVec2(at.x + chip.x, at.y + chip.y), ImGui::GetColorU32(colors.surface0),
-                                ImGui::GetStyle().FrameRounding);
+                                ImGui::GetStyle().FrameRounding + 3);
         }
-        agentIconAt(t.agentId, ImVec2(at.x + 10, std::floor(at.y + (button - 16) * 0.5f)), 16);
-        draw->AddText(ImVec2(at.x + 10 + 16 + 8, at.y + (button - ImGui::GetTextLineHeight()) * 0.5f),
+        agentIconAt(t.agentId, ImVec2(at.x + chipPad, std::floor(at.y + (button - chipIcon) * 0.5f)), chipIcon);
+        draw->AddText(ImVec2(at.x + chipPad + chipIcon + chipGap, at.y + (button - ImGui::GetTextLineHeight()) * 0.5f),
                       ImGui::GetColorU32(lit ? colors.text : colors.subtext1), label.c_str());
         if (clicked) {
             ImGui::OpenPopup("models");
