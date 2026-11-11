@@ -162,7 +162,15 @@ bool Thread::ensureStarted() {
 }
 
 void Thread::open() {
-    if (!acp_ && items.empty()) {
+    // a saved thread: its agent replays the history. a new one waits until it is needed
+    // (a message, the model picker, a slash command): no process for a thread never used
+    if (!acp_ && items.empty() && !sessionId.empty()) {
+        ensureStarted();
+    }
+}
+
+void Thread::wake() {
+    if (!acp_ && !connectOp_.isRunning()) {
         ensureStarted();
     }
 }

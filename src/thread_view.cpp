@@ -503,6 +503,9 @@ void App::composer(Thread& t, float width) {
         const std::string text = input;
         const size_t word = text.find_last_of(" \n") + 1; // 0 when there is no space
         const bool commandMode = text.starts_with("/") && word == 0;
+        if (commandMode) {
+            t.wake(); // the commands come from the agent
+        }
         const bool fileMode = !commandMode && word < text.size() && text[word] == '@';
         struct Row {
             std::string label, detail, insert;
@@ -703,10 +706,12 @@ void App::composer(Thread& t, float width) {
         draw->AddText(ImVec2(at.x + chipPad + chipIcon + chipGap, at.y + (button - ImGui::GetTextLineHeight()) * 0.5f),
                       ImGui::GetColorU32(lit ? colors.text : colors.subtext1), label.c_str());
         if (clicked) {
+            t.wake(); // the models and modes come from the agent
             ImGui::OpenPopup("models");
         }
     }
     if (std::exchange(devOpenModels, false)) {
+        t.wake();
         ImGui::OpenPopup("models");
     }
     // above the button, right edges aligned; plain panes, not the composer's rounded box

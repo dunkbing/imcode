@@ -91,6 +91,8 @@ public:
     // shown for the first time: start the agent, so its settings (model, mode) are there
     // before the first message and a saved thread replays its history
     void open();
+    // its agent is needed now (the model picker, the slash commands): started if it is not
+    void wake();
     // files: local paths. images go along as pictures, other files as links (not over ssh)
     void send(const std::string& text, const std::vector<std::string>& files = {});
     void cancel();
