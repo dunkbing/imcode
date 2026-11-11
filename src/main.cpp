@@ -1,6 +1,7 @@
 #include "app.hpp"
 
-#include "markdown.hpp"
+#include "code_colors.hpp"
+#include "imshell/markdown.hpp"
 #include "notify.hpp"
 #include "imgui_internal.h"
 #include "imshell/alert.hpp"
@@ -97,6 +98,21 @@ void App::setup() {
         imshell::AddFont({{text->data, text->size}, {icons->data, icons->size, iconRanges, true}},
                         15.0f);
     }
+    // replies: our fonts, our colours for code, icon glyphs on the copy button
+    auto face = [](const char* name) {
+        const EmbeddedFont* font = findEmbeddedFont(name);
+        return font ? imshell::Markdown::Font{font->data, font->size} : imshell::Markdown::Font{};
+    };
+    imshell::Markdown::Configure({.regular = face("JetBrainsMono-Medium"),
+                                  .bold = face("JetBrainsMono-Bold"),
+                                  .italic = face("JetBrainsMono-MediumItalic"),
+                                  .boldItalic = face("JetBrainsMono-BoldItalic"),
+                                  .code = face("JetBrainsMono-Medium"),
+                                  .highlighter = [](const std::string& language) {
+                                      return codeColors(fenceLang(language));
+                                  },
+                                  .copyIcon = ICON_FA_COPY,
+                                  .copiedIcon = ICON_FA_CHECK});
     AcpHost::setWake([this] {
         imshell::requestFrames();
         hostWake.notify_one();
@@ -660,7 +676,7 @@ int main() {
     }
     shell.run();
     app.icons.clear();
-    Markdown::shutdown();
+    imshell::Markdown::Shutdown();
     // stop the shells and the agents while the loop they wake still exists, not during static teardown
     app.stopHost();
     app.terminals.clear();

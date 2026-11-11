@@ -29,8 +29,8 @@ else()
     FetchContent_MakeAvailable(ghostty_vt)
 endif()
 
-# imgui's core is compiled here, once; imshell only adds the backends it uses
-set(IMSHELL_IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui)
+# dear imgui and imgui_rich_md are imshell's submodules (git submodule update --init
+# --recursive). imgui's core is compiled here, once; imshell only adds the backends it uses
 add_subdirectory(external/imshell)
 option(IMCODE_BUILD_TESTS "Build the tests" OFF)
 if(IMCODE_BUILD_TESTS)
@@ -39,22 +39,17 @@ if(IMCODE_BUILD_TESTS)
 endif()
 add_subdirectory(external/acp-cpp)
 add_subdirectory(external/acp-host)
-# chat markdown. it links a target named imgui; ours is compiled into the executable, so headers only
-add_library(imgui INTERFACE)
-target_include_directories(imgui INTERFACE external/imgui)
-set(IMGUI_RICHMD_STB_IMAGE_IMPLEMENTATION OFF CACHE BOOL "" FORCE) # imshell has it
-add_subdirectory(external/imgui_rich_md EXCLUDE_FROM_ALL)
 file(GLOB IMGUI_CORE ${IMSHELL_IMGUI_DIR}/imgui*.cpp)
 imshell_embed_fonts(${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts)
 imshell_embed_images(${CMAKE_CURRENT_SOURCE_DIR}/assets/images) # none yet: both lookups must exist
 
 add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sidebar.cpp src/thread_view.cpp
-               src/markdown.cpp src/notify.cpp src/headless.cpp
+               src/notify.cpp src/headless.cpp
                src/history.cpp src/diff.cpp src/git.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp
                src/terminal.cpp src/terminal_view.cpp src/files_view.cpp src/syntax.cpp
                ${EMBEDDED_FONTS_FILE} ${EMBEDDED_IMAGES_FILE} ${IMGUI_CORE})
 target_include_directories(imcode PRIVATE external/IconFontCppHeaders)
-target_link_libraries(imcode PRIVATE imshell::imshell imshell::components imshell::editor acp::host imgui_rich_md ${IMCODE_SSH} ghostty-vt-static)
+target_link_libraries(imcode PRIVATE imshell::imshell imshell::components imshell::markdown acp::host ${IMCODE_SSH} ghostty-vt-static)
 
 # ctest: configure with -DIMCODE_BUILD_TESTS=ON (turns on the echo agent it talks to)
 if(IMCODE_BUILD_TESTS)

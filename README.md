@@ -5,7 +5,7 @@ Run coding agents (Claude Code, Codex, Gemini, any [ACP](https://agentclientprot
 ## Build
 
 ```sh
-git submodule update --init
+git submodule update --init --recursive
 cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
 cmake --build build -j 4
 ./build/imcode

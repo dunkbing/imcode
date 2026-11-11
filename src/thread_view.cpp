@@ -1,6 +1,6 @@
 #include "app.hpp"
 
-#include "markdown.hpp"
+#include "imshell/markdown.hpp"
 #include "imshell/button.hpp"
 #include "imshell/components.hpp"
 #include "imshell/themes.hpp"
@@ -110,7 +110,7 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         break;
     }
     case Item::Kind::Assistant:
-        Markdown::render(it.text, std::format("m{}", index));
+        imshell::Markdown::Render(it.text, std::format("m{}", index));
         break;
     case Item::Kind::Thought:
         ImGui::PushStyleColor(ImGuiCol_Text, colors.overlay1);

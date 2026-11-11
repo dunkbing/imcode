@@ -4,8 +4,24 @@
 #include "syntax.hpp"
 #include <algorithm>
 #include <span>
+#include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
+
+// a code fence's language name as one of ours
+inline Syntax::Lang fenceLang(const std::string& name) {
+    static const std::pair<const char*, const char*> files[] = {
+        {"c", "a.c"},     {"cpp", "a.cpp"},         {"c++", "a.cpp"},     {"h", "a.h"},   {"hpp", "a.hpp"},
+        {"cmake", "CMakeLists.txt"},               {"json", "a.json"},   {"md", "a.md"}, {"markdown", "a.md"},
+        {"sh", "a.sh"},   {"bash", "a.sh"},         {"zsh", "a.sh"},      {"shell", "a.sh"}};
+    for (const auto& [lang, file] : files) {
+        if (name == lang) {
+            return Syntax::langOf(file);
+        }
+    }
+    return Syntax::Lang::None;
+}
 
 // our line tokenizer as an editor highlighter: a line at a time over the whole text
 inline imshell::TextEditor::Highlighter codeColors(Syntax::Lang lang) {

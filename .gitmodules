@@ -1,7 +1,3 @@
-[submodule "external/imgui"]
-	path = external/imgui
-	url = https://github.com/ocornut/imgui
-	branch = docking
 [submodule "external/acp-cpp"]
 	path = external/acp-cpp
 	url = https://github.com/dunkbing/acp-cpp
@@ -11,9 +7,6 @@
 [submodule "external/IconFontCppHeaders"]
 	path = external/IconFontCppHeaders
 	url = https://github.com/juliettef/IconFontCppHeaders
-[submodule "external/imgui_rich_md"]
-	path = external/imgui_rich_md
-	url = https://github.com/pthom/imgui_rich_md
 [submodule "external/imshell"]
 	path = external/imshell
 	url = https://github.com/dunkbing/imshell

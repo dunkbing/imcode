@@ -3,7 +3,6 @@
 // captured: a locked screen, a build machine
 #include "app.hpp"
 
-#include "markdown.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
