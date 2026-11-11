@@ -51,6 +51,8 @@ public:
     std::vector<std::string> queue; // sent one by one as turns end
     std::vector<acp::ConfigOption> config; // model, mode, ... as the agent offers them
     std::vector<AcpCommand> commands;      // its slash commands
+    long long contextUsed = 0, contextSize = 0; // tokens, as the agent last reported
+    double cost = -1;                           // of the session so far; -1 = not reported
     // other conversations the agent holds for this folder (started elsewhere, e.g. in a
     // terminal); asked once when the session opens. taken by the app, which lists them
     std::vector<acp::SessionInfo> found;

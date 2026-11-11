@@ -347,6 +347,15 @@ void Thread::poll() {
             add({.kind = Item::Kind::Info, .text = "Agent exited. The next message restarts it."});
             gone = true;
             break;
+        case AcpEvent::Type::Usage:
+            contextUsed = ev.used;
+            contextSize = ev.size;
+            cost = ev.cost >= 0 ? ev.cost : cost;
+            break;
+        case AcpEvent::Type::Title: // the agent's summary reads better than the first prompt
+            title = ev.text.substr(0, 80);
+            changed_ = true;
+            break;
         case AcpEvent::Type::Sessions:
             found = std::move(ev.sessions);
             break;

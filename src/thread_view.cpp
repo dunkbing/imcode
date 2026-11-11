@@ -427,6 +427,17 @@ void App::composer(Thread& t, float width) {
         ImGui::SetCursorPos(after);
     }
 
+    // how full the agent's context is, at the left of the row
+    if (t.contextSize > 0) {
+        const int percent = static_cast<int>(100 * t.contextUsed / t.contextSize);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(percent >= 80 ? colors.yellow : colors.overlay1, "%d%% context", percent);
+        if (ImGui::IsItemHovered()) {
+            const std::string spent = t.cost >= 0 ? std::format("\n${:.2f} so far", t.cost) : "";
+            ImGui::SetTooltip("%lldk of %lldk tokens%s", t.contextUsed / 1000, t.contextSize / 1000, spent.c_str());
+        }
+        ImGui::SameLine();
+    }
     // "<agent> <model> <effort>": the picker
     const acp::ConfigOption* model = optionOf(t, "model");
     const acp::ConfigOption* effort = optionOf(t, "thought_level");

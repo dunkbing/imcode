@@ -16,7 +16,7 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly.
 - [ ] Agents install themselves: managed Bun and registry binaries, with progress
 - [~] Queue a message while a turn runs (done); edit and resend the last one
 - [ ] Images and files as attachments (paste, drop)
-- [ ] Context and cost from `usage_update`; compaction notices
+- [~] Context and cost from `usage_update`, and the agent's own title for a thread (done); compaction notices
 - [~] Rename, archive, search threads
 - [~] Detect installed agents: turn on, install, sign in, update; browse the ACP registry
 - [ ] Add a local ACP command as an agent; several accounts or configs of one agent
