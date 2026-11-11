@@ -109,7 +109,7 @@ bool App::toolGroupRow(Thread& t, size_t from, size_t to, float width, bool show
         }
         failed += t.items[k].toolStatus == "failed";
     }
-    std::string label = std::format("{}  {} tool calls", shown ? ICON_FA_CHEVRON_DOWN : ICON_FA_CHEVRON_RIGHT, to - from);
+    std::string label = std::format("{} tool calls", to - from);
     for (size_t k = 0; k < kinds.size(); ++k) {
         label += (k == 0 ? "  ·  " : ", ") + kinds[k];
     }
@@ -117,10 +117,18 @@ bool App::toolGroupRow(Thread& t, size_t from, size_t to, float width, bool show
         label += std::format("  ·  {} failed", failed);
     }
     ImGui::PushID(static_cast<int>(from));
-    ImGui::PushStyleColor(ImGuiCol_Text, failed > 0 ? colors.peach : colors.overlay1);
-    const bool clicked = ImGui::Selectable((label + "##group").c_str(), false, 0,
-                                           ImVec2(width, ImGui::GetTextLineHeight() + 10));
-    ImGui::PopStyleColor();
+    const bool clicked = ImGui::Selectable("##group", false, 0, ImVec2(width, ImGui::GetTextLineHeight() + 10));
+    // the chevron in a slot of its own width: the open and shut ones differ, the text stays put
+    const ImVec2 at = ImGui::GetItemRectMin();
+    const float slot = ImGui::CalcTextSize(ICON_FA_CHEVRON_RIGHT).x;
+    const float down = ImGui::CalcTextSize(ICON_FA_CHEVRON_DOWN).x;
+    const float y = at.y + (ImGui::GetItemRectSize().y - ImGui::GetTextLineHeight()) * 0.5f;
+    const ImU32 tone = ImGui::GetColorU32(failed > 0 ? colors.peach : colors.overlay1);
+    const float slotWidth = std::max(slot, down);
+    const char* chevron = shown ? ICON_FA_CHEVRON_DOWN : ICON_FA_CHEVRON_RIGHT;
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    draw->AddText(ImVec2(at.x + 4 + (slotWidth - ImGui::CalcTextSize(chevron).x) * 0.5f, y), tone, chevron);
+    draw->AddText(ImVec2(at.x + 4 + slotWidth + 10, y), tone, label.c_str());
     ImGui::PopID();
     ImGui::Spacing();
     return clicked;
