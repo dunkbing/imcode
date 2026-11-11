@@ -59,7 +59,7 @@ void App::sidebar() {
         ImGui::PushID(i);
         const ImVec2 at = ImGui::GetCursorPos();
         const float width = ImGui::GetContentRegionAvail().x;
-        if (ImGui::Selectable("##thread", i == current, 0, ImVec2(0, line * 3 + 14))) {
+        if (rowButton("##thread", i == current, line * 3 + 14)) {
             open = i;
         }
         if (ImGui::BeginPopupContextItem("menu")) {

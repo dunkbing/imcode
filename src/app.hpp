@@ -162,5 +162,9 @@ struct App : mydear::Delegate {
     void filesPanel(Thread& t, float splitWidth);
 };
 
+// a full-width row to click: rounded, lit when chosen or under the mouse. its content is
+// drawn after it, over it
+bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags = 0);
+
 // "now", "5m", "2h", "3d"
 std::string ago(long long unixSeconds);

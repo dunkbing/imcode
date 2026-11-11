@@ -45,8 +45,8 @@ namespace {
         const float height = line + 8;
         const ImVec2 at = ImGui::GetCursorPos();
         const float width = ImGui::GetContentRegionAvail().x;
-        const bool clicked = ImGui::Selectable(("##" + id).c_str(), chosen,
-                                               ImGuiSelectableFlags_DontClosePopups, ImVec2(0, height));
+        const bool clicked =
+            rowButton(("##" + id).c_str(), chosen, height, ImGuiSelectableFlags_DontClosePopups);
         const ImVec2 next = ImGui::GetCursorPos();
         ImGui::SetCursorPos(ImVec2(at.x + 8, at.y + 4));
         if (lead) {

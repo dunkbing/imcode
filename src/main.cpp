@@ -26,6 +26,25 @@ namespace ui = mydear::ui;
 
 int runHeadless(App& app, const char* out, int width, int height, int frames); // headless.cpp
 
+bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags) {
+    const auto& colors = Theme::Current()->colors;
+    const ImVec2 min = ImGui::GetCursorScreenPos();
+    const float width = ImGui::GetContentRegionAvail().x;
+    // the selectable only takes the click: its own square highlight is not drawn
+    for (const ImGuiCol col : {ImGuiCol_Header, ImGuiCol_HeaderHovered, ImGuiCol_HeaderActive}) {
+        ImGui::PushStyleColor(col, ImVec4(0, 0, 0, 0));
+    }
+    const bool clicked = ImGui::Selectable(id, false, flags, ImVec2(0, height));
+    ImGui::PopStyleColor(3);
+    if (chosen || ImGui::IsItemHovered()) {
+        ImVec4 fill = colors.surface0;
+        fill.w = chosen ? 1.0f : 0.5f;
+        ImGui::GetWindowDrawList()->AddRectFilled(min, ImVec2(min.x + width, min.y + height),
+                                                  ImGui::GetColorU32(fill), 8);
+    }
+    return clicked;
+}
+
 std::string ago(long long unixSeconds) {
     const long long s = std::max(0LL, static_cast<long long>(std::time(nullptr)) - unixSeconds);
     return unixSeconds == 0 ? ""

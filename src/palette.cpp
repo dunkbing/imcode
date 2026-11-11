@@ -271,15 +271,16 @@ void App::paletteDraw() {
     ImGui::Spacing();
     ImGui::TextColored(colors.subtext0, "%s", heading);
     int picked = -1;
+    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, 6);
     ImGui::BeginChild("rows", ImVec2(0, 300));
+    ImGui::PopStyleVar();
     for (int i = 0; i < static_cast<int>(rows.size()); ++i) {
         ImGui::PushID(i);
         const float height = rows[i].detail.empty()
-                                 ? 0
-                                 : ImGui::GetTextLineHeight() * 2 + ImGui::GetStyle().ItemSpacing.y + 6;
+                                 ? ImGui::GetTextLineHeight() + 12
+                                 : ImGui::GetTextLineHeight() * 2 + ImGui::GetStyle().ItemSpacing.y + 12;
         const ImVec2 at = ImGui::GetCursorPos();
-        if (ImGui::Selectable("##row", i == p.selected, ImGuiSelectableFlags_DontClosePopups,
-                              ImVec2(0, height))) {
+        if (rowButton("##row", i == p.selected, height, ImGuiSelectableFlags_DontClosePopups)) {
             picked = i;
         }
         if (i == p.selected && (ImGui::IsKeyPressed(ImGuiKey_DownArrow) ||
@@ -287,10 +288,13 @@ void App::paletteDraw() {
             ImGui::SetScrollHereY();
         }
         const ImVec2 next = ImGui::GetCursorPos();
-        ImGui::SetCursorPos(ImVec2(at.x + 8, at.y + (rows[i].detail.empty() ? 0 : 2)));
-        ImGui::Text("%s  %s", rows[i].icon.c_str(), rows[i].title.c_str());
+        ImGui::SetCursorPos(ImVec2(at.x + 10, at.y + 6));
+        // icons differ in width: the titles start in one column
+        ImGui::TextUnformatted(rows[i].icon.c_str());
+        ImGui::SameLine(at.x + 10 + 30);
+        ImGui::TextUnformatted(rows[i].title.c_str());
         if (!rows[i].detail.empty()) {
-            ImGui::SetCursorPosX(at.x + 8 + 30);
+            ImGui::SetCursorPosX(at.x + 10 + 30);
             ImGui::TextColored(colors.overlay1, "%s", rows[i].detail.c_str());
         }
         ImGui::SetCursorPos(next);
