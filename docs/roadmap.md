@@ -11,7 +11,7 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly.
 - [x] Model, mode and effort pickers from the agent's config options, there before the first message
 - [~] Markdown (done, imgui_rich_md) and highlighted code blocks
 - [x] Fonts and icons: JetBrains Mono, an icon font, the system CJK font
-- [ ] Slash commands and `@file` mentions in the composer
+- [x] Slash commands and `@file` mentions in the composer
 - [x] Tool call details: diffs for edits, output for commands, files that open in the viewer
 - [ ] Agents install themselves: managed Bun and registry binaries, with progress
 - [~] Queue a message while a turn runs (done); edit and resend the last one

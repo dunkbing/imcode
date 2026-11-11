@@ -309,10 +309,116 @@ void App::composer(Thread& t, float width) {
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleColor(ImGuiCol_NavCursor, ImVec4(0, 0, 0, 0));
     const ImVec2 inputAt = ImGui::GetCursorPos();
+    const ImVec2 boxAt = ImGui::GetWindowPos();
     bool send = ImGui::InputTextMultiline(
         "##input", input, sizeof(input), ImVec2(-FLT_MIN, inputHeight),
-        ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CtrlEnterForNewLine);
+        ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CtrlEnterForNewLine |
+            ImGuiInputTextFlags_CallbackAlways,
+        [](ImGuiInputTextCallbackData* data) {
+            // the only way to change a field's text while it is being edited
+            auto* picker = static_cast<Picker*>(data->UserData);
+            if (picker->replace) {
+                data->DeleteChars(0, data->BufTextLen);
+                data->InsertChars(0, picker->replace->c_str());
+                picker->replace.reset();
+            }
+            return 0;
+        },
+        &picker);
     ImGui::PopStyleColor(3);
+
+    // "/" at the start: the agent's commands. "@" starting the last word: the project's files
+    {
+        const std::string text = input;
+        const size_t word = text.find_last_of(" \n") + 1; // 0 when there is no space
+        const bool commandMode = text.starts_with("/") && word == 0;
+        const bool fileMode = !commandMode && word < text.size() && text[word] == '@';
+        struct Row {
+            std::string label, detail, insert;
+        };
+        std::vector<Row> rows;
+        auto matches = [](const std::string& hay, const std::string& needle) {
+            const auto found = std::ranges::search(hay, needle, [](char a, char b) {
+                return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+            });
+            return needle.empty() || !found.empty();
+        };
+        if (text != picker.dismissed && commandMode) {
+            // names that start with what was typed, then names that contain it
+            for (const bool prefix : {true, false}) {
+                for (const auto& command : t.commands) {
+                    const bool starts = command.name.starts_with(text.substr(1));
+                    if (starts == prefix && matches(command.name, text.substr(1)) && rows.size() < 8) {
+                        rows.push_back({"/" + command.name, command.description, "/" + command.name + " "});
+                    }
+                }
+            }
+        } else if (text != picker.dismissed && fileMode) {
+            const std::string key = t.host + "\n" + t.cwd;
+            picker.op.check([&](std::pair<std::string, std::vector<std::string>> got) {
+                picker.filesFor = std::move(got.first);
+                picker.files = std::move(got.second);
+            });
+            if (picker.filesFor != key && !picker.op.isRunning()) {
+                picker.op.start([key, host = t.host, cwd = t.cwd] { return std::pair{key, projectFiles(host, cwd)}; });
+            }
+            for (const auto& file : picker.filesFor == key ? picker.files : std::vector<std::string>{}) {
+                if (matches(file, text.substr(word + 1)) && rows.size() < 8) {
+                    // shortcut: a mention is sent as "@path" in the text, which agents read;
+                    // a resource link block when one needs the file attached
+                    rows.push_back({file.substr(file.find_last_of('/') + 1), file, text.substr(0, word) + "@" + file + " "});
+                }
+            }
+        }
+        if (!rows.empty()) {
+            picker.selected = std::clamp(picker.selected + (ImGui::IsKeyPressed(ImGuiKey_DownArrow) ? 1 : 0) -
+                                             (ImGui::IsKeyPressed(ImGuiKey_UpArrow) ? 1 : 0),
+                                         0, static_cast<int>(rows.size()) - 1);
+            int accept = send ? picker.selected : -1; // enter takes the row, it does not send
+            send = false;
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+                picker.dismissed = text;
+            }
+            // a list over the box's top edge; it must not take the keyboard from the input
+            const float line = ImGui::GetTextLineHeight();
+            const float height =
+                static_cast<float>(rows.size()) * (line + 10 + ImGui::GetStyle().ItemSpacing.y) + 14;
+            ImGui::SetNextWindowPos(ImVec2(boxAt.x, boxAt.y - height - 6));
+            ImGui::SetNextWindowSize(ImVec2(width, height));
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, colors.mantle);
+            ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(1, 1)); // one row is a short window
+            ImGui::Begin("##picker", nullptr,
+                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+                             ImGuiWindowFlags_NoMove);
+            for (int i = 0; i < static_cast<int>(rows.size()); ++i) {
+                const ImVec2 at = ImGui::GetCursorPos();
+                if (rowButton(("##pick" + std::to_string(i)).c_str(), i == picker.selected, line + 8)) {
+                    accept = i;
+                }
+                const ImVec2 next = ImGui::GetCursorPos();
+                ImGui::SetCursorPos(ImVec2(at.x + 10, at.y + 4));
+                ImGui::TextUnformatted(rows[i].label.c_str());
+                ImGui::SameLine(0, 14);
+                ImGui::TextColored(colors.overlay1, "%s", rows[i].detail.substr(0, 70).c_str());
+                ImGui::SetCursorPos(ImVec2(next.x, next.y - ImGui::GetStyle().ItemSpacing.y + 2));
+                ImGui::Dummy(ImVec2(0, 0)); // imgui wants an item after a cursor move
+            }
+            ImGui::End();
+            ImGui::PopStyleVar(3);
+            ImGui::PopStyleColor(2);
+            if (accept >= 0) {
+                picker.replace = rows[accept].insert;
+                picker.selected = 0;
+                focusInput = true; // a click on a row took the keyboard
+            }
+        } else {
+            picker.selected = 0;
+        }
+    }
     if (!input[0]) {
         const ImVec2 after = ImGui::GetCursorPos();
         const ImVec2 pad = ImGui::GetStyle().FramePadding;

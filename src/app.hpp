@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <map>
 #include <set>
@@ -157,6 +158,16 @@ struct App : imshell::Delegate {
 
     void sidebar();
 
+    // the composer's picker: the agent's commands after "/", the project's files after "@"
+    struct Picker {
+        std::optional<std::string> replace; // the input's new text, set through its callback
+        int selected = 0;
+        std::string dismissed; // the text escape was pressed on: no picker until it changes
+        std::string filesFor;  // host and folder `files` lists
+        std::vector<std::string> files;
+        AcpHost::AsyncOp<std::pair<std::string, std::vector<std::string>>> op;
+    } picker;
+
     // the open thread's repository: asked again every few seconds, off the ui thread
     Git::Status git;
     std::string gitFor; // host and folder `git` describes
@@ -188,6 +199,9 @@ bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags f
 
 // a project's mark: two letters of its name on a square in a colour of its own
 void projectBadge(const std::string& name, float size = 16);
+
+// every file of a project, by git's list when it is a repository (files_view.cpp); blocks
+std::vector<std::string> projectFiles(const std::string& host, const std::string& cwd);
 
 // "now", "5m", "2h", "3d"
 std::string ago(long long unixSeconds);

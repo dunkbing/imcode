@@ -353,7 +353,8 @@ void Thread::poll() {
         case AcpEvent::Type::ConfigOptions:
             config = std::move(ev.configOptions);
             break;
-        case AcpEvent::Type::Commands: // shortcut: slash commands are not offered yet
+        case AcpEvent::Type::Commands:
+            commands = std::move(ev.commands);
             break;
         }
     }

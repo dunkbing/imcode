@@ -276,6 +276,14 @@ namespace {
     }
 } // namespace
 
+std::vector<std::string> projectFiles(const std::string& host, const std::string& cwd) {
+    std::vector<std::string> out;
+    for (auto& entry : index(host, cwd, 0).entries) {
+        out.push_back(std::move(entry.name));
+    }
+    return out;
+}
+
 void App::showFile(const std::string& path) {
     files.want = path;
     files.open = true;

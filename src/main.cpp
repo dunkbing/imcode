@@ -245,7 +245,7 @@ bool App::wantsFrames() {
         return true;
     }
     return scanOp.isRunning() || palette.op.isRunning() || registry.isBusy() ||
-           gitOp.isRunning() || files.listOp.isRunning() || files.indexOp.isRunning() || files.readOp.isRunning() ||
+           gitOp.isRunning() || picker.op.isRunning() || files.listOp.isRunning() || files.indexOp.isRunning() || files.readOp.isRunning() ||
            std::ranges::any_of(data.threads,
                                [](const auto& t) { return t->busy() || t->starting(); });
 }
