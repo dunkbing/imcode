@@ -101,6 +101,17 @@ bool Thread::ensureStarted() {
         }
     } else {
         argv = testCmd ? std::vector<std::string>{testCmd} : AcpAgents::resolveInvocation(*def);
+        if (!argv && !def->npmPackage.empty() && !bunTried_ && !connectOp_.isRunning()) {
+            // npm agents run on bun: none on this machine, so the app's own is fetched once
+            bunTried_ = true;
+            add({.kind = Item::Kind::Info, .text = "Installing the Bun runtime to run " + def->name + " (once)..."});
+            connectOp_.start([] {
+                std::string failed;
+                AcpRegistry::installBun(failed);
+                return failed;
+            });
+            return false;
+        }
         if (!argv) {
             // shortcut: no download of bun or registry binaries yet (the install card in
             // DearSQL's panel)
@@ -284,8 +295,7 @@ void Thread::signIn(Item& item, const acp::AuthMethod& method) {
         return;
     } else if (!host.empty() && !def->npmPackage.empty()) {
         // on the host: whichever runner it has, as the agent itself is started there
-        command += "$(command -v bun >/dev/null 2>&1 && echo 'bun x --bun' || echo 'npx -y') " +
-                   quote(def->npmPackage);
+        command += "PATH=\"$HOME/.bun/bin:$HOME/.imcode/bun:$PATH\" bun x --bun " + quote(def->npmPackage);
     } else if (!host.empty()) {
         for (const auto& part : def->runCmd) {
             command += quote(part) + " ";

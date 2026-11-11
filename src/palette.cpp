@@ -228,16 +228,29 @@ void App::paletteDraw() {
                            shown.c_str());
         ImGui::SameLine();
     }
+    const float addWidth = browsing ? 90.0f : 0.0f;
+    const std::string before = p.query;
+    // a field being edited ignores changes to its text: when a step or a folder change
+    // empties it, it becomes a new field
+    static std::string shownFor;
+    static int fieldId = 0;
+    const std::string where = std::to_string(static_cast<int>(p.step)) + p.host + "\n" + p.dir;
+    if (where != shownFor) {
+        shownFor = where;
+        ++fieldId;
+        p.query.clear();
+        p.focus = true;
+    }
+    ImGui::PushID(fieldId);
     if (std::exchange(p.focus, false)) {
         ImGui::SetKeyboardFocusHere();
     }
-    const float addWidth = browsing ? 90.0f : 0.0f;
-    const std::string before = p.query;
     bool enter = ui::TextField("##query", p.query,
                                {.placeholder = hint,
                                 .width = ImGui::GetContentRegionAvail().x - addWidth -
                                          (browsing ? ImGui::GetStyle().ItemSpacing.x : 0),
                                 .flags = ImGuiInputTextFlags_EnterReturnsTrue});
+    ImGui::PopID();
     if (p.query != before) {
         p.selected = 0;
     }
@@ -359,8 +372,6 @@ void App::paletteDraw() {
         } else if (picked >= 0 || (enter && !p.query.empty())) {
             // a listed host, or exactly what was typed
             p.host = picked >= 0 && !(enter && rows.empty()) ? rows[picked].title : Ssh::destination(p.query);
-            p.query = p.host; // what will be used, in place of a pasted command
-            p.focus = true;
             paletteGo(p.host, "");
         }
     } else {

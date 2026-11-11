@@ -10,4 +10,8 @@ namespace Remote {
     // (registry-only binaries)
     std::string agentCommand(const AcpAgentDef& def, const std::string& dir);
 
+    // sh: when the machine has no bun, download the app's pinned one into ~/.imcode/bun
+    // (checked against the release's checksums). quiet on stdout
+    std::string bunSetup();
+
 } // namespace Remote

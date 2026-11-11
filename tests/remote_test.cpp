@@ -5,7 +5,11 @@
 #include <cstdlib>
 #include <filesystem>
 
-int main() {
+int main(int argc, char** argv) {
+    if (argc > 1) { // manual: the bun install script, to run under a clean HOME
+        std::printf("%s\n", Remote::bunSetup().c_str());
+        return 0;
+    }
     // a folder with a quote and a space under a fake home, an agent that prints where it runs
     const auto home = std::filesystem::temp_directory_path() / "imcode remote test";
     std::filesystem::create_directories(home / "it's here");

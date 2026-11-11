@@ -108,6 +108,7 @@ private:
     // connected. what was sent meanwhile waits in heldPrompt_
     AcpHost::AsyncOp<std::string> connectOp_;
     std::string heldPrompt_;
+    bool bunTried_ = false; // the managed bun was asked for once
     std::vector<std::string> heldFiles_;
     bool changed_ = false;
     int revision_ = 0;
