@@ -17,6 +17,7 @@ namespace Store {
     struct Data {
         bool onboarded = false;
         std::vector<std::string> agents; // ids turned on: what the pickers offer
+        std::string lastSession;         // the thread that was open: opened again at launch
         std::vector<Project> projects;
         std::vector<std::unique_ptr<Thread>> threads;
     };

@@ -127,6 +127,13 @@ void App::setup() {
     data = Store::load(dataFile);
     project = data.projects.empty() ? -1 : 0;
     startScan();
+    // back where the user was: the thread that was open comes up again, with its history
+    for (int i = 0; data.onboarded && !data.lastSession.empty() && i < static_cast<int>(data.threads.size()); ++i) {
+        if (data.threads[i]->sessionId == data.lastSession && !data.threads[i]->archived) {
+            select(i);
+            break;
+        }
+    }
     // ui checks: IMCODE_DEV_SEND=<text> starts a thread in the first project before any frame
     if (const char* text = std::getenv("IMCODE_DEV_SEND"); text && !data.projects.empty()) {
         const Store::Project& p = data.projects.front();
@@ -301,6 +308,10 @@ void App::select(int index) {
         Thread& t = *data.threads[index];
         project = addProject(t.host, t.projectDir());
         t.open();
+        if (!t.sessionId.empty() && t.sessionId != data.lastSession) {
+            data.lastSession = t.sessionId;
+            save();
+        }
     }
 }
 
@@ -397,6 +408,10 @@ void App::hostLoop() {
             }
             data.threads.push_back(std::move(thread));
             changed = true;
+        }
+        // a new thread gets its session id a moment after it is opened
+        if (changed && current >= 0 && !data.threads[current]->sessionId.empty()) {
+            data.lastSession = data.threads[current]->sessionId;
         }
         if (changed) {
             save();
