@@ -202,7 +202,7 @@ void App::paletteDraw() {
     } else {
         hint = "Filter, or type a path";
         heading = "Directories";
-        if (p.dir != "/") {
+        if (p.dir != "/" && p.query.empty()) { // while filtering, enter takes the first match
             rows.push_back({ICON_FA_TURN_UP, "..", ""});
         }
         for (const auto& name : p.dirs) {
