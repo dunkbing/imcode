@@ -102,8 +102,10 @@ public:
     void release();
     // another client (the agent's cli) is writing this conversation on this machine: shown
     // live from its transcript, read only, until it has been quiet for a while
+    // read only while the other client wrote recently; followed (not read only) while it is
+    // quiet, so it is noticed when the user carries on there
     [[nodiscard]] bool watching() const {
-        return watching_;
+        return watching_ && live_;
     }
     // files: local paths. images go along as pictures, other files as links (not over ssh)
     void send(const std::string& text, const std::vector<std::string>& files = {});
@@ -147,7 +149,8 @@ private:
     bool sendNow_ = false; // the turn was stopped for a queued message: the queue moves on
     bool bunTried_ = false; // the managed bun was asked for once
     std::string turnBefore_; // the folder as the running turn found it (a git tree); empty: not a repository
-    bool watching_ = false;
+    bool watching_ = false; // following the transcript
+    bool live_ = false;     // and it was written recently
     std::string watchPath_; // the transcript followed
     size_t watchOffset_ = 0;
     long long watchCheckMs_ = 0;

@@ -167,7 +167,11 @@ namespace {
     long long nowMs() {
         return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
     }
-    constexpr long long quietSeconds = 120; // a transcript written this recently is in use elsewhere
+    // a transcript written this recently is in use elsewhere. IMCODE_QUIET_SECONDS: shorter, for checks
+    const long long quietSeconds = [] {
+        const char* v = std::getenv("IMCODE_QUIET_SECONDS");
+        return v ? std::atoll(v) : 120LL;
+    }();
 }
 
 void Thread::open() {
@@ -192,6 +196,7 @@ bool Thread::watch() {
     watchOffset_ = 0;
     watchCheckMs_ = 0;
     watching_ = true;
+    live_ = true;
     ++revision_;
     return true;
 }
@@ -233,8 +238,14 @@ void Thread::wake() {
 }
 
 void Thread::send(const std::string& text, const std::vector<std::string>& files) {
-    if ((text.empty() && files.empty()) || watching_) { // another client is writing it
+    if ((text.empty() && files.empty()) || (watching_ && live_)) { // another client is writing it
         return;
+    }
+    if (watching_) {
+        // quiet there: carry on here, in the same conversation. the agent replays its history
+        watching_ = false;
+        items.clear();
+        ++revision_;
     }
     if (busy()) {
         queue.push_back({text, files}); // a turn is running: this one goes after it
@@ -474,9 +485,11 @@ void Thread::follow() {
                  .toolTitle = e.kind == History::Entry::Kind::Tool ? e.text : "",
                  .toolStatus = "completed"});
         }
-        if (History::quietFor(watchPath_) >= quietSeconds) {
-            watching_ = false; // the other client stopped: this one can carry on
-            add({.kind = Item::Kind::Info, .text = "The other client has been quiet for two minutes: you can continue here."});
+        const bool live = History::quietFor(watchPath_) < quietSeconds;
+        // quiet there: the composer opens; written there again: read only again
+        if (live != live_) {
+            live_ = live;
+            ++revision_;
         }
     }
 }
