@@ -23,6 +23,7 @@ struct Item {
         int added = 0, removed = 0;
     };
     std::vector<Change> changes;
+    std::string toolPath; // the file the tool is about, under the project; empty = none there
     // Plan
     std::vector<AcpPlanEntry> plan;
     // Permission, Auth: what was asked, and the answer once given
@@ -73,6 +74,8 @@ public:
 private:
     bool ensureStarted();
     Item* findTool(const std::string& id);
+    // a path the agent named, as the project sees it; unchanged when outside it
+    [[nodiscard]] std::string underProject(std::string path) const;
     void add(Item item);
 
     std::unique_ptr<AcpClient> acp_;

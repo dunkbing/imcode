@@ -544,7 +544,8 @@ void App::frame() {
             const std::string after = "#include \"config.hpp\"\n\n// reads the file, or the defaults when it is missing\n"
                                       "Config readConfig(const std::string& path) {\n    Config out;\n    out.path = path;\n"
                                       "    out.retries = 3;\n    return out;\n}\n";
-            edit.changes.push_back({"src/config.cpp", Diff::lines(before, after), 3, 2});
+            edit.changes.push_back({"src/store.cpp", Diff::lines(before, after), 3, 2});
+            edit.toolPath = "src/store.cpp";
             t.items.push_back(edit);
             Item ask{.kind = Item::Kind::Permission};
             ask.permission.title = "Run `ctest --test-dir build`";

@@ -127,6 +127,20 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
                   it.toolStatus == "failed"      ? ui::Tone::Danger
                   : it.toolStatus == "completed" ? ui::Tone::Success
                                                  : ui::Tone::Info);
+        if (!it.toolPath.empty()) {
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_Text, colors.overlay1);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+            if (ImGui::SmallButton(ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE)) {
+                showFile(it.toolPath);
+            }
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(2);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Open %s", it.toolPath.c_str());
+            }
+        }
         if (open) {
             // an edit shows as its diff; the text only says "diff: <path>" then
             if (!it.toolOutput.empty() && it.changes.empty()) {
@@ -151,7 +165,17 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
                               ImGuiWindowFlags_HorizontalScrollbar);
             ImGui::PopStyleVar();
             // the file, then how much was added and removed
-            ImGui::TextColored(colors.subtext0, ICON_FA_FILE "  %s", change.path.c_str());
+            // the file: click to read it in the viewer
+            ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
+            if (ImGui::Selectable((std::string(ICON_FA_FILE "  ") + change.path).c_str(), false, 0,
+                                  ImGui::CalcTextSize((std::string(ICON_FA_FILE "  ") + change.path).c_str())) &&
+                !change.path.starts_with("/")) {
+                showFile(change.path);
+            }
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            }
             ImGui::SameLine();
             ImGui::TextColored(colors.green, "+%d", change.added);
             ImGui::SameLine();

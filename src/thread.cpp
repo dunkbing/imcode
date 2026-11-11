@@ -18,6 +18,17 @@ void Thread::add(Item item) {
     ++revision_;
 }
 
+std::string Thread::underProject(std::string path) const {
+    // the agent may name the folder through a symlink (/tmp is /private/tmp)
+    for (const std::string& root : {cwd, "/private" + cwd}) {
+        if (path.starts_with(root + "/")) {
+            path.erase(0, root.size() + 1);
+            break;
+        }
+    }
+    return path;
+}
+
 Item* Thread::findTool(const std::string& id) {
     for (auto it = items.rbegin(); it != items.rend(); ++it) {
         if (it->kind == Item::Kind::Tool && it->toolId == id) {
@@ -248,17 +259,15 @@ void Thread::poll() {
                 item->toolStatus = ev.tool.status;
             }
             item->toolOutput += ev.tool.output;
+            if (!ev.tool.paths.empty()) {
+                const std::string path = underProject(ev.tool.paths.front());
+                item->toolPath = path.starts_with("/") ? "" : path; // the viewer shows the project
+            }
             if (!ev.tool.diffs.empty()) { // each update carries the edits as they stand
                 item->changes.clear();
                 for (const auto& diff : ev.tool.diffs) {
                     Item::Change change{diff.path, Diff::lines(diff.oldText, diff.newText), 0, 0};
-                    // as the project sees it; the agent may name it through a symlink (/tmp)
-                    for (const std::string& root : {cwd, "/private" + cwd}) {
-                        if (change.path.starts_with(root + "/")) {
-                            change.path.erase(0, root.size() + 1);
-                            break;
-                        }
-                    }
+                    change.path = underProject(change.path);
                     for (const auto& line : change.lines) {
                         change.added += line.kind == '+';
                         change.removed += line.kind == '-';
