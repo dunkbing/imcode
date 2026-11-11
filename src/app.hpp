@@ -54,6 +54,7 @@ struct App : imshell::Delegate {
     bool focusTerminal = false;
     std::string terminalRun; // typed into the open thread's terminal once it is up
     bool terminalExited = false; // the open thread's shell ended this frame
+    float sidebarWidth = 264;
     float terminalSplit = 0.62f; // share of the height the chat keeps above the terminal
 
     // the open thread's folder beside the chat: a tree and one file, read-only. loaded off
@@ -84,6 +85,7 @@ struct App : imshell::Delegate {
         bool treeOver = true; // narrow windows: the tree covers the file
         bool toTop = false;   // a new file: scroll back
         float split = 0.42f;  // share of the width the chat keeps
+        float treeWidth = 220;
         int epoch = 0;        // bumps with the folder: what was loading for the old one is dropped
         std::string host, cwd;
         std::map<std::string, Listing> dirs; // by path under cwd, "" = cwd itself
@@ -205,11 +207,17 @@ struct App : imshell::Delegate {
     void filesPoll(); // once per frame: results in, the next load out
     void showFile(const std::string& path); // under the thread's folder
     // splitWidth: the width shared with the chat on its left; 0 = the panel is alone
-    void filesPanel(Thread& t, float splitWidth);
+    // true when one of its handles was let go: its sizes want saving
+    bool filesPanel(Thread& t, float splitWidth);
 };
 
 // a full-width row to click: rounded, lit when chosen or under the mouse. its content is
 // drawn after it, over it
+// a handle between two panels side by side, as tall as `height`: lit while hovered or
+// dragged, with a resting line when `line`. returns how far it was dragged this frame;
+// *released is set when the drag ends (time to save)
+// shortcut: imshell's Splitter only splits top from bottom; this belongs there
+float sideSplitter(const char* id, float height, bool line, bool* released);
 bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags = 0);
 
 // a project's mark: two letters of its name on a square in a colour of its own

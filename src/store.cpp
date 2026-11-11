@@ -23,6 +23,12 @@ namespace Store {
         out.agents = root.value("agents", std::vector<std::string>{});
         out.lastSession = root.value("last", "");
         out.theme = root.value("theme", out.theme);
+        if (const auto layout = root.value("layout", std::vector<float>{}); layout.size() == 4) {
+            out.sidebarWidth = layout[0];
+            out.filesSplit = layout[1];
+            out.treeWidth = layout[2];
+            out.terminalSplit = layout[3];
+        }
         for (const auto& row : root.value("projects", json::array())) {
             addProject({row.value("host", ""), row.value("cwd", "")});
         }
@@ -64,6 +70,7 @@ namespace Store {
                                    {"agents", data.agents},
                                    {"last", data.lastSession},
                                    {"theme", data.theme},
+                                   {"layout", {data.sidebarWidth, data.filesSplit, data.treeWidth, data.terminalSplit}},
                                    {"projects", projects},
                                    {"threads", threads}}.dump(2) << "\n";
         std::error_code ec;

@@ -18,6 +18,9 @@ namespace Store {
         bool onboarded = false;
         std::vector<std::string> agents; // ids turned on: what the pickers offer
         std::string theme = "tokyo-night"; // an imshell theme id
+        // panel sizes as the user dragged them: the list's width, the chat's share beside the
+        // files, the file tree's width, the chat's share above the terminal
+        float sidebarWidth = 264, filesSplit = 0.42f, treeWidth = 220, terminalSplit = 0.62f;
         std::string lastSession;         // the thread that was open: opened again at launch
         std::vector<Project> projects;
         std::vector<std::unique_ptr<Thread>> threads;

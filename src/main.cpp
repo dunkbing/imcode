@@ -32,6 +32,28 @@ constexpr float barHeight = 40; // taller than the os default: air above and bel
 
 int runHeadless(App& app, const char* out, int width, int height, int frames); // headless.cpp
 
+float sideSplitter(const char* id, float height, bool line, bool* released) {
+    const auto& colors = Theme::Current()->colors;
+    ImGui::SameLine(0, 0);
+    ImGui::InvisibleButton(id, ImVec2(5, height));
+    const bool lit = ImGui::IsItemHovered() || ImGui::IsItemActive();
+    if (lit) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+    }
+    if (released && ImGui::IsItemDeactivated()) {
+        *released = true;
+    }
+    if (lit || line) {
+        const ImVec2 min = ImGui::GetItemRectMin();
+        ImGui::GetWindowDrawList()->AddLine(ImVec2(min.x + 2, min.y), ImVec2(min.x + 2, min.y + height),
+                                            ImGui::GetColorU32(lit ? colors.blue : colors.surface1),
+                                            lit ? 2.0f : 1.0f);
+    }
+    const float moved = ImGui::IsItemActive() ? ImGui::GetIO().MouseDelta.x : 0;
+    ImGui::SameLine(0, 0);
+    return moved;
+}
+
 bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags) {
     const auto& colors = Theme::Current()->colors;
     const ImVec2 min = ImGui::GetCursorScreenPos();
@@ -122,6 +144,10 @@ void App::setup() {
     AcpRegistry::setInstallRoot(dir / "agents");
     dataFile = dir / "threads.json";
     data = Store::load(dataFile);
+    sidebarWidth = data.sidebarWidth;
+    files.split = data.filesSplit;
+    files.treeWidth = data.treeWidth;
+    terminalSplit = data.terminalSplit;
     applyTheme(data.theme);
     project = data.projects.empty() ? -1 : 0;
     startScan();
@@ -269,6 +295,10 @@ bool App::wantsFrames() {
 }
 
 void App::save() {
+    data.sidebarWidth = sidebarWidth;
+    data.filesSplit = files.split;
+    data.treeWidth = files.treeWidth;
+    data.terminalSplit = terminalSplit;
     Store::save(dataFile, data);
 }
 
@@ -546,11 +576,18 @@ void App::frame() {
         onboarding();
     } else {
         const bool list = !narrow || sidebarOpen || current < 0;
+        bool resized = false; // a panel was dragged to a new size: saved when let go
         if (list) {
-            ImGui::BeginChild("sidebar", ImVec2(narrow ? 0 : 264, 0), ImGuiChildFlags_Borders);
+            // the list keeps its width; the thread beside it keeps at least 420
+            sidebarWidth = std::clamp(sidebarWidth, 200.0f, std::max(200.0f, content.size.x - 420));
+            ImGui::BeginChild("sidebar", ImVec2(narrow ? 0 : sidebarWidth, 0), ImGuiChildFlags_Borders);
             sidebar();
             ImGui::EndChild();
-            ImGui::SameLine();
+            if (narrow) {
+                ImGui::SameLine();
+            } else {
+                sidebarWidth += sideSplitter("##sidebar-split", ImGui::GetContentRegionAvail().y, false, &resized);
+            }
         }
         ImGui::BeginChild("thread", ImVec2(0, 0), 0,
                           narrow && list ? ImGuiWindowFlags_NoInputs : 0);
@@ -566,6 +603,7 @@ void App::frame() {
                 ImGui::EndChild();
                 if (terminalOpen) {
                     imshell::Splitter("##terminal", &terminalSplit, area.y, 160, 80);
+                    resized |= ImGui::IsItemDeactivated();
                     terminalPanel(t);
                 if (std::exchange(terminalExited, false)) {
                     terminals.erase(&t); // opening the panel again starts a new shell
@@ -576,7 +614,7 @@ void App::frame() {
                 ImGui::EndChild();
             }
             if (files.open) {
-                filesPanel(t, beside ? area.x : 0);
+                resized |= filesPanel(t, beside ? area.x : 0);
             }
         } else if (ui::EmptyState(data.projects.empty() ? "No project yet" : "No thread open",
                                   data.projects.empty()
@@ -586,6 +624,9 @@ void App::frame() {
             newThread(project);
         }
         ImGui::EndChild();
+        if (resized) {
+            save();
+        }
     }
     // cmd/ctrl+shift+p: quick actions
     const ImGuiIO& io = ImGui::GetIO();

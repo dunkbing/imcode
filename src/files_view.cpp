@@ -374,28 +374,14 @@ void App::filesPoll() {
     }
 }
 
-void App::filesPanel(Thread& t, float splitWidth) {
+bool App::filesPanel(Thread& t, float splitWidth) {
     Files& f = files;
+    bool released = false;
     const auto& colors = Theme::Current()->colors;
     const ImVec2 avail = ImGui::GetContentRegionAvail();
     if (splitWidth > 0) {
-        // shortcut: imshell's splitter only splits top from bottom; this belongs there once
-        // a second side panel needs it
-        ImGui::SameLine(0, 0);
-        ImGui::InvisibleButton("##files-split", ImVec2(5, avail.y));
-        const bool lit = ImGui::IsItemHovered() || ImGui::IsItemActive();
-        if (lit) {
-            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-        }
-        if (ImGui::IsItemActive()) {
-            f.split = std::clamp(f.split + ImGui::GetIO().MouseDelta.x / splitWidth, 280 / splitWidth,
-                                 1 - 360 / splitWidth);
-        }
-        const ImVec2 min = ImGui::GetItemRectMin();
-        ImGui::GetWindowDrawList()->AddLine(ImVec2(min.x + 2, min.y), ImVec2(min.x + 2, min.y + avail.y),
-                                            ImGui::GetColorU32(lit ? colors.blue : colors.surface1),
-                                            lit ? 2.0f : 1.0f);
-        ImGui::SameLine(0, 0);
+        f.split = std::clamp(f.split + sideSplitter("##files-split", avail.y, true, &released) / splitWidth,
+                             280 / splitWidth, 1 - 360 / splitWidth);
     }
     ImGui::BeginChild("files");
     const bool alone = splitWidth <= 0;
@@ -404,7 +390,9 @@ void App::filesPanel(Thread& t, float splitWidth) {
 
     if (!alone || !showTree) {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 6));
-        ImGui::BeginChild("file", ImVec2(alone ? 0 : ImGui::GetContentRegionAvail().x - 220, 0),
+        const float room = ImGui::GetContentRegionAvail().x;
+        f.treeWidth = std::clamp(f.treeWidth, 140.0f, std::max(140.0f, room - 200));
+        ImGui::BeginChild("file", ImVec2(alone ? 0 : room - f.treeWidth - 5, 0),
                           ImGuiChildFlags_AlwaysUseWindowPadding);
         ImGui::PopStyleVar();
         if (f.doc.path.empty()) {
@@ -464,7 +452,11 @@ void App::filesPanel(Thread& t, float splitWidth) {
             }
         }
         ImGui::EndChild();
-        ImGui::SameLine(0, 0);
+        if (alone) {
+            ImGui::SameLine(0, 0);
+        } else {
+            f.treeWidth -= sideSplitter("##tree-split", ImGui::GetContentRegionAvail().y, false, &released);
+        }
     }
     if (showTree) {
         ImGui::BeginChild("tree", ImVec2(0, 0), ImGuiChildFlags_Borders);
@@ -485,4 +477,5 @@ void App::filesPanel(Thread& t, float splitWidth) {
     if (!opened.empty()) {
         showFile(opened);
     }
+    return released;
 }
