@@ -421,9 +421,12 @@ void App::composer(Thread& t, float width) {
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 14);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, colors.mantle);
     ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
+    // a thin outline: the theme gives child windows none. read when the window begins
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1);
     ImGui::BeginChild("composer", ImVec2(width, inputHeight + button + 34),
                       ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleVar();
     if (std::exchange(focusInput, false)) {
         ImGui::SetKeyboardFocusHere();
     }
