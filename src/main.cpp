@@ -276,7 +276,7 @@ void App::select(int index) {
     focusInput = true;
     if (index >= 0) {
         Thread& t = *data.threads[index];
-        project = addProject(t.host, t.cwd);
+        project = addProject(t.host, t.projectDir());
         t.open();
     }
 }
@@ -411,7 +411,7 @@ void App::frame() {
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
         ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
-        if (ImGui::Button((std::filesystem::path(t.cwd).filename().string() + "  " ICON_FA_CHEVRON_DOWN "##project").c_str())) {
+        if (ImGui::Button((std::filesystem::path(t.projectDir()).filename().string() + "  " ICON_FA_CHEVRON_DOWN "##project").c_str())) {
             ImGui::OpenPopup("projects");
         }
         ImGui::PopStyleVar();
@@ -546,6 +546,9 @@ void App::frame() {
         }
         if (frames == 40 && all.find(";installing;") != std::string::npos) {
             installing = "cursor"; // the row's progress, without a download
+        }
+        if (frames == 39 && all.find(";worktree;") != std::string::npos && current >= 0) {
+            data.threads[current]->wantWorktree = true;
         }
         if (frames == 40 && all.find(";settings;") != std::string::npos) {
             settingsWant = true;

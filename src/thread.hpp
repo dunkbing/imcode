@@ -41,6 +41,8 @@ public:
 
     std::string title;     // first prompt, shortened
     std::string cwd;       // absolute, on the host
+    std::string root;      // the project's folder when cwd is a worktree of it; else empty
+    bool wantWorktree = false; // the first message makes a worktree and works there
     std::string sessionId; // the agent's id for this conversation: what a restart resumes
     long long updatedAt = 0; // unix seconds of the last prompt or reply
     const std::string agentId;
@@ -49,6 +51,10 @@ public:
     std::vector<std::string> queue; // sent one by one as turns end
     std::vector<acp::ConfigOption> config; // model, mode, ... as the agent offers them
 
+    // the project this belongs to: its folder, also when the work happens in a worktree
+    [[nodiscard]] const std::string& projectDir() const {
+        return root.empty() ? cwd : root;
+    }
     void poll(); // once per frame
     // shown for the first time: start the agent, so its settings (model, mode) are there
     // before the first message and a saved thread replays its history

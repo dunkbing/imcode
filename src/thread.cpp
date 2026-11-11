@@ -1,6 +1,7 @@
 #include "thread.hpp"
 
 #include "acp_host/registry.hpp"
+#include "git.hpp"
 #include "remote.hpp"
 #include "ssh.hpp"
 #include <algorithm>
@@ -133,6 +134,22 @@ void Thread::send(const std::string& text) {
         return;
     }
     queued_ = starting() || !acp_;
+    if (wantWorktree && root.empty() && items.empty()) {
+        // shortcut: blocks the ui for git (and ssh); with the other blocking starts, move to
+        // the host thread
+        std::string error;
+        const std::string made = Git::addWorktree(host, cwd, Git::slug(text), error);
+        if (made.empty()) {
+            add({.kind = Item::Kind::Error, .text = error});
+            return;
+        }
+        acp_.reset(); // the agent that came up for the pickers is in the project's folder
+        sessionId.clear(); // and so is its session: the worktree gets a new one
+        root = cwd;
+        cwd = made;
+        wantWorktree = false;
+        add({.kind = Item::Kind::Info, .text = "Working in a new worktree: " + made});
+    }
     if (title.empty()) {
         title = text.substr(0, text.find('\n'));
     }

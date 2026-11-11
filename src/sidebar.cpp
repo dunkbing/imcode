@@ -125,7 +125,7 @@ void App::sidebar() {
         });
         const bool listed = filterProject < 0 || filterProject >= static_cast<int>(data.projects.size()) ||
                             (t.host == data.projects[filterProject].host &&
-                             t.cwd == data.projects[filterProject].cwd);
+                             t.projectDir() == data.projects[filterProject].cwd);
         if (!t.title.empty() && listed && (query.empty() || !found.empty())) {
             order.push_back(i);
         }
@@ -154,7 +154,7 @@ void App::sidebar() {
         const ImVec2 next = ImGui::GetCursorPos();
         // the project and how long ago; the title; where and with which agent
         ImGui::SetCursorPos(ImVec2(at.x + 8, at.y + 4));
-        const std::string projectName = std::filesystem::path(t.cwd).filename().string();
+        const std::string projectName = std::filesystem::path(t.projectDir()).filename().string();
         projectBadge(projectName, 14);
         ImGui::SameLine(0, 6);
         ImGui::TextColored(colors.subtext0, "%s", projectName.c_str());

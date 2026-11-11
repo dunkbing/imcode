@@ -29,8 +29,9 @@ namespace Store {
                                                    row.value("host", ""));
             thread->title = row.value("title", "");
             thread->sessionId = row.value("session", "");
+            thread->root = row.value("root", "");
             thread->updatedAt = row.value("updated", 0LL);
-            addProject({thread->host, thread->cwd}); // a thread is never without its folder
+            addProject({thread->host, thread->projectDir()}); // a thread is never without its folder
             out.threads.push_back(std::move(thread));
         }
         return out;
@@ -48,6 +49,7 @@ namespace Store {
                                {"host", t->host},
                                {"title", t->title},
                                {"session", t->sessionId},
+                               {"root", t->root},
                                {"updated", t->updatedAt}});
         }
         // written beside and renamed: a crash mid-write must not lose the list

@@ -5,6 +5,7 @@
 #include "imshell/components.hpp"
 #include "imshell/themes.hpp"
 #include <algorithm>
+#include <cstdlib>
 #include <format>
 #include <functional>
 #include <optional>
@@ -444,10 +445,22 @@ void App::statusLine(Thread& t, float left) {
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
     ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+    // the folder, short: ~ for the home folder, the last two parts when it is still long
+    std::string where = t.cwd;
+    if (const char* home = std::getenv("HOME"); t.host.empty() && home && where.starts_with(home)) {
+        where.replace(0, std::string(home).size(), "~");
+    }
+    if (where.size() > 44) {
+        const size_t cut = where.rfind('/', where.rfind('/') - 1);
+        where = ".../" + where.substr(cut + 1);
+    }
     if (ImGui::Button((std::string(t.host.empty() ? ICON_FA_FOLDER : ICON_FA_SERVER) + "  " +
-                       (t.host.empty() ? "" : t.host + ":") + t.cwd + "  " ICON_FA_CHEVRON_DOWN "##where")
+                       (t.host.empty() ? "" : t.host + ":") + where + "  " ICON_FA_CHEVRON_DOWN "##where")
                           .c_str())) {
         ImGui::OpenPopup("projects");
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", t.cwd.c_str());
     }
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
@@ -459,6 +472,28 @@ void App::statusLine(Thread& t, float left) {
         if (git.changed > 0) {
             ImGui::SameLine(0, 10);
             ImGui::TextColored(colors.yellow, "%d changed", git.changed);
+        }
+        // before the first message: work in this checkout, or in a worktree of its own
+        if (t.items.empty() && t.root.empty()) {
+            ImGui::SameLine(0, 16);
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
+            ImGui::PushStyleColor(ImGuiCol_Text, t.wantWorktree ? colors.blue : colors.subtext0);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+            if (ImGui::Button(t.wantWorktree ? ICON_FA_CODE_FORK "  New worktree" : ICON_FA_CODE_FORK "  Current checkout")) {
+                t.wantWorktree = !t.wantWorktree;
+            }
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(3);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", t.wantWorktree
+                                            ? "The first message makes a worktree on a new branch and works there"
+                                            : "Works in the project's folder. Click to use a worktree of its own");
+            }
+        } else if (!t.root.empty()) {
+            ImGui::SameLine(0, 16);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(colors.overlay1, ICON_FA_CODE_FORK "  worktree");
         }
     }
 }

@@ -393,7 +393,7 @@ void App::filesPanel(Thread& t, float splitWidth) {
             const float button = ImGui::GetFrameHeight();
             const size_t slash = f.doc.path.rfind('/');
             ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(colors.subtext0, "%s", fs::path(t.cwd).filename().string().c_str());
+            ImGui::TextColored(colors.subtext0, "%s", fs::path(t.projectDir()).filename().string().c_str());
             ImGui::SameLine();
             ImGui::TextColored(colors.overlay0, ICON_FA_CHEVRON_RIGHT);
             ImGui::SameLine();

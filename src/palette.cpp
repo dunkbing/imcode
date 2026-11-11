@@ -168,7 +168,7 @@ void App::paletteDraw() {
             const Thread& t = *data.threads[i];
             if (!t.title.empty()) {
                 offer({ICON_FA_ARROW_UP, t.title.substr(0, 60),
-                       fs::path(t.cwd).filename().string()},
+                       fs::path(t.projectDir()).filename().string()},
                       -2 - i);
             }
         }

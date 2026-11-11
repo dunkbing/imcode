@@ -70,10 +70,10 @@ if(IMCODE_BUILD_TESTS)
     add_executable(imcode-remote-test tests/remote_test.cpp src/remote.cpp)
     target_link_libraries(imcode-remote-test PRIVATE acp::host)
     add_test(NAME imcode-remote COMMAND imcode-remote-test)
-    add_executable(imcode-thread-test tests/thread_test.cpp src/diff.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp)
+    add_executable(imcode-thread-test tests/thread_test.cpp src/diff.cpp src/git.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp)
     target_link_libraries(imcode-thread-test PRIVATE acp::host ${IMCODE_SSH})
     # manual: a real ssh server is needed (see the file)
-    add_executable(imcode-ssh-check tests/ssh_check.cpp src/diff.cpp src/thread.cpp src/remote.cpp src/ssh.cpp src/ssh_config.cpp
+    add_executable(imcode-ssh-check tests/ssh_check.cpp src/diff.cpp src/git.cpp src/thread.cpp src/remote.cpp src/ssh.cpp src/ssh_config.cpp
                    src/terminal.cpp)
     target_link_libraries(imcode-ssh-check PRIVATE acp::host ${IMCODE_SSH} ghostty-vt-static)
     add_executable(imcode-terminal-test tests/terminal_test.cpp src/terminal.cpp)
