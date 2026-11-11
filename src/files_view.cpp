@@ -1,5 +1,7 @@
 #include "app.hpp"
 
+#include "imshell/image.hpp"
+
 #include "acp_host/agents.hpp"
 #include "acp_host/process_runner.hpp"
 #include "imshell/button.hpp"
@@ -17,7 +19,7 @@ namespace fs = std::filesystem;
 using Files = App::Files;
 
 namespace {
-    constexpr size_t maxBytes = 1 << 20;
+    constexpr size_t textBytes = 1 << 20;
     constexpr int maxLineBytes = 2000;
     constexpr size_t maxIndexed = 20000;
 
@@ -53,6 +55,9 @@ namespace {
         doc.epoch = epoch;
         doc.path = path;
         const std::string full = under(cwd, path);
+        // shortcut: png only (what imshell decodes); other pictures still read as binary
+        const bool picture = fs::path(path).extension() == ".png";
+        const size_t maxBytes = picture ? 16u << 20 : textBytes;
         // one byte over the limit tells a larger file from one that just fits
         if (!host.empty()) {
             Ssh::Error failed;
@@ -69,6 +74,12 @@ namespace {
             doc.note = "Could not open " + full;
         }
         if (!doc.note.empty()) {
+            doc.text.clear();
+        } else if (picture && doc.text.size() > maxBytes) {
+            doc.text.clear();
+            doc.note = "A picture larger than 16 MB: not shown.";
+        } else if (picture && doc.text.starts_with("\x89PNG")) {
+            doc.image = std::move(doc.text);
             doc.text.clear();
         } else if (doc.text.substr(0, 8192).find('\0') != std::string::npos) {
             doc.text.clear();
@@ -306,6 +317,7 @@ void App::filesPoll() {
     f.readOp.check([&](Files::Doc got) {
         if (got.epoch == f.epoch) {
             f.doc = std::move(got);
+            f.picturePath.clear(); // a new read: its picture is uploaded again
             f.toTop = true;
             // shown in the tree too
             for (size_t slash = f.doc.path.find('/'); slash != std::string::npos;
@@ -327,6 +339,7 @@ void App::filesPoll() {
         f.index = {};
         f.indexed = false;
         f.doc = {};
+        f.picturePath.clear(); // a new read: its picture is uploaded again
         f.filter[0] = 0;
         f.treeOver = f.want.empty(); // a file asked for as the panel opens stays in front
     }
@@ -429,7 +442,24 @@ void App::filesPanel(Thread& t, float splitWidth) {
                 ImGui::TextColored(colors.yellow, "%s", f.doc.note.c_str());
             }
             ImGui::Spacing();
-            if (f.doc.lines.size() > 1) {
+            if (!f.doc.image.empty()) {
+                if (f.picturePath != f.doc.path) {
+                    f.picturePath = f.doc.path;
+                    f.picture = imshell::LoadTexture(reinterpret_cast<const uint8_t*>(f.doc.image.data()),
+                                                     f.doc.image.size(), upload, &f.pictureWidth, &f.pictureHeight);
+                }
+                if (f.picture && f.pictureWidth > 0) {
+                    // whole in the panel, never larger than it is
+                    const ImVec2 room = ImGui::GetContentRegionAvail();
+                    const float scale = std::min({1.0f, room.x / static_cast<float>(f.pictureWidth),
+                                                  room.y / static_cast<float>(f.pictureHeight)});
+                    ImGui::Image(f.picture, ImVec2(static_cast<float>(f.pictureWidth) * scale,
+                                                   static_cast<float>(f.pictureHeight) * scale));
+                    ImGui::TextColored(colors.overlay0, "%d x %d", f.pictureWidth, f.pictureHeight);
+                } else {
+                    ImGui::TextColored(colors.yellow, "This picture could not be read.");
+                }
+            } else if (f.doc.lines.size() > 1) {
                 code(f);
             }
         }

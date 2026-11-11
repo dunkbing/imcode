@@ -67,11 +67,17 @@ struct App : imshell::Delegate {
         struct Doc {
             int epoch = 0;
             std::string path, text, note; // note: why nothing, or not all of it, is shown
+            std::string image;            // a picture's bytes, in place of text
             std::vector<int> lines;       // where each line starts in text, then text's size
             std::vector<bool> carry;      // per line: it starts inside a block comment
             int widest = 0;               // index of the longest line
         };
         imshell::TextEditor editor; // shows doc
+        // the picture being shown, uploaded from doc.image
+        // shortcut: its texture is not freed when another replaces it (imshell has no call for that yet)
+        ImTextureID picture{};
+        int pictureWidth = 0, pictureHeight = 0;
+        std::string picturePath;
         std::string shownPath;      // what the editor holds
         size_t shownSize = 0;
         bool open = false;
