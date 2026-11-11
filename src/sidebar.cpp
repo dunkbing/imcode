@@ -17,7 +17,8 @@ void App::sidebar() {
     const float spacing = ImGui::GetStyle().ItemSpacing.x;
 
     // search, add project, new thread
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 3 * (button + spacing));
+    // three buttons after it, the last clear of the divider beside the list
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 3 * (button + spacing) - 6);
     ImGui::InputTextWithHint("##search", ICON_FA_MAGNIFYING_GLASS "  Search", search, sizeof(search));
     ImGui::SameLine();
     // which project's threads are listed; picking one also makes it where new threads go
