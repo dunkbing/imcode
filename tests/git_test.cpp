@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 
 int main() {
     const Git::Status a = Git::parse("## main...origin/main [ahead 1]\n M src/a.cpp\n?? new.txt\n");
@@ -31,6 +32,13 @@ int main() {
     const bool refused = Git::addWorktree("", repo.string(), name, again).empty() && !again.empty();
     ok = ok && name.starts_with("fix-the-login-test-") && fs::is_directory(made) && in.repo &&
          in.branch == "imcode/" + name && refused;
+    // a worktree with uncommitted work is kept; a clean one goes, its branch stays
+    std::ofstream(fs::path(made) / "new.txt") << "x";
+    std::string kept;
+    const bool refusedDirty = !Git::removeWorktree("", repo.string(), made, kept) && !kept.empty();
+    fs::remove(fs::path(made) / "new.txt");
+    std::string gone;
+    ok = ok && refusedDirty && Git::removeWorktree("", repo.string(), made, gone) && !fs::exists(made);
     fs::remove_all(home);
     std::printf(ok ? "ok\n" : "FAILED: %s | %s | %s | %s\n", name.c_str(), made.c_str(), error.c_str(),
                 in.branch.c_str());

@@ -102,7 +102,7 @@ One host per machine owns the agents and the threads; every screen is a client o
 ## 4. Workspace
 
 - [~] Projects: threads grouped by host and folder (done), with the git branch
-- [~] A git worktree per thread on its own branch, local or over ssh (done); a setup command; removing it with the thread
+- [~] A git worktree per thread on its own branch, local or over ssh, removed with the thread when clean (done); a setup command
 - [ ] Diff view: what a turn changed, and the working tree against its base
 - [ ] Checkpoints as hidden git refs; revert the files of a turn
 - [ ] Commit, push, open a pull request

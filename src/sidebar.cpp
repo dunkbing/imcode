@@ -149,6 +149,16 @@ void App::sidebar() {
             if (ImGui::MenuItem("Remove from list")) {
                 remove = i;
             }
+            // only when git lets it go: a worktree with uncommitted work stays, and so does the thread
+            if (!t.root.empty() && ImGui::MenuItem("Remove with its worktree")) {
+                std::string error;
+                // shortcut: blocks the ui for git (and ssh), like making the worktree does
+                if (Git::removeWorktree(t.host, t.root, t.cwd, error)) {
+                    remove = i;
+                } else {
+                    ui::Toast(("The worktree was kept: " + error).c_str(), ui::Tone::Warning, 8);
+                }
+            }
             ImGui::EndPopup();
         }
         const ImVec2 next = ImGui::GetCursorPos();

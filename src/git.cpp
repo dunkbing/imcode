@@ -85,39 +85,42 @@ namespace Git {
         return (out.empty() ? "thread" : out) + "-" + tail;
     }
 
-    std::string addWorktree(const std::string& host, const std::string& repo, const std::string& name,
-                            std::string& error) {
-        auto quote = [](const std::string& s) {
+    namespace {
+        std::string quote(const std::string& s) {
             std::string out = "'";
             for (const char c : s) {
                 out += c == '\'' ? std::string("'\\''") : std::string(1, c);
             }
             return out + "'";
-        };
+        }
+
+        // a shell script on this machine or on the host, its output (both streams)
+        std::string run(const std::string& host, const std::string& script) {
+            if (host.empty()) {
+                return ProcessRunner::run({.args = {"/bin/sh", "-c", script},
+                                           .environment = {{"PATH", AcpAgents::loginShellPath()}},
+                                           .timeout = std::chrono::seconds(60)})
+                    .output;
+            }
+            Ssh::Error sshError;
+            const auto session = Ssh::session(host, "", sshError);
+            std::string failed, out;
+            auto lines = session ? session->exec(script, nullptr, failed) : nullptr;
+            for (std::string line; lines && lines->readLine(line);) {
+                out += line + "\n";
+            }
+            return lines ? out : sshError.message + failed;
+        }
+    } // namespace
+
+    std::string addWorktree(const std::string& host, const std::string& repo, const std::string& name,
+                            std::string& error) {
         const std::string repoName = repo.substr(repo.find_last_of('/') + 1);
         // one script for both: it prints the new folder on its last line
         const std::string script = "dir=\"$HOME/.imcode/worktrees/\"" + quote(repoName) + " && mkdir -p \"$dir\" && git -C " +
                                    quote(repo) + " worktree add -q -b " + quote("imcode/" + name) + " \"$dir\"/" +
                                    quote(name) + " 2>&1 && printf '%s\\n' \"$dir\"/" + quote(name);
-        std::string out;
-        if (host.empty()) {
-            const ProcessResult res =
-                ProcessRunner::run({.args = {"/bin/sh", "-c", script},
-                                    .environment = {{"PATH", AcpAgents::loginShellPath()}},
-                                    .timeout = std::chrono::seconds(60)});
-            out = res.output;
-        } else {
-            Ssh::Error sshError;
-            const auto session = Ssh::session(host, "", sshError);
-            std::string failed;
-            auto lines = session ? session->exec(script, nullptr, failed) : nullptr;
-            for (std::string line; lines && lines->readLine(line);) {
-                out += line + "\n";
-            }
-            if (!lines) {
-                out = sshError.message + failed;
-            }
-        }
+        std::string out = run(host, script);
         while (!out.empty() && out.back() == '\n') {
             out.pop_back();
         }
@@ -127,6 +130,20 @@ namespace Git {
             return "";
         }
         return last;
+    }
+
+    bool removeWorktree(const std::string& host, const std::string& repo, const std::string& path,
+                        std::string& error) {
+        std::string out =
+            run(host, "git -C " + quote(repo) + " worktree remove " + quote(path) + " 2>&1 && echo imcode-removed");
+        while (!out.empty() && out.back() == '\n') {
+            out.pop_back();
+        }
+        if (out.ends_with("imcode-removed")) {
+            return true;
+        }
+        error = out;
+        return false;
     }
 
 } // namespace Git

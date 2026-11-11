@@ -19,6 +19,10 @@ namespace Git {
     // empty with an error when git refuses
     std::string addWorktree(const std::string& host, const std::string& repo, const std::string& name,
                             std::string& error);
+    // remove a worktree of `repo` (its branch stays). git refuses when it holds changes that
+    // are not committed: false with git's own words; blocks
+    bool removeWorktree(const std::string& host, const std::string& repo, const std::string& path,
+                        std::string& error);
     // a branch-safe name from a prompt: its first words, and a few characters to keep it unique
     std::string slug(const std::string& text);
 } // namespace Git
