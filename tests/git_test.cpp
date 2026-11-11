@@ -1,6 +1,7 @@
 // the branch and the count of changed files from git's porcelain status; a worktree of a
 // scratch repository
 #include "../src/git.hpp"
+#include "../src/ssh.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -14,6 +15,11 @@ int main() {
     const Git::Status none = Git::parse("");
     bool ok = a.repo && a.branch == "main" && a.changed == 2 && b.branch == "trunk" && b.changed == 0 &&
               c.branch == "detached" && c.changed == 1 && d.branch == "feature/x" && !none.repo;
+
+    // a host as typed, or as a command copied from a terminal
+    ok = ok && Ssh::destination("me@box") == "me@box" && Ssh::destination("ssh me@box") == "me@box" &&
+         Ssh::destination("  ssh -p 2222 -i ~/.ssh/k me@box ") == "me@box:2222" &&
+         Ssh::destination("ssh -l me box") == "me@box" && Ssh::destination("devbox") == "devbox";
 
     namespace fs = std::filesystem;
     const fs::path home = fs::temp_directory_path() / "imcode-git-test";

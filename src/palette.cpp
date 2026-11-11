@@ -358,7 +358,9 @@ void App::paletteDraw() {
             p.focus = true;
         } else if (picked >= 0 || (enter && !p.query.empty())) {
             // a listed host, or exactly what was typed
-            p.host = picked >= 0 && !(enter && rows.empty()) ? rows[picked].title : p.query;
+            p.host = picked >= 0 && !(enter && rows.empty()) ? rows[picked].title : Ssh::destination(p.query);
+            p.query = p.host; // what will be used, in place of a pasted command
+            p.focus = true;
             paletteGo(p.host, "");
         }
     } else {

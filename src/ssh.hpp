@@ -52,6 +52,10 @@ namespace Ssh {
     // there is a live connection to host: session() will not block on the network
     bool connected(const std::string& host);
 
+    // what was typed for a host, as session() takes it: "ssh -p 2222 me@box" (a command
+    // copied from a terminal) becomes "me@box:2222". other options are dropped
+    std::string destination(const std::string& typed);
+
     // Host names of ~/.ssh/config
     std::vector<std::string> configHosts();
 

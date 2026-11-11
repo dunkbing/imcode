@@ -1,5 +1,6 @@
 #include "ssh.hpp"
 
+#include "acp_host/process_runner.hpp"
 #include "ssh_config.hpp"
 #include <algorithm>
 #include <atomic>
@@ -252,6 +253,15 @@ namespace Ssh {
             if (libssh2_userauth_authenticated(session)) {
                 return true;
             }
+#if defined(__APPLE__)
+            // the system ssh reads a key's passphrase from the keychain by itself; we cannot,
+            // but the agent can be told to load those keys, once
+            static std::once_flag keychain;
+            std::call_once(keychain, [] {
+                ProcessRunner::run({.args = {"/usr/bin/ssh-add", "--apple-load-keychain"},
+                                    .timeout = std::chrono::seconds(5)});
+            });
+#endif
             if (LIBSSH2_AGENT* agent = libssh2_agent_init(session)) {
                 if (libssh2_agent_connect(agent) == 0 && libssh2_agent_list_identities(agent) == 0) {
                     libssh2_agent_publickey* id = nullptr;
@@ -726,6 +736,37 @@ namespace Ssh {
             secrets[host] = useSecret;
         }
         return made;
+    }
+
+    std::string destination(const std::string& typed) {
+        std::string user, host, port;
+        std::string word, flag;
+        auto take = [&] {
+            if (word.empty()) {
+                return;
+            }
+            if (!flag.empty()) { // the value of the option before it
+                (flag == "-p" ? port : flag == "-l" ? user : word) = word;
+                flag.clear();
+            } else if (word == "-p" || word == "-l" || word == "-i" || word == "-o" || word == "-J") {
+                flag = word;
+            } else if (word != "ssh" && word.front() != '-') {
+                host = word;
+            }
+            word.clear();
+        };
+        for (const char c : typed) {
+            if (c == ' ' || c == '\t') {
+                take();
+            } else {
+                word += c;
+            }
+        }
+        take();
+        if (!user.empty() && host.find('@') == std::string::npos) {
+            host = user + "@" + host;
+        }
+        return port.empty() || host.empty() ? host : host + ":" + port;
     }
 
     bool connected(const std::string& host) {
