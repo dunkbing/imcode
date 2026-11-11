@@ -96,8 +96,9 @@ namespace {
                                   ImGui::GetCursorScreenPos().y);
             const int lines = static_cast<int>(std::ranges::count(code, '\n')) + 1;
             view.editor->Render("##md_editor",
+                                // the editor's margins, and room for a sideways scrollbar
                                 ImVec2(-1, static_cast<float>(lines) * ImGui::GetTextLineHeightWithSpacing() +
-                                               6.0f)); // the editor's margins
+                                               6.0f + ImGui::GetStyle().ScrollbarSize));
             // copy floats over the code, top right: a later sibling child draws on top
             static ImGuiID copied = 0;
             static double copiedAt = -10.0;

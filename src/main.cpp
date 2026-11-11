@@ -387,7 +387,12 @@ void App::frame() {
         ImGui::SameLine();
         ImGui::TextColored(colors.overlay0, "/");
         ImGui::SameLine();
-        ImGui::TextUnformatted(t.title.empty() ? "New thread" : t.title.substr(0, narrow ? 22 : 70).c_str());
+        // as much of the title as fits before the buttons at the right
+        const float room = bar.pos.x + bar.size.x - bar.rightInset - 76 - 12 - ImGui::GetCursorScreenPos().x;
+        const size_t fits = static_cast<size_t>(std::max(0.0f, room / ImGui::CalcTextSize("0").x));
+        const std::string title = t.title.empty() ? "New thread" : t.title;
+        ImGui::TextUnformatted(title.size() > fits ? (title.substr(0, fits > 2 ? fits - 2 : 0) + "..").c_str()
+                                                   : title.c_str());
         // at the right end, before the os's own buttons
         ImGui::SameLine();
         ImGui::SetCursorScreenPos(ImVec2(bar.pos.x + bar.size.x - bar.rightInset - 76,
