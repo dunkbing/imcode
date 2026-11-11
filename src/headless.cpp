@@ -129,7 +129,7 @@ namespace {
 } // namespace
 
 namespace {
-    // IMCODE_INPUT="90 type echo hi;95 key enter;100 click 600 300;110 drag 700 507 700 300":
+    // IMCODE_INPUT="90 type echo hi;95 key enter;100 click 600 300;105 rclick 600 300;110 drag 700 507 700 300":
     // "<frame> <what> <args>" steps, played into imgui as a user's mouse and keys
     struct Step {
         int frame = 0;
@@ -168,11 +168,12 @@ namespace {
                                      : s.args == "backspace" ? ImGuiKey_Backspace
                                                              : ImGuiKey_None;
                 io.AddKeyEvent(key, age == 0);
-            } else if (s.what == "click" && std::sscanf(s.args.c_str(), "%f %f", &x1, &y1) == 2) {
+            } else if ((s.what == "click" || s.what == "rclick") &&
+                       std::sscanf(s.args.c_str(), "%f %f", &x1, &y1) == 2) {
                 if (age == 0) {
                     io.AddMousePosEvent(x1, y1);
                 } else if (age == 1 || age == 3) {
-                    io.AddMouseButtonEvent(0, age == 1);
+                    io.AddMouseButtonEvent(s.what == "rclick" ? 1 : 0, age == 1);
                 }
             } else if (s.what == "drag" &&
                        std::sscanf(s.args.c_str(), "%f %f %f %f", &x1, &y1, &x2, &y2) == 4) {
