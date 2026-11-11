@@ -276,7 +276,10 @@ void AcpClient::onSessionOpened(const std::string& method, const acp::Response& 
         if (method == "session/load") {
             // pruned, or open in another client (a terminal): the app asks whether to try
             // again or start over, so a conversation is never dropped behind the user's back
-            pushEvent({.type = AcpEvent::Type::ResumeFailed, .text = r.error->describe()});
+            const json& data = r.error->data;
+            pushEvent({.type = AcpEvent::Type::ResumeFailed,
+                       .text = r.error->describe(),
+                       .reason = data.is_object() ? data.value("reason", "") : ""});
             return;
         }
         pushEvent({.type = AcpEvent::Type::Error, .text = r.error->describe()});

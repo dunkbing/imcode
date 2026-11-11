@@ -470,6 +470,8 @@ void App::composer(Thread& t, float width) {
             picker.replace = std::string(input);
         }
     }
+    // another client is writing this conversation: read only here, shown live
+    ImGui::BeginDisabled(t.watching());
     bool send = ImGui::InputTextMultiline(
         "##input", input, sizeof(input), ImVec2(-FLT_MIN, inputHeight),
         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CtrlEnterForNewLine |
@@ -485,6 +487,15 @@ void App::composer(Thread& t, float width) {
             return 0;
         },
         &picker);
+    ImGui::EndDisabled();
+    if (t.watching()) {
+        send = false;
+        // in the empty field: why it is read only
+        const ImVec2 at = ImGui::GetItemRectMin();
+        ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + ImGui::GetStyle().FramePadding.x, at.y + ImGui::GetStyle().FramePadding.y),
+                                            ImGui::GetColorU32(colors.yellow),
+                                            ICON_FA_TOWER_BROADCAST "  Live from another client (a terminal): read only until it goes quiet");
+    }
     ImGui::PopStyleColor(3);
     // up/down in an empty input (or one still showing a recalled prompt): the prompts sent
     // in this thread, newest first
@@ -604,7 +615,7 @@ void App::composer(Thread& t, float width) {
             picker.selected = 0;
         }
     }
-    if (!input[0]) {
+    if (!input[0] && !t.watching()) {
         const ImVec2 after = ImGui::GetCursorPos();
         const ImVec2 pad = ImGui::GetStyle().FramePadding;
         ImGui::SetCursorPos(ImVec2(inputAt.x + pad.x, inputAt.y + pad.y));

@@ -1,6 +1,7 @@
 #include "history.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -76,6 +77,123 @@ namespace History {
                 .count();
         }
     } // namespace
+
+    std::string transcript(const std::string& agentId, const std::string& cwd, const std::string& sessionId) {
+        const char* home = std::getenv("HOME");
+        const fs::path base = home ? home : "";
+        std::error_code ec;
+        if (agentId == "claude-code") {
+            // the folder's path with every character but letters and digits as "-"
+            std::string folder = cwd;
+            for (char& c : folder) {
+                c = std::isalnum(static_cast<unsigned char>(c)) ? c : '-';
+            }
+            const fs::path file = base / ".claude" / "projects" / folder / (sessionId + ".jsonl");
+            return fs::exists(file, ec) ? file.string() : "";
+        }
+        if (agentId == "codex" && !sessionId.empty()) {
+            // rollout-<time>-<session>.jsonl under a dated folder
+            for (const auto& entry : fs::recursive_directory_iterator(base / ".codex" / "sessions", ec)) {
+                const std::string name = entry.path().filename().string();
+                if (name.ends_with(sessionId + ".jsonl")) {
+                    return entry.path().string();
+                }
+            }
+        }
+        return "";
+    }
+
+    long long quietFor(const std::string& path) {
+        std::error_code ec;
+        if (path.empty() || !fs::exists(path, ec)) {
+            return 1'000'000'000;
+        }
+        return std::chrono::duration_cast<std::chrono::seconds>(fs::file_time_type::clock::now() -
+                                                                fs::last_write_time(path, ec))
+            .count();
+    }
+
+    std::vector<Entry> readFrom(const std::string& agentId, const std::string& path, size_t& offset) {
+        std::vector<Entry> out;
+        std::ifstream in(path, std::ios::binary);
+        in.seekg(static_cast<std::streamoff>(offset));
+        std::string chunk((std::istreambuf_iterator<char>(in)), {});
+        // only complete lines: the writer may be in the middle of one
+        const size_t end = chunk.rfind('\n');
+        if (end == std::string::npos) {
+            return out;
+        }
+        offset += end + 1;
+        const auto shown = [](const std::string& text) { // injected context starts with a tag or a heading
+            return !text.empty() && text.front() != '<' && !text.starts_with("# AGENTS.md");
+        };
+        for (size_t at = 0; at <= end;) {
+            const size_t stop = chunk.find('\n', at);
+            const json row = json::parse(chunk.substr(at, stop - at), nullptr, false);
+            at = stop + 1;
+            if (!row.is_object()) {
+                continue;
+            }
+            const std::string type = row.value("type", "");
+            if (agentId == "codex" && type == "response_item") {
+                const json p = row.value("payload", json::object());
+                const std::string kind = p.value("type", "");
+                if (kind == "message") {
+                    const std::string role = p.value("role", "");
+                    std::string text;
+                    for (const auto& block : p.value("content", json::array())) {
+                        text += block.value("text", "");
+                    }
+                    if (role == "user" && shown(text)) {
+                        out.push_back({Entry::Kind::User, text});
+                    } else if (role == "assistant" && !text.empty()) {
+                        out.push_back({Entry::Kind::Assistant, text});
+                    }
+                } else if (kind == "function_call" || kind == "custom_tool_call" || kind == "local_shell_call") {
+                    std::string title = p.value("name", "tool");
+                    const std::string args = p.contains("arguments") && p["arguments"].is_string() ? p["arguments"].get<std::string>()
+                                             : p.contains("input") && p["input"].is_string()       ? p["input"].get<std::string>()
+                                                                                                   : "";
+                    if (!args.empty()) {
+                        title += " " + args.substr(0, std::min(args.find('\n'), size_t{120}));
+                    }
+                    out.push_back({Entry::Kind::Tool, title});
+                }
+            } else if (agentId == "claude-code" && (type == "user" || type == "assistant") &&
+                       !row.value("isMeta", false) && row.contains("message")) {
+                const json content = row["message"].value("content", json());
+                if (content.is_string()) {
+                    if (type == "user" && shown(content.get<std::string>())) {
+                        out.push_back({Entry::Kind::User, content.get<std::string>()});
+                    }
+                    continue;
+                }
+                for (const auto& block : content.is_array() ? content : json::array()) {
+                    const std::string kind = block.value("type", "");
+                    if (kind == "text" && block.contains("text")) {
+                        const std::string text = block["text"].get<std::string>();
+                        if (type == "assistant") {
+                            out.push_back({Entry::Kind::Assistant, text});
+                        } else if (shown(text)) {
+                            out.push_back({Entry::Kind::User, text});
+                        }
+                    } else if (kind == "tool_use") {
+                        std::string title = block.value("name", "tool");
+                        const json input = block.value("input", json::object());
+                        for (const char* key : {"command", "file_path", "path", "pattern", "description"}) {
+                            if (input.contains(key) && input[key].is_string()) {
+                                const std::string v = input[key].get<std::string>();
+                                title += " " + v.substr(0, std::min(v.find('\n'), size_t{120}));
+                                break;
+                            }
+                        }
+                        out.push_back({Entry::Kind::Tool, title});
+                    }
+                }
+            }
+        }
+        return out;
+    }
 
     std::vector<Found> scan(int perFolder) {
         const char* home = std::getenv("HOME");

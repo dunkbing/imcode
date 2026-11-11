@@ -1,5 +1,6 @@
 // the two session formats, read from a fake home
 #include "../src/history.hpp"
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -37,6 +38,50 @@ int main() {
         std::printf("FAILED: %zu found, claude=%d codex=%d\n", found.size(), claude, codex);
         return 1;
     }
+    // a conversation read as its cli writes it: the cwd's folder named the way claude does
+    std::string folder = cwd;
+    for (char& c : folder) {
+        c = std::isalnum(static_cast<unsigned char>(c)) ? c : '-';
+    }
+    fs::create_directories(home / ".claude/projects" / folder);
+    const fs::path live = home / ".claude/projects" / folder / "s1.jsonl";
+    std::ofstream(live) << R"({"type":"user","message":{"role":"user","content":"<system-reminder>x</system-reminder>"}})" << "\n"
+                        << R"({"type":"user","message":{"role":"user","content":[{"type":"text","text":"rename it"}]}})" << "\n"
+                        << R"({"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"On it."},)"
+                        << R"({"type":"tool_use","name":"Edit","input":{"file_path":"a.cpp"}}]}})" << "\n"
+                        << R"({"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"ok"}]}})" << "\n"
+                        << R"({"type":"assistant","message":{"role":"assistant","content":[{"type":"te)"; // half written
+    const std::string path = History::transcript("claude-code", cwd, "s1");
+    size_t offset = 0;
+    auto entries = History::readFrom("claude-code", path, offset);
+    bool ok = path == live.string() && entries.size() == 3 && entries[0].text == "rename it" &&
+              entries[1].kind == History::Entry::Kind::Assistant && entries[2].text == "Edit a.cpp";
+    std::ofstream(live, std::ios::app) << R"(xt","text":"Done."}]}})" << "\n"; // the line completes
+    entries = History::readFrom("claude-code", path, offset);
+    ok = ok && entries.size() == 1 && entries[0].text == "Done." && History::quietFor(path) < 5 &&
+         History::quietFor("") > 1000;
+    // codex: found by its session id in the file name; injected instructions left out
+    fs::create_directories(home / ".codex/sessions/2026/11/11");
+    const fs::path rollout = home / ".codex/sessions/2026/11/11/rollout-2026-11-11T10-00-00-cdx2.jsonl";
+    std::ofstream(rollout) << R"({"type":"session_meta","payload":{"id":"cdx2","cwd":"x"}})" << "\n"
+                           << R"({"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"# AGENTS.md instructions"}]}})" << "\n"
+                           << R"({"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}})" << "\n"
+                           << R"({"type":"response_item","payload":{"type":"custom_tool_call","name":"exec","input":"ls -la\nmore"}})" << "\n"
+                           << R"({"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hello"}]}})" << "\n";
+    size_t codexOffset = 0;
+    const std::string codexPath = History::transcript("codex", "x", "cdx2");
+    entries = History::readFrom("codex", codexPath, codexOffset);
+    ok = ok && codexPath == rollout.string() && entries.size() == 3 && entries[0].text == "hi" &&
+         entries[1].text == "exec ls -la" && entries[2].text == "Hello";
+    if (!ok) {
+        std::printf("FAILED: transcripts (%zu entries) claude path '%s' codex path '%s'\n", entries.size(), path.c_str(),
+                    codexPath.c_str());
+        for (const auto& e : entries) {
+            std::printf("  %d %s\n", static_cast<int>(e.kind), e.text.c_str());
+        }
+        return 1;
+    }
+    fs::remove_all(home);
     std::printf("ok\n");
     return 0;
 }

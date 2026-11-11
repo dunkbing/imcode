@@ -97,6 +97,14 @@ public:
     // after a failed resume: the same session again, or a new one in its place
     void retryResume();
     void startOver();
+    // left for another thread: an idle agent is stopped and its history dropped, so the
+    // conversation is free for the agent's cli and comes back fresh when opened again
+    void release();
+    // another client (the agent's cli) is writing this conversation on this machine: shown
+    // live from its transcript, read only, until it has been quiet for a while
+    [[nodiscard]] bool watching() const {
+        return watching_;
+    }
     // files: local paths. images go along as pictures, other files as links (not over ssh)
     void send(const std::string& text, const std::vector<std::string>& files = {});
     void cancel();
@@ -139,6 +147,12 @@ private:
     bool sendNow_ = false; // the turn was stopped for a queued message: the queue moves on
     bool bunTried_ = false; // the managed bun was asked for once
     std::string turnBefore_; // the folder as the running turn found it (a git tree); empty: not a repository
+    bool watching_ = false;
+    std::string watchPath_; // the transcript followed
+    size_t watchOffset_ = 0;
+    long long watchCheckMs_ = 0;
+    bool watch(); // start following the transcript; false when there is none
+    void follow(); // what the followed transcript gained since the last look
     std::vector<std::string> heldFiles_;
     bool changed_ = false;
     int revision_ = 0;

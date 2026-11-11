@@ -320,6 +320,9 @@ void App::dropDraft() {
 }
 
 void App::select(int index) {
+    if (index != current && current >= 0 && current < static_cast<int>(data.threads.size())) {
+        data.threads[current]->release(); // left: free for the agent's cli, fresh when opened again
+    }
     if (index != current) {
         const Thread* keep = index >= 0 ? data.threads[index].get() : nullptr;
         dropDraft();
@@ -450,6 +453,43 @@ void App::hostLoop() {
         if (changed) {
             save();
             imshell::requestFrames();
+        }
+        // threads in the background: an idle agent is let go after a minute
+        for (int i = 0; i < static_cast<int>(data.threads.size()); ++i) {
+            Thread& t = *data.threads[i];
+            if (i != current && std::time(nullptr) - t.updatedAt > 60) {
+                t.release();
+            }
+        }
+        // what the agents' clis did meanwhile (a conversation continued, a new one), every
+        // minute: the list follows. sessions of this machine's projects only
+        historyOp.check([&](std::vector<History::Found> found) {
+            for (const auto& f : found) {
+                const auto same = std::ranges::find_if(data.threads, [&](const auto& t) {
+                    return t->host.empty() && t->sessionId == f.sessionId && t->agentId == f.agentId;
+                });
+                if (same != data.threads.end()) {
+                    if (f.updatedAt > (*same)->updatedAt) {
+                        (*same)->updatedAt = f.updatedAt;
+                        changed = true;
+                    }
+                } else if (std::ranges::any_of(data.projects, [&](const auto& p) { return p.host.empty() && p.cwd == f.cwd; })) {
+                    auto thread = std::make_unique<Thread>(f.cwd, f.agentId, "");
+                    thread->title = f.title;
+                    thread->sessionId = f.sessionId;
+                    thread->updatedAt = f.updatedAt;
+                    data.threads.push_back(std::move(thread));
+                    changed = true;
+                }
+            }
+            if (changed) {
+                save();
+                imshell::requestFrames();
+            }
+        });
+        if (!historyOp.isRunning() && nowMs() - historyAtMs > 60'000) {
+            historyAtMs = nowMs();
+            historyOp.start([] { return History::scan(); });
         }
         hostWake.wait_for(lock, std::chrono::milliseconds(250));
     }

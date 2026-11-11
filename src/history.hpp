@@ -13,4 +13,18 @@ namespace History {
     // Claude Code (~/.claude/projects/<folder>/<session>.jsonl) and
     // Codex (~/.codex/sessions/<y>/<m>/<d>/rollout-*.jsonl)
     std::vector<Found> scan(int perFolder = 5);
+
+    // a conversation as its agent's cli writes it on this machine, read as it grows: another
+    // client (a terminal) can be followed live, read only
+    struct Entry {
+        enum class Kind { User, Assistant, Tool };
+        Kind kind;
+        std::string text; // a message's text, or a tool call's title
+    };
+    // the session's transcript file on this machine; empty when there is none
+    std::string transcript(const std::string& agentId, const std::string& cwd, const std::string& sessionId);
+    // the entries in the complete lines from `offset`, which moves past them
+    std::vector<Entry> readFrom(const std::string& agentId, const std::string& path, size_t& offset);
+    // seconds since the file was last written; a large number when it is not there
+    long long quietFor(const std::string& path);
 } // namespace History

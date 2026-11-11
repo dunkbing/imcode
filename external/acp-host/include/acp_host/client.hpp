@@ -66,6 +66,7 @@ struct AcpEvent {
     };
     Type type{};
     std::string text;
+    std::string reason; // ResumeFailed: the agent's own code for why (data.reason), as "thread_active_writer"
     AcpToolCall tool;
     std::vector<AcpPlanEntry> plan;
     std::vector<AcpCommand> commands;

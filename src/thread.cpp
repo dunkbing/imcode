@@ -2,9 +2,11 @@
 
 #include "acp_host/registry.hpp"
 #include "git.hpp"
+#include "history.hpp"
 #include "remote.hpp"
 #include "ssh.hpp"
 #include <algorithm>
+#include <chrono>
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
@@ -161,12 +163,53 @@ bool Thread::ensureStarted() {
     return ok;
 }
 
-void Thread::open() {
-    // a saved thread: its agent replays the history. a new one waits until it is needed
-    // (a message, the model picker, a slash command): no process for a thread never used
-    if (!acp_ && items.empty() && !sessionId.empty()) {
-        ensureStarted();
+namespace {
+    long long nowMs() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
     }
+    constexpr long long quietSeconds = 120; // a transcript written this recently is in use elsewhere
+}
+
+void Thread::open() {
+    // a saved thread: its agent replays the history, unless another client is writing it
+    // right now (then it is followed). a new one waits until it is needed (a message, the
+    // model picker, a slash command): no process for a thread never used
+    if (!acp_ && !watching_ && items.empty() && !sessionId.empty()) {
+        const std::string path = host.empty() ? History::transcript(agentId, cwd, sessionId) : "";
+        if (!(!path.empty() && History::quietFor(path) < quietSeconds && watch())) {
+            ensureStarted();
+        }
+    }
+}
+
+bool Thread::watch() {
+    // shortcut: this machine only; a remote cli's transcript would be read over sftp
+    watchPath_ = host.empty() ? History::transcript(agentId, cwd, sessionId) : "";
+    if (watchPath_.empty()) {
+        return false;
+    }
+    items.clear();
+    watchOffset_ = 0;
+    watchCheckMs_ = 0;
+    watching_ = true;
+    ++revision_;
+    return true;
+}
+
+void Thread::release() {
+    if (watching_) {
+        watching_ = false;
+        items.clear();
+        ++revision_;
+        return;
+    }
+    if (!acp_ || busy() || needsAnswer() || !queue.empty() || connectOp_.isRunning()) {
+        return;
+    }
+    acp_.reset();
+    items.clear();
+    replaying_ = false;
+    ++revision_;
 }
 
 void Thread::retryResume() {
@@ -190,7 +233,7 @@ void Thread::wake() {
 }
 
 void Thread::send(const std::string& text, const std::vector<std::string>& files) {
-    if (text.empty() && files.empty()) {
+    if ((text.empty() && files.empty()) || watching_) { // another client is writing it
         return;
     }
     if (busy()) {
@@ -419,6 +462,25 @@ void Thread::continueAfterTerminalSignIn(Item& item) {
     }
 }
 
+void Thread::follow() {
+    // following another client's transcript: what it wrote since, twice a second
+    if (watching_ && nowMs() - watchCheckMs_ > 500) {
+        watchCheckMs_ = nowMs();
+        for (auto& e : History::readFrom(agentId, watchPath_, watchOffset_)) {
+            add({.kind = e.kind == History::Entry::Kind::User        ? Item::Kind::User
+                         : e.kind == History::Entry::Kind::Assistant ? Item::Kind::Assistant
+                                                                     : Item::Kind::Tool,
+                 .text = e.kind == History::Entry::Kind::Tool ? "" : e.text,
+                 .toolTitle = e.kind == History::Entry::Kind::Tool ? e.text : "",
+                 .toolStatus = "completed"});
+        }
+        if (History::quietFor(watchPath_) >= quietSeconds) {
+            watching_ = false; // the other client stopped: this one can carry on
+            add({.kind = Item::Kind::Info, .text = "The other client has been quiet for two minutes: you can continue here."});
+        }
+    }
+}
+
 void Thread::poll() {
     connectOp_.check([this](std::string error) {
         const std::string text = std::exchange(heldPrompt_, {});
@@ -430,10 +492,12 @@ void Thread::poll() {
         }
     });
     if (!acp_) {
+        follow();
         return;
     }
     acp_->tick(); // sign-in restarts happen here, on the ui thread
     bool gone = false;
+    bool followAfter = false;
     bool next = false; // a turn ended: the queue moves on
     auto append = [this](Item::Kind kind, const std::string& text) {
         if (items.empty() || items.back().kind != kind) {
@@ -552,13 +616,16 @@ void Thread::poll() {
             add({.kind = Item::Kind::Info, .text = ev.text});
             break;
         case AcpEvent::Type::ResumeFailed: {
-            const bool inUse = ev.text.find("in use") != std::string::npos || ev.text.find("active writer") != std::string::npos;
+            const bool inUse = ev.reason == "thread_active_writer" || ev.text.find("active writer") != std::string::npos;
             add({.kind = Item::Kind::Error,
                  .text = inUse ? "This conversation is open in another client (a terminal or another app). Close it "
                                  "there, then try again.\n\n" + ev.text
                                : "Could not resume this conversation: " + ev.text,
                  .resumeChoice = true});
             gone = true; // the agent is stopped: nothing runs until the user picks
+            if (inUse) {
+                followAfter = true; // shown live from its transcript meanwhile
+            }
             break;
         }
         case AcpEvent::Type::Error: {
@@ -613,4 +680,11 @@ void Thread::poll() {
         queued_ = false;
         heldUser_.clear();
     }
+    if (followAfter) {
+        std::vector<Item> kept = std::move(items); // the error and its buttons stay on top
+        if (watch()) {
+            items = std::move(kept);
+        }
+    }
+    follow();
 }

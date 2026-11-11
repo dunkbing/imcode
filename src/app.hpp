@@ -123,6 +123,8 @@ struct App : imshell::Delegate {
         std::vector<History::Found> history;
     };
     AcpHost::AsyncOp<Scan> scanOp;
+    AcpHost::AsyncOp<std::vector<History::Found>> historyOp; // the clis' sessions, looked at every minute
+    long long historyAtMs = 0;
     Scan scan;
     bool scanned = false;
     bool importHistory = true;
