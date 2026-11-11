@@ -163,6 +163,9 @@ namespace {
                 io.AddKeyEvent(ImGuiMod_Ctrl, age == 0);
 #endif
                 io.AddKeyEvent(ImGuiKey_V, age == 0);
+            } else if (s.what == "wheel" && age == 0 && std::sscanf(s.args.c_str(), "%f %f %f", &x1, &y1, &x2) == 3) {
+                io.AddMousePosEvent(x1, y1); // wheel x y amount: a scroll there
+                io.AddMouseWheelEvent(0, x2);
             } else if (s.what == "move" && age == 0 && std::sscanf(s.args.c_str(), "%f %f", &x1, &y1) == 2) {
                 io.AddMousePosEvent(x1, y1); // a hover, nothing pressed
             } else if (s.what == "type" && age == 0) {

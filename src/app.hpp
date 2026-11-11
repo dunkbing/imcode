@@ -229,6 +229,7 @@ struct App : imshell::Delegate {
     void agentIcon(const std::string& agentId, float size = 16, float rowHeight = 0);
 
     void threadView(Thread& t);
+    void threadBody(Thread& t);
     void transcriptItem(Thread& t, Item& item, int index, float width);
     bool diffBlock(const std::string& path, int added, int removed, const std::vector<Diff::Line>& lines, float maxHeight);
     bool toolGroupRow(Thread& t, size_t from, size_t to, float width, bool shown);

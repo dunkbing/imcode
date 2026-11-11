@@ -615,11 +615,19 @@ void App::composer(Thread& t, float width) {
     ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - labelWidth - button - 16 - 6 -
                          ImGui::GetStyle().ItemSpacing.x - modeWidth);
     if (!modeLabel.empty()) {
-        ImGui::AlignTextToFramePadding();
-        ImGui::PushStyleColor(ImGuiCol_Text, risky ? colors.peach : colors.overlay1);
-        const bool clicked = ImGui::Selectable((modeLabel + "##mode").c_str(), false, 0,
-                                               ImVec2(modeWidth - ImGui::GetStyle().ItemSpacing.x, button));
-        ImGui::PopStyleColor();
+        // level with the buttons beside it: the text drawn in the middle of a button-high
+        // area (a selectable would follow the line's text offset and sit lower)
+        const ImVec2 chipSize(modeWidth - ImGui::GetStyle().ItemSpacing.x, button);
+        const bool clicked = ImGui::InvisibleButton("##mode", chipSize);
+        const ImVec2 chipAt = ImGui::GetItemRectMin();
+        const bool chipHot = ImGui::IsItemHovered();
+        if (chipHot) {
+            ImGui::GetWindowDrawList()->AddRectFilled(chipAt, ImVec2(chipAt.x + chipSize.x, chipAt.y + chipSize.y),
+                                                      ImGui::GetColorU32(colors.surface0), 6);
+        }
+        ImGui::GetWindowDrawList()->AddText(
+            ImVec2(chipAt.x + 4, chipAt.y + (chipSize.y - ImGui::GetTextLineHeight()) * 0.5f),
+            ImGui::GetColorU32(risky ? colors.peach : chipHot ? colors.text : colors.overlay1), modeLabel.c_str());
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("%s: permission mode (shift+tab to change)", currentName(mode).c_str());
         }
@@ -862,7 +870,16 @@ void App::statusLine(Thread& t, float left) {
     }
 }
 
+// the thread in a window of its own that never scrolls: only the transcript inside it does, so
+// the composer and the line under it stay put
 void App::threadView(Thread& t) {
+    ImGui::BeginChild("thread-view", ImVec2(0, 0), ImGuiChildFlags_None,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    threadBody(t);
+    ImGui::EndChild();
+}
+
+void App::threadBody(Thread& t) {
     const auto& colors = Theme::Current()->colors;
     const AcpAgentDef* def = AcpAgents::find(t.agentId);
     const ImVec2 avail = ImGui::GetContentRegionAvail();
@@ -1060,8 +1077,7 @@ void App::threadView(Thread& t) {
         }
         ImGui::EndChild();
         ImGui::PopStyleColor();
-        ImGui::SetCursorScreenPos(back);
-        ImGui::Dummy(ImVec2(0, 0));
+        ImGui::SetCursorScreenPos(back); // what follows goes where it would without the button
     }
     // what waits for the running turn, each removable
     int drop = -1, now = -1;
