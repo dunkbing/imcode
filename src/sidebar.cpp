@@ -1,12 +1,12 @@
 #include "app.hpp"
 
-#include "mydear/button.hpp"
-#include "mydear/components.hpp"
-#include "mydear/themes.hpp"
+#include "imshell/button.hpp"
+#include "imshell/components.hpp"
+#include "imshell/themes.hpp"
 #include <algorithm>
 
-namespace Theme = mydear::Theme;
-namespace ui = mydear::ui;
+namespace Theme = imshell::Theme;
+namespace ui = imshell::ui;
 
 void App::sidebar() {
     const auto& colors = Theme::Current()->colors;
@@ -17,7 +17,7 @@ void App::sidebar() {
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2 * (button + spacing));
     ImGui::InputTextWithHint("##search", ICON_FA_MAGNIFYING_GLASS "  Search", search, sizeof(search));
     ImGui::SameLine();
-    if (mydear::IconButton(ICON_FA_FOLDER_PLUS, mydear::ButtonVariant::Secondary,
+    if (imshell::IconButton(ICON_FA_FOLDER_PLUS, imshell::ButtonVariant::Secondary,
                            ImVec2(button, button))) {
         paletteOpen();
     }
@@ -25,7 +25,7 @@ void App::sidebar() {
         ImGui::SetTooltip("Add project");
     }
     ImGui::SameLine();
-    if (mydear::IconButton(ICON_FA_PEN_TO_SQUARE, mydear::ButtonVariant::Secondary,
+    if (imshell::IconButton(ICON_FA_PEN_TO_SQUARE, imshell::ButtonVariant::Secondary,
                            ImVec2(button, button))) {
         newThread(project);
     }
@@ -102,12 +102,11 @@ void App::sidebar() {
     }
     ImGui::EndChild();
 
-    if (mydear::IconButton(ICON_FA_GEAR, mydear::ButtonVariant::Secondary, ImVec2(button, button))) {
-        dropDraft();
-        data.onboarded = false; // the setup screen doubles as agent settings
+    if (imshell::IconButton(ICON_FA_GEAR, imshell::ButtonVariant::Secondary, ImVec2(button, button))) {
+        settingsWant = true;
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Agents and setup");
+        ImGui::SetTooltip("Settings");
     }
 
     if (remove >= 0) {

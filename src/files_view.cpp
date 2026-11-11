@@ -2,8 +2,8 @@
 
 #include "acp_host/agents.hpp"
 #include "acp_host/process_runner.hpp"
-#include "mydear/button.hpp"
-#include "mydear/themes.hpp"
+#include "imshell/button.hpp"
+#include "imshell/themes.hpp"
 #include "syntax.hpp"
 #include <algorithm>
 #include <chrono>
@@ -12,7 +12,7 @@
 #include <fstream>
 #include <optional>
 
-namespace Theme = mydear::Theme;
+namespace Theme = imshell::Theme;
 namespace fs = std::filesystem;
 using Files = App::Files;
 
@@ -410,7 +410,7 @@ void App::filesPanel(Thread& t, float splitWidth) {
     const auto& colors = Theme::Current()->colors;
     const ImVec2 avail = ImGui::GetContentRegionAvail();
     if (splitWidth > 0) {
-        // shortcut: mydear's splitter only splits top from bottom; this belongs there once
+        // shortcut: imshell's splitter only splits top from bottom; this belongs there once
         // a second side panel needs it
         ImGui::SameLine(0, 0);
         ImGui::InvisibleButton("##files-split", ImVec2(5, avail.y));
@@ -453,7 +453,7 @@ void App::filesPanel(Thread& t, float splitWidth) {
             ImGui::SameLine(0, 0);
             ImGui::TextUnformatted(f.doc.path.c_str() + slash + 1);
             ImGui::SameLine(ImGui::GetContentRegionMax().x - button - (alone ? button + 6 : 0));
-            if (mydear::IconButton(ICON_FA_COPY, mydear::ButtonVariant::Secondary, ImVec2(button, button))) {
+            if (imshell::IconButton(ICON_FA_COPY, imshell::ButtonVariant::Secondary, ImVec2(button, button))) {
                 ImGui::SetClipboardText(f.doc.text.c_str());
             }
             if (ImGui::IsItemHovered()) {
@@ -461,7 +461,7 @@ void App::filesPanel(Thread& t, float splitWidth) {
             }
             if (alone) {
                 ImGui::SameLine(0, 6);
-                if (mydear::IconButton(ICON_FA_FOLDER_TREE, mydear::ButtonVariant::Secondary,
+                if (imshell::IconButton(ICON_FA_FOLDER_TREE, imshell::ButtonVariant::Secondary,
                                        ImVec2(button, button))) {
                     f.treeOver = true;
                 }

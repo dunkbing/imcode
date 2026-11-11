@@ -5,7 +5,7 @@
 #include <thread>
 
 // shortcut: the os's own command-line helpers (the banner is filed under Script Editor on
-// macos, nothing on windows); a native notification with the app's icon belongs in mydear
+// macos, nothing on windows); a native notification with the app's icon belongs in imshell
 void notify(const std::string& title, const std::string& body) {
     std::thread([title, body] {
 #if defined(__APPLE__)

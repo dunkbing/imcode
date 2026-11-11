@@ -4,7 +4,7 @@
 #include "acp_host/host.hpp"
 #include "acp_host/registry.hpp"
 #include "history.hpp"
-#include "mydear/app.hpp"
+#include "imshell/app.hpp"
 #include "ssh.hpp"
 #include "store.hpp"
 #include "terminal.hpp"
@@ -22,8 +22,8 @@
 // the window: onboarding, then a sidebar of threads and the open thread. one file per
 // screen part (onboarding.cpp, palette.cpp, sidebar.cpp, thread_view.cpp, terminal_view.cpp,
 // files_view.cpp)
-struct App : mydear::Delegate {
-    mydear::App* shell = nullptr; // the window: uploads textures
+struct App : imshell::Delegate {
+    imshell::App* shell = nullptr; // the window: uploads textures
     bool headless = false;        // no window (headless.cpp): frames are drawn into memory
     std::function<ImTextureID(const uint8_t* rgba, int width, int height)> upload;
     Store::Data data;
@@ -34,6 +34,8 @@ struct App : mydear::Delegate {
     char search[128] = {};
     int shownRevision = -1; // of the current thread: scroll down when it moves on
     bool focusInput = false;
+    bool settingsWant = false;
+    int switchProjectTo = -1; // picked in the projects popup: applied after the frame's ui
     bool sidebarOpen = false; // narrow windows (phones): the thread list covers the thread
     bool devOpenModels = false; // ui checks: open the model popup once
     std::string switchAgentTo; // picked in the model popup: applied after the frame's ui
@@ -121,7 +123,7 @@ struct App : mydear::Delegate {
     void hostLoop();
     void stopHost();
 
-    // mydear::Delegate
+    // imshell::Delegate
     void setup() override;
     void frame() override;
     bool wantsFrames() override;
@@ -136,6 +138,9 @@ struct App : mydear::Delegate {
     void newThread(int projectIndex, std::string agentId = "");
 
     void onboarding();
+    void agentRows(bool narrow);
+    void settingsDraw();
+    void projectPopup(); // "projects": pick the folder a new thread goes to
     void installAgent(const AcpAgentDef& def);
     void pollInstall();
 

@@ -1,16 +1,16 @@
 #include "app.hpp"
 
-#include "mydear/button.hpp"
-#include "mydear/components.hpp"
-#include "mydear/themes.hpp"
+#include "imshell/button.hpp"
+#include "imshell/components.hpp"
+#include "imshell/themes.hpp"
 #include <algorithm>
 #include <cstring>
 #include <format>
 #include <set>
 #include <unistd.h>
 
-namespace Theme = mydear::Theme;
-namespace ui = mydear::ui;
+namespace Theme = imshell::Theme;
+namespace ui = imshell::ui;
 
 namespace {
     // a section: its name in the left column, the rows to the right of it
@@ -82,25 +82,9 @@ void App::pollInstall() {
     startScan(); // it is launchable now
 }
 
-void App::onboarding() {
+// each agent: its mark and name, then ready / turn on or off / install
+void App::agentRows(bool narrow) {
     const auto& colors = Theme::Current()->colors;
-    const bool narrow = ImGui::GetContentRegionAvail().x < 560;
-    const float width = std::min(720.0f, ImGui::GetContentRegionAvail().x - 2 * Theme::Spacing::XL);
-    ImGui::SetCursorPos(ImVec2((ImGui::GetWindowWidth() - width) * 0.5f, narrow ? 24 : 72));
-    ImGui::BeginChild("onboarding", ImVec2(width, 0));
-
-    char hostName[256] = "this machine";
-    gethostname(hostName, sizeof(hostName));
-    if (char* dot = std::strchr(hostName, '.')) {
-        *dot = 0; // "name.local"
-    }
-    ImGui::PushFont(nullptr, 24.0f);
-    ImGui::TextUnformatted("Welcome to imcode");
-    ImGui::PopFont();
-    ImGui::TextColored(colors.subtext0, "Setting up %s.", hostName);
-    ImGui::Dummy(ImVec2(0, Theme::Spacing::XL));
-
-    beginSection("Agents", narrow);
     if (!scanned) {
         ui::Progress(-1, "Looking for agents");
     }
@@ -123,7 +107,7 @@ void App::onboarding() {
             ui::Progress(-1, nullptr, 90);
         } else if (!scan.ready[i]) {
             alignRight(90);
-            if (mydear::Button("Install", mydear::ButtonVariant::Secondary, ImVec2(90, 0))) {
+            if (imshell::Button("Install", imshell::ButtonVariant::Secondary, ImVec2(90, 0))) {
                 installAgent(def);
             }
         } else {
@@ -132,7 +116,7 @@ void App::onboarding() {
                 ImGui::TextColored(colors.green, narrow ? ICON_FA_CHECK : ICON_FA_CHECK " Ready");
             }
             alignRight(90);
-            if (mydear::Button(on ? "Turn off" : "Turn on", mydear::ButtonVariant::Secondary,
+            if (imshell::Button(on ? "Turn off" : "Turn on", imshell::ButtonVariant::Secondary,
                                ImVec2(90, 0))) {
                 if (on) {
                     std::erase(data.agents, def.id);
@@ -144,6 +128,73 @@ void App::onboarding() {
         }
         ImGui::PopID();
     }
+}
+
+// agents and setup, over the app: closed by its x, escape, or a click outside
+void App::settingsDraw() {
+    const auto& colors = Theme::Current()->colors;
+    if (std::exchange(settingsWant, false)) {
+        ImGui::OpenPopup("##settings");
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const bool narrow = vp->WorkSize.x < 560;
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(640.0f, vp->WorkSize.x - 32), 0));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
+    ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20, 18));
+    const bool shown = ImGui::BeginPopupModal(
+        "##settings", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoSavedSettings);
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
+    if (!shown) {
+        return;
+    }
+    const float button = ImGui::GetFrameHeight();
+    ImGui::PushFont(nullptr, 20.0f);
+    ImGui::TextUnformatted("Settings");
+    ImGui::PopFont();
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - button);
+    bool close = imshell::IconButton(ICON_FA_XMARK, imshell::ButtonVariant::Secondary, ImVec2(button, button));
+    ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
+    ImGui::TextColored(colors.subtext0, "Agents");
+    ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
+    agentRows(narrow);
+    ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
+    close |= ImGui::IsKeyPressed(ImGuiKey_Escape);
+    close |= ImGui::IsMouseClicked(0) &&
+             !ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows |
+                                     ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+    if (close) {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+void App::onboarding() {
+    const auto& colors = Theme::Current()->colors;
+    const bool narrow = ImGui::GetContentRegionAvail().x < 560;
+    const float width = std::min(720.0f, ImGui::GetContentRegionAvail().x - 2 * Theme::Spacing::XL);
+    ImGui::SetCursorPos(ImVec2((ImGui::GetWindowWidth() - width) * 0.5f, narrow ? 24 : 72));
+    ImGui::BeginChild("onboarding", ImVec2(width, 0));
+
+    char hostName[256] = "this machine";
+    gethostname(hostName, sizeof(hostName));
+    if (char* dot = std::strchr(hostName, '.')) {
+        *dot = 0; // "name.local"
+    }
+    ImGui::PushFont(nullptr, 24.0f);
+    ImGui::TextUnformatted("Welcome to imcode");
+    ImGui::PopFont();
+    ImGui::TextColored(colors.subtext0, "Setting up %s.", hostName);
+    ImGui::Dummy(ImVec2(0, Theme::Spacing::XL));
+
+    beginSection("Agents", narrow);
+    agentRows(narrow);
     endSection();
 
     // folders and conversations the agents' own clis left here
@@ -178,7 +229,7 @@ void App::onboarding() {
     const float buttonWidth = ImGui::CalcTextSize(label.c_str()).x + 2 * Theme::Spacing::XL;
     ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - buttonWidth);
     ImGui::BeginDisabled(!scanned || !installing.empty());
-    if (mydear::Button(label.c_str(), mydear::ButtonVariant::Primary, ImVec2(buttonWidth, 0))) {
+    if (imshell::Button(label.c_str(), imshell::ButtonVariant::Primary, ImVec2(buttonWidth, 0))) {
         for (const auto& found : import ? scan.history : std::vector<History::Found>{}) {
             const bool have = std::ranges::any_of(data.threads, [&](const auto& t) {
                 return t->sessionId == found.sessionId;

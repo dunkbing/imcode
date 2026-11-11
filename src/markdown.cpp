@@ -3,13 +3,13 @@
 #include "IconsFontAwesome6.h"
 #include "imgui.h"
 #include "imgui_internal.h"
-#include "mydear/embedded.hpp"
-#include "mydear/themes.hpp"
+#include "imshell/embedded.hpp"
+#include "imshell/themes.hpp"
 #include <format>
 #include <imgui_rich_md/rich_md.h>
 #include <vector>
 
-namespace Theme = mydear::Theme;
+namespace Theme = imshell::Theme;
 
 namespace {
     // the render() in progress: code blocks are drawn from inside RichMd::Render

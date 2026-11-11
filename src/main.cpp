@@ -3,16 +3,16 @@
 #include "markdown.hpp"
 #include "notify.hpp"
 #include "imgui_internal.h"
-#include "mydear/alert.hpp"
-#include "mydear/button.hpp"
-#include "mydear/components.hpp"
-#include "mydear/embedded.hpp"
-#include "mydear/fonts.hpp"
-#include "mydear/image.hpp"
-#include "mydear/splitter.hpp"
-#include "mydear/frames.hpp"
-#include "mydear/themes.hpp"
-#include "mydear/title_bar.hpp"
+#include "imshell/alert.hpp"
+#include "imshell/button.hpp"
+#include "imshell/components.hpp"
+#include "imshell/embedded.hpp"
+#include "imshell/fonts.hpp"
+#include "imshell/image.hpp"
+#include "imshell/splitter.hpp"
+#include "imshell/frames.hpp"
+#include "imshell/themes.hpp"
+#include "imshell/title_bar.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -21,8 +21,8 @@
 #include <ctime>
 #include <format>
 
-namespace Theme = mydear::Theme;
-namespace ui = mydear::ui;
+namespace Theme = imshell::Theme;
+namespace ui = imshell::ui;
 
 int runHeadless(App& app, const char* out, int width, int height, int frames); // headless.cpp
 
@@ -61,16 +61,16 @@ void App::setup() {
     const EmbeddedFont* text = findEmbeddedFont("JetBrainsMono-Medium");
     const EmbeddedFont* icons = findEmbeddedFont("fa-solid-900");
     if (text && icons) {
-        mydear::AddFont({{text->data, text->size}, {icons->data, icons->size, iconRanges, true}},
+        imshell::AddFont({{text->data, text->size}, {icons->data, icons->size, iconRanges, true}},
                         15.0f);
     }
     AcpHost::setWake([this] {
-        mydear::requestFrames();
+        imshell::requestFrames();
         hostWake.notify_one();
     });
     // IMCODE_DATA_DIR: another folder for the saved data (a second profile, ui checks)
     const char* dataDir = std::getenv("IMCODE_DATA_DIR");
-    const std::filesystem::path dir = dataDir ? dataDir : mydear::DataDir("imcode");
+    const std::filesystem::path dir = dataDir ? dataDir : imshell::DataDir("imcode");
     AcpRegistry::setInstallRoot(dir / "agents");
     dataFile = dir / "threads.json";
     data = Store::load(dataFile);
@@ -90,7 +90,7 @@ void App::agentIcon(const std::string& agentId, float size, float rowHeight) {
     if (it == icons.end()) {
         const EmbeddedImage* image = findEmbeddedImage(("agent-" + agentId).c_str());
         const ImTextureID texture =
-            image && upload ? mydear::LoadTexture(image->data, image->size, upload) : ImTextureID{};
+            image && upload ? imshell::LoadTexture(image->data, image->size, upload) : ImTextureID{};
         it = icons.emplace(agentId, texture).first;
     }
     // an item as tall as its row, the mark drawn in its middle: no cursor nudging, which
@@ -115,6 +115,54 @@ void App::agentIcon(const std::string& agentId, float size, float rowHeight) {
     }
     ImGui::GetWindowDrawList()->AddImage(it->second, min, ImVec2(min.x + size, min.y + size), ImVec2(0, 0),
                                          ImVec2(1, 1), ImGui::GetColorU32(tint));
+}
+
+void App::projectPopup() {
+    const auto& colors = Theme::Current()->colors;
+    ImGui::SetNextWindowSize(ImVec2(380, 0));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 10);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
+    const bool shown = ImGui::BeginPopup("projects");
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor();
+    if (!shown) {
+        return;
+    }
+    const float line = ImGui::GetTextLineHeight();
+    auto row = [&](const std::string& id, const char* icon, const std::string& title,
+                   const std::string& detail, bool chosen) {
+        const ImVec2 at = ImGui::GetCursorPos();
+        const float height = detail.empty() ? line + 12 : line * 2 + 14;
+        const bool clicked = rowButton(("##" + id).c_str(), chosen, height);
+        const ImVec2 next = ImGui::GetCursorPos();
+        ImGui::SetCursorPos(ImVec2(at.x + 10, at.y + 6));
+        ImGui::TextColored(colors.subtext0, "%s", icon);
+        ImGui::SameLine(at.x + 38);
+        ImGui::TextUnformatted(title.c_str());
+        if (!detail.empty()) {
+            ImGui::SetCursorPos(ImVec2(at.x + 38, at.y + 6 + line + 2));
+            ImGui::TextColored(colors.overlay1, "%s", detail.c_str());
+        }
+        ImGui::SetCursorPos(ImVec2(next.x, next.y - ImGui::GetStyle().ItemSpacing.y + 2));
+        ImGui::Dummy(ImVec2(0, 0)); // imgui wants an item after a cursor move
+        return clicked;
+    };
+    for (int i = 0; i < static_cast<int>(data.projects.size()); ++i) {
+        const Store::Project& p = data.projects[i];
+        if (row(std::to_string(i), p.host.empty() ? ICON_FA_FOLDER : ICON_FA_SERVER,
+                std::filesystem::path(p.cwd).filename().string(),
+                p.host.empty() ? p.cwd : p.host + ":" + p.cwd, i == project)) {
+            switchProjectTo = i;
+            ImGui::CloseCurrentPopup();
+        }
+    }
+    ImGui::Separator();
+    if (row("add", ICON_FA_FOLDER_PLUS, "Add project...", "", false)) {
+        paletteOpen();
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
 }
 
 void App::startScan() {
@@ -265,7 +313,7 @@ void App::hostLoop() {
         seen = std::move(now);
         if (changed) {
             save();
-            mydear::requestFrames();
+            imshell::requestFrames();
         }
         hostWake.wait_for(lock, std::chrono::milliseconds(250));
     }
@@ -301,10 +349,10 @@ void App::frame() {
     const auto& colors = Theme::Current()->colors;
     // without a window the bar is a plain strip, with room where the os buttons would be
     const ImVec2 display = ImGui::GetIO().DisplaySize;
-    const mydear::Rect content = headless ? mydear::Rect{ImVec2(0, 28), ImVec2(display.x, display.y - 28)}
-                                          : mydear::ContentRect();
+    const imshell::Rect content = headless ? imshell::Rect{ImVec2(0, 28), ImVec2(display.x, display.y - 28)}
+                                          : imshell::ContentRect();
     const bool narrow = content.size.x < 720; // one pane at a time
-    mydear::TitleBar bar{ImVec2(0, 0), ImVec2(display.x, 28), 78, 0};
+    imshell::TitleBar bar{ImVec2(0, 0), ImVec2(display.x, 28), 78, 0};
     if (headless) {
         ImGui::SetNextWindowPos(bar.pos);
         ImGui::SetNextWindowSize(bar.size);
@@ -313,10 +361,10 @@ void App::frame() {
         ImGui::PopStyleVar();
         ImGui::SetCursorPosX(bar.leftInset);
     } else {
-        bar = mydear::BeginTitleBar();
+        bar = imshell::BeginTitleBar();
     }
     if (data.onboarded && narrow) {
-        if (mydear::IconButton(ICON_FA_BARS, mydear::ButtonVariant::Secondary, ImVec2(30, 22))) {
+        if (imshell::IconButton(ICON_FA_BARS, imshell::ButtonVariant::Secondary, ImVec2(30, 22))) {
             sidebarOpen = !sidebarOpen;
         }
         ImGui::SameLine();
@@ -324,8 +372,19 @@ void App::frame() {
     ImGui::AlignTextToFramePadding();
     if (data.onboarded && current >= 0) {
         const Thread& t = *data.threads[current];
-        ImGui::TextColored(colors.subtext0, "%s  /",
-                           std::filesystem::path(t.cwd).filename().string().c_str());
+        // the project: click to start a thread in another one
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
+        ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+        if (ImGui::Button((std::filesystem::path(t.cwd).filename().string() + "  " ICON_FA_CHEVRON_DOWN "##project").c_str())) {
+            ImGui::OpenPopup("projects");
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(3);
+        projectPopup();
+        ImGui::SameLine();
+        ImGui::TextColored(colors.overlay0, "/");
         ImGui::SameLine();
         ImGui::TextUnformatted(t.title.empty() ? "New thread" : t.title.substr(0, narrow ? 22 : 70).c_str());
         // at the right end, before the os's own buttons
@@ -363,7 +422,7 @@ void App::frame() {
     if (headless) {
         ImGui::End();
     } else {
-        mydear::EndTitleBar();
+        imshell::EndTitleBar();
     }
 
     ImGui::SetNextWindowPos(content.pos);
@@ -392,7 +451,7 @@ void App::frame() {
                 threadView(t);
                 ImGui::EndChild();
                 if (terminalOpen) {
-                    mydear::Splitter("##terminal", &terminalSplit, area.y, 160, 80);
+                    imshell::Splitter("##terminal", &terminalSplit, area.y, 160, 80);
                     terminalPanel(t);
                 }
                 ImGui::EndChild();
@@ -449,6 +508,9 @@ void App::frame() {
         if (frames == 40 && all.find(";installing;") != std::string::npos) {
             installing = "cursor"; // the row's progress, without a download
         }
+        if (frames == 40 && all.find(";settings;") != std::string::npos) {
+            settingsWant = true;
+        }
         if (frames == 40 && all.find(";hosts;") != std::string::npos) {
             paletteOpen();
             palette.step = Palette::Step::Host;
@@ -501,19 +563,23 @@ void App::frame() {
             std::snprintf(files.filter, sizeof(files.filter), "%s",
                           all.substr(at + 8, all.find(';', at + 1) - at - 8).c_str());
         }
-        mydear::requestFrames();
+        imshell::requestFrames();
     }
     paletteDraw();
+    settingsDraw();
+    if (switchProjectTo >= 0) {
+        newThread(std::exchange(switchProjectTo, -1));
+    }
     if (!switchAgentTo.empty()) {
         newThread(project, std::exchange(switchAgentTo, {}));
     }
     ImGui::End();
     ui::RenderToasts();
-    mydear::Alert::render(); // last: over everything
+    imshell::Alert::render(); // last: over everything
 }
 
 int main() {
-    mydear::Config config;
+    imshell::Config config;
     config.title = "imcode";
     config.appName = "imcode";
     config.titleBar = true;
@@ -532,8 +598,8 @@ int main() {
         AcpHost::setWake(nullptr);
         return code;
     }
-    // not mydear::Run: markdown and icon textures are freed between run() and destroy()
-    static mydear::App shell;
+    // not imshell::Run: markdown and icon textures are freed between run() and destroy()
+    static imshell::App shell;
     app.shell = &shell;
     app.upload = [](const uint8_t* rgba, int w, int h) { return shell.createTexture(rgba, w, h); };
     if (!shell.create(config, app)) {

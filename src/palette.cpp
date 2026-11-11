@@ -1,14 +1,14 @@
 #include "app.hpp"
 
-#include "mydear/button.hpp"
-#include "mydear/components.hpp"
-#include "mydear/themes.hpp"
+#include "imshell/button.hpp"
+#include "imshell/components.hpp"
+#include "imshell/themes.hpp"
 #include <algorithm>
 #include <climits>
 #include <cstdlib>
 
-namespace Theme = mydear::Theme;
-namespace ui = mydear::ui;
+namespace Theme = imshell::Theme;
+namespace ui = imshell::ui;
 namespace fs = std::filesystem;
 
 namespace {
@@ -142,6 +142,7 @@ void App::paletteDraw() {
     const char* heading = "Sources";
     std::vector<int> targets; // Actions: a project (>= 0) or thread (-2 - index) per row
     constexpr int terminalRow = INT_MIN; // or the terminal toggle
+    constexpr int settingsRow = INT_MIN + 1;
     if (p.step == Palette::Step::Actions) {
         hint = "Search commands, projects, and threads...";
         heading = "Actions";
@@ -152,6 +153,7 @@ void App::paletteDraw() {
             }
         };
         offer({ICON_FA_FOLDER_PLUS, "Add project", "A folder here or on another machine"}, -1);
+        offer({ICON_FA_GEAR, "Settings", "Agents: turn on, turn off, install"}, settingsRow);
         if (current >= 0) {
             offer({ICON_FA_TERMINAL, "Toggle terminal", "A shell in this thread's folder"}, terminalRow);
         }
@@ -214,7 +216,7 @@ void App::paletteDraw() {
 
     // header: back, where we are, the input, and Add while browsing
     const bool browsing = p.step == Palette::Step::Browse;
-    bool back = mydear::IconButton(ICON_FA_ARROW_LEFT);
+    bool back = imshell::IconButton(ICON_FA_ARROW_LEFT);
     ImGui::SameLine();
     if (browsing) {
         std::string shown = p.dir == "/" ? "/" : p.dir + "/";
@@ -243,7 +245,7 @@ void App::paletteDraw() {
     bool add = false;
     if (browsing) {
         ImGui::SameLine();
-        add = mydear::Button("Add", mydear::ButtonVariant::Primary, ImVec2(addWidth, 0));
+        add = imshell::Button("Add", imshell::ButtonVariant::Primary, ImVec2(addWidth, 0));
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Add this folder (Cmd/Ctrl+Enter)");
         }
@@ -330,6 +332,8 @@ void App::paletteDraw() {
             close = true;
             if (targets[picked] == terminalRow) {
                 toggleTerminal();
+            } else if (targets[picked] == settingsRow) {
+                settingsWant = true;
             } else if (targets[picked] >= 0) {
                 newThread(targets[picked]);
             } else {

@@ -29,9 +29,9 @@ else()
     FetchContent_MakeAvailable(ghostty_vt)
 endif()
 
-# imgui's core is compiled here, once; mydear only adds the backends it uses
-set(MYDEAR_IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui)
-add_subdirectory(external/mydear)
+# imgui's core is compiled here, once; imshell only adds the backends it uses
+set(IMSHELL_IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui)
+add_subdirectory(external/imshell)
 option(IMCODE_BUILD_TESTS "Build the tests" OFF)
 if(IMCODE_BUILD_TESTS)
     set(ACP_BUILD_EXAMPLES ON CACHE BOOL "" FORCE) # the echo agent
@@ -42,11 +42,11 @@ add_subdirectory(external/acp-host)
 # chat markdown. it links a target named imgui; ours is compiled into the executable, so headers only
 add_library(imgui INTERFACE)
 target_include_directories(imgui INTERFACE external/imgui)
-set(IMGUI_RICHMD_STB_IMAGE_IMPLEMENTATION OFF CACHE BOOL "" FORCE) # mydear has it
+set(IMGUI_RICHMD_STB_IMAGE_IMPLEMENTATION OFF CACHE BOOL "" FORCE) # imshell has it
 add_subdirectory(external/imgui_rich_md EXCLUDE_FROM_ALL)
-file(GLOB IMGUI_CORE ${MYDEAR_IMGUI_DIR}/imgui*.cpp)
-mydear_embed_fonts(${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts)
-mydear_embed_images(${CMAKE_CURRENT_SOURCE_DIR}/assets/images) # none yet: both lookups must exist
+file(GLOB IMGUI_CORE ${IMSHELL_IMGUI_DIR}/imgui*.cpp)
+imshell_embed_fonts(${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts)
+imshell_embed_images(${CMAKE_CURRENT_SOURCE_DIR}/assets/images) # none yet: both lookups must exist
 
 add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sidebar.cpp src/thread_view.cpp
                src/markdown.cpp src/notify.cpp src/headless.cpp
@@ -54,7 +54,7 @@ add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sideba
                src/terminal.cpp src/terminal_view.cpp src/files_view.cpp src/syntax.cpp
                ${EMBEDDED_FONTS_FILE} ${EMBEDDED_IMAGES_FILE} ${IMGUI_CORE})
 target_include_directories(imcode PRIVATE external/IconFontCppHeaders)
-target_link_libraries(imcode PRIVATE mydear::mydear mydear::components acp::host imgui_rich_md ${IMCODE_SSH} ghostty-vt-static)
+target_link_libraries(imcode PRIVATE imshell::imshell imshell::components acp::host imgui_rich_md ${IMCODE_SSH} ghostty-vt-static)
 
 # ctest: configure with -DIMCODE_BUILD_TESTS=ON (turns on the echo agent it talks to)
 if(IMCODE_BUILD_TESTS)

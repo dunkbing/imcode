@@ -1,16 +1,16 @@
 #include "app.hpp"
 
 #include "markdown.hpp"
-#include "mydear/button.hpp"
-#include "mydear/components.hpp"
-#include "mydear/themes.hpp"
+#include "imshell/button.hpp"
+#include "imshell/components.hpp"
+#include "imshell/themes.hpp"
 #include <algorithm>
 #include <format>
 #include <functional>
 #include <optional>
 
-namespace Theme = mydear::Theme;
-namespace ui = mydear::ui;
+namespace Theme = imshell::Theme;
+namespace ui = imshell::ui;
 
 namespace {
     const acp::ConfigOption* optionOf(const Thread& t, const char* category) {
@@ -162,9 +162,9 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
             if (i > 0) {
                 ImGui::SameLine(0, Theme::Spacing::S);
             }
-            if (mydear::SmallButton(std::format("{}##p{}", option.name, i).c_str(),
-                                    option.kind == "allow_once" ? mydear::ButtonVariant::Primary
-                                                                : mydear::ButtonVariant::Secondary)) {
+            if (imshell::SmallButton(std::format("{}##p{}", option.name, i).c_str(),
+                                    option.kind == "allow_once" ? imshell::ButtonVariant::Primary
+                                                                : imshell::ButtonVariant::Secondary)) {
                 t.answerPermission(it, option);
             }
         }
@@ -178,7 +178,7 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
             ImGui::TextColored(colors.subtext0, "-> %s", it.choice.c_str());
             if (it.terminalSignIn) {
                 ImGui::TextWrapped("Finish signing in in the Terminal window, then continue.");
-                if (mydear::SmallButton("Continue", mydear::ButtonVariant::Primary)) {
+                if (imshell::SmallButton("Continue", imshell::ButtonVariant::Primary)) {
                     t.continueAfterTerminalSignIn(it);
                 }
             }
@@ -187,9 +187,9 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
             if (i > 0) {
                 ImGui::SameLine(0, Theme::Spacing::S);
             }
-            if (mydear::SmallButton(std::format("{}##a{}", it.authMethods[i].name, i).c_str(),
-                                    i == 0 ? mydear::ButtonVariant::Primary
-                                           : mydear::ButtonVariant::Secondary)) {
+            if (imshell::SmallButton(std::format("{}##a{}", it.authMethods[i].name, i).c_str(),
+                                    i == 0 ? imshell::ButtonVariant::Primary
+                                           : imshell::ButtonVariant::Secondary)) {
                 picked = it.authMethods[i];
             }
         }
@@ -260,7 +260,7 @@ void App::composer(Thread& t, float width) {
                          ImGui::GetStyle().ItemSpacing.x);
     agentIcon(t.agentId, 16, button);
     ImGui::SameLine(0, 6);
-    if (mydear::Button((label + "##models").c_str(), mydear::ButtonVariant::Secondary,
+    if (imshell::Button((label + "##models").c_str(), imshell::ButtonVariant::Secondary,
                        ImVec2(labelWidth, 0))) {
         ImGui::OpenPopup("models");
     }
@@ -376,9 +376,20 @@ void App::threadView(Thread& t) {
         ImGui::Dummy(ImVec2(0, Theme::Spacing::L));
         ImGui::SetCursorPosX(left);
         composer(t, width);
-        ImGui::SetCursorPosX(left + 8);
-        ImGui::TextColored(colors.overlay1, ICON_FA_FOLDER "  %s%s%s", t.host.c_str(),
-                           t.host.empty() ? "" : ":", t.cwd.c_str());
+        // where it will work: click to pick another project
+        ImGui::SetCursorPosX(left);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
+        ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+        if (ImGui::Button((std::string(t.host.empty() ? ICON_FA_FOLDER : ICON_FA_SERVER) + "  " +
+                           (t.host.empty() ? "" : t.host + ":") + t.cwd + "  " ICON_FA_CHEVRON_DOWN "##where")
+                              .c_str())) {
+            ImGui::OpenPopup("projects");
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(3);
+        projectPopup();
         if (t.starting()) {
             ImGui::SetCursorPosX(left + 8);
             ImGui::TextColored(colors.overlay1, "Starting %s...",

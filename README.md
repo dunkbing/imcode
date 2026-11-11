@@ -1,6 +1,6 @@
 # imcode
 
-Run coding agents (Claude Code, Codex, Gemini, any [ACP](https://agentclientprotocol.com) agent) in folders on this machine or over ssh, several at once. C++ with [mydear](https://github.com/dunkbing/mydear) (Dear ImGui) and [acp-cpp](https://github.com/dunkbing/acp-cpp). See the [roadmap](docs/roadmap.md).
+Run coding agents (Claude Code, Codex, Gemini, any [ACP](https://agentclientprotocol.com) agent) in folders on this machine or over ssh, several at once. C++ with [imshell](https://github.com/dunkbing/imshell) (Dear ImGui) and [acp-cpp](https://github.com/dunkbing/acp-cpp). See the [roadmap](docs/roadmap.md).
 
 ## Build
 

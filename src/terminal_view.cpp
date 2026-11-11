@@ -1,11 +1,11 @@
 #include "app.hpp"
 
 #include "imgui_internal.h"
-#include "mydear/frames.hpp"
-#include "mydear/themes.hpp"
+#include "imshell/frames.hpp"
+#include "imshell/themes.hpp"
 #include <algorithm>
 
-namespace Theme = mydear::Theme;
+namespace Theme = imshell::Theme;
 
 namespace {
     // what is typed goes to the shell: text as it is, the rest through the key encoder
@@ -112,7 +112,7 @@ void App::terminalPanel(Thread& t) {
                 error = failed.message;
                 return session ? session->shell(c, r, cwd, error) : nullptr;
             },
-            cols, rows, [] { mydear::requestFrames(); });
+            cols, rows, [] { imshell::requestFrames(); });
     }
     term->resize(cols, rows);
     term->poll();
