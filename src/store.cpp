@@ -23,6 +23,7 @@ namespace Store {
         out.agents = root.value("agents", std::vector<std::string>{});
         out.lastSession = root.value("last", "");
         out.theme = root.value("theme", out.theme);
+        out.defaults = root.value("defaults", out.defaults);
         if (const auto layout = root.value("layout", std::vector<float>{}); layout.size() == 4) {
             out.sidebarWidth = layout[0];
             out.filesSplit = layout[1];
@@ -70,6 +71,7 @@ namespace Store {
                                    {"agents", data.agents},
                                    {"last", data.lastSession},
                                    {"theme", data.theme},
+                                   {"defaults", data.defaults},
                                    {"layout", {data.sidebarWidth, data.filesSplit, data.treeWidth, data.terminalSplit}},
                                    {"projects", projects},
                                    {"threads", threads}}.dump(2) << "\n";

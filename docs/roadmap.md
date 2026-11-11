@@ -21,7 +21,7 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly.
 - [~] Detect installed agents: turn on, install, sign in, update; browse the ACP registry
 - [ ] Add a local ACP command as an agent; several accounts or configs of one agent
 - [~] Import projects and recent threads from agent CLI history (Claude Code and Codex done, Pi)
-- [ ] Custom models per agent; model, effort and mode remembered for new threads
+- [~] Model, effort and mode remembered for new threads (done); custom models per agent
 - [ ] Permission mode per thread: supervised, auto-accept edits, auto, full access; a default for new threads
 - [ ] Approve or reject requests in the transcript; a subagent's requests asked in the parent
 - [ ] Agent questions: pick an option or type an answer, with files attached

@@ -60,6 +60,26 @@ int main(int argc, char** argv) {
         loaded.threads[0]->agentId == "codex" && loaded.threads[0]->host == "me@box" &&
         loaded.threads[0]->title == "t" && loaded.threads[0]->sessionId == t.sessionId &&
         loaded.projects == std::vector<Store::Project>{{"", "/empty"}, {"me@box", "/x"}};
+    // remembered choices: applied when offered and different, dropped when not offered, kept
+    // while their option has not arrived
+    std::map<std::string, std::string> wanted{{"model", "big"}, {"mode", "gone"}, {"effort", "high"}, {"same", "a"}};
+    std::vector<acp::ConfigOption> offered(3);
+    offered[0].id = "model";
+    offered[0].currentValue = "small";
+    offered[0].options = {{.value = "small"}, {.value = "big"}};
+    offered[1].id = "mode";
+    offered[1].currentValue = "ask";
+    offered[1].options = {{.value = "ask"}};
+    offered[2].id = "same";
+    offered[2].currentValue = "a";
+    offered[2].options = {{.value = "a"}};
+    const auto due = dueChoices(offered, wanted);
+    const bool remembered = due == std::vector<std::pair<std::string, std::string>>{{"model", "big"}} &&
+                            wanted == std::map<std::string, std::string>{{"effort", "high"}};
+    if (!remembered) {
+        std::printf("FAILED: remembered choices: %zu due, %zu left\n", due.size(), wanted.size());
+        return 1;
+    }
     if (!ok || !stored) {
         std::printf("FAILED: busy=%d items=%zu stored=%d\n", t.busy(), t.items.size(), stored);
         for (const auto& item : t.items) {

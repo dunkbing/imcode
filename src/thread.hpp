@@ -4,6 +4,7 @@
 #include "acp_host/client.hpp"
 #include "acp_host/host.hpp"
 #include "diff.hpp"
+#include <map>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -36,6 +37,12 @@ struct Item {
     bool terminalSignIn = false; // a terminal sign-in is open: offer Continue
 };
 
+// the remembered choices to apply now that these options arrived. they leave `wanted`, as do
+// those the agent no longer offers; one whose option is not there yet (effort, before its
+// model is set) stays
+std::vector<std::pair<std::string, std::string>> dueChoices(const std::vector<acp::ConfigOption>& config,
+                                                            std::map<std::string, std::string>& wanted);
+
 class Thread {
 public:
     // host: empty = this machine, else an ssh host (see Ssh::session) and cwd is a folder there
@@ -59,6 +66,9 @@ public:
     std::vector<Queued> queue; // sent one by one as turns end
     std::string terminalCommand;    // a sign-in to run in this thread's terminal: taken by the app
     std::vector<acp::ConfigOption> config; // model, mode, ... as the agent offers them
+    // a new thread starts with what was last picked for its agent: option id -> value, applied
+    // as the options arrive. `picked` is what the user chose here, taken by the app to remember
+    std::map<std::string, std::string> wanted, picked;
     std::vector<AcpCommand> commands;      // its slash commands
     long long contextUsed = 0, contextSize = 0; // tokens, as the agent last reported
     double cost = -1;                           // of the session so far; -1 = not reported

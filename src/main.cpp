@@ -378,6 +378,7 @@ void App::newThread(int projectIndex, std::string agentId) {
     const Store::Project p = data.projects[projectIndex];
     dropDraft();
     data.threads.push_back(std::make_unique<Thread>(p.cwd, agentId, p.host));
+    data.threads.back()->wanted = data.defaults[agentId];
     project = projectIndex;
     current = -1;
     select(static_cast<int>(data.threads.size()) - 1);
@@ -407,6 +408,9 @@ void App::hostLoop() {
         for (auto& t : data.threads) {
             t->poll(); // every thread, shown or not
             changed |= t->takeChanged();
+            for (auto& [id, value] : std::exchange(t->picked, {})) {
+                data.defaults[t->agentId][id] = value;
+            }
             fresh.insert(fresh.end(), std::make_move_iterator(t->found.begin()),
                          std::make_move_iterator(t->found.end()));
             if (!t->found.empty()) {

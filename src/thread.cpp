@@ -262,7 +262,26 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
     acp_->prompt(blocks); // held until the session is ready
 }
 
+std::vector<std::pair<std::string, std::string>> dueChoices(const std::vector<acp::ConfigOption>& config,
+                                                            std::map<std::string, std::string>& wanted) {
+    std::vector<std::pair<std::string, std::string>> due;
+    for (const auto& option : config) {
+        const auto want = wanted.find(option.id);
+        if (want == wanted.end()) {
+            continue;
+        }
+        const bool offered = std::ranges::any_of(option.options, [&](const auto& o) { return o.value == want->second; });
+        if (offered && option.currentValue != want->second) {
+            due.emplace_back(*want);
+        }
+        wanted.erase(want);
+    }
+    return due;
+}
+
 void Thread::setConfig(const std::string& id, const std::string& value) {
+    picked[id] = value;
+    changed_ = true;
     if (acp_) {
         acp_->setConfigOption(id, value);
     }
@@ -512,6 +531,9 @@ void Thread::poll() {
             break;
         case AcpEvent::Type::ConfigOptions:
             config = std::move(ev.configOptions);
+            for (const auto& [id, value] : dueChoices(config, wanted)) {
+                acp_->setConfigOption(id, value);
+            }
             break;
         case AcpEvent::Type::Commands:
             commands = std::move(ev.commands);
