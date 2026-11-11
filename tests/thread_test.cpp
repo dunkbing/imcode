@@ -12,14 +12,15 @@ int main(int argc, char** argv) {
     setenv("IMCODE_AGENT_CMD", argv[1], 1);
     Thread t(".", "claude-code");
     t.send("one two");
+    t.send("three"); // while the first turn starts: queued, sent when it ends
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     do {
         t.poll();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    } while (t.busy() && std::chrono::steady_clock::now() < deadline);
+    } while ((t.busy() || !t.queue.empty()) && std::chrono::steady_clock::now() < deadline);
     t.poll();
 
-    const bool ok = !t.busy() && t.title == "one two" && t.items.size() == 2 &&
+    const bool ok = !t.busy() && t.title == "one two" && t.items.size() == 4 && t.items[2].text == "three" && t.items[3].text == "three " &&
                     t.items[0].kind == Item::Kind::User && t.items[0].text == "one two" &&
                     t.items[1].kind == Item::Kind::Assistant && t.items[1].text == "one two ";
     // the list survives a save and a load; the echo agent gave the session an id

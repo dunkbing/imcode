@@ -113,7 +113,12 @@ void Thread::open() {
 }
 
 void Thread::send(const std::string& text) {
-    if (text.empty() || busy()) {
+    if (text.empty()) {
+        return;
+    }
+    if (busy()) {
+        queue.push_back(text); // a turn is running: this one goes after it
+        ++revision_;
         return;
     }
     queued_ = starting() || !acp_;
@@ -199,6 +204,7 @@ void Thread::poll() {
     }
     acp_->tick(); // sign-in restarts happen here, on the ui thread
     bool gone = false;
+    bool next = false; // a turn ended: the queue moves on
     auto append = [this](Item::Kind kind, const std::string& text) {
         if (items.empty() || items.back().kind != kind) {
             items.push_back({.kind = kind});
@@ -272,6 +278,7 @@ void Thread::poll() {
         case AcpEvent::Type::TurnEnded:
             updatedAt = std::time(nullptr);
             changed_ = true;
+            next = ev.text != "cancelled"; // a stop keeps the queue for the user to decide
             if (ev.text != "end_turn" && ev.text != "cancelled" && !ev.text.empty()) {
                 add({.kind = Item::Kind::Info, .text = "Turn stopped: " + ev.text});
             }
@@ -301,6 +308,11 @@ void Thread::poll() {
         case AcpEvent::Type::Commands: // shortcut: slash commands are not offered yet
             break;
         }
+    }
+    if (next && !gone && !queue.empty() && !busy()) {
+        const std::string text = queue.front();
+        queue.erase(queue.begin());
+        send(text);
     }
     if (gone) {
         acp_.reset();

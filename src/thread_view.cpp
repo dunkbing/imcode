@@ -346,7 +346,7 @@ void App::composer(Thread& t, float width) {
     ImGui::EndChild();
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar();
-    if (send && !t.busy() && input[0]) {
+    if (send && input[0]) { // while a turn runs this queues
         t.send(input);
         input[0] = 0;
         focusInput = true;
@@ -398,7 +398,8 @@ void App::threadView(Thread& t) {
         return;
     }
 
-    ImGui::BeginChild("transcript", ImVec2(0, -(composerHeight + Theme::Spacing::L)));
+    const float queued = static_cast<float>(t.queue.size()) * ImGui::GetFrameHeightWithSpacing();
+    ImGui::BeginChild("transcript", ImVec2(0, -(composerHeight + Theme::Spacing::L + queued)));
     ImGui::Dummy(ImVec2(0, Theme::Spacing::L));
     ImGui::Indent(left);
     ImGui::PushTextWrapPos(left + width);
@@ -416,6 +417,22 @@ void App::threadView(Thread& t) {
         ImGui::SetScrollHereY(1.0f);
     }
     ImGui::EndChild();
+    // what waits for the running turn, each removable
+    int drop = -1;
+    for (size_t i = 0; i < t.queue.size(); ++i) {
+        ImGui::SetCursorPosX(left + 8);
+        ImGui::PushID(static_cast<int>(i));
+        if (ImGui::SmallButton(ICON_FA_XMARK)) {
+            drop = static_cast<int>(i);
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+        ImGui::TextColored(colors.overlay1, "Queued: %s",
+                           t.queue[i].substr(0, std::min(t.queue[i].find('\n'), size_t{90})).c_str());
+    }
+    if (drop >= 0) {
+        t.queue.erase(t.queue.begin() + drop);
+    }
     ImGui::SetCursorPosX(left);
     composer(t, width);
 }

@@ -14,7 +14,7 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly.
 - [ ] Slash commands and `@file` mentions in the composer
 - [ ] Tool call details: diffs for edits, output for commands, file links
 - [ ] Agents install themselves: managed Bun and registry binaries, with progress
-- [ ] Queue a message while a turn runs; edit and resend the last one
+- [~] Queue a message while a turn runs (done); edit and resend the last one
 - [ ] Images and files as attachments (paste, drop)
 - [ ] Context and cost from `usage_update`; compaction notices
 - [~] Rename, archive, search threads

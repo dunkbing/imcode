@@ -24,6 +24,8 @@
 namespace Theme = imshell::Theme;
 namespace ui = imshell::ui;
 
+constexpr float barHeight = 40; // taller than the os default: air above and below its row
+
 int runHeadless(App& app, const char* out, int width, int height, int frames); // headless.cpp
 
 bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags) {
@@ -350,14 +352,15 @@ void App::frame() {
     const auto& colors = Theme::Current()->colors;
     // without a window the bar is a plain strip, with room where the os buttons would be
     const ImVec2 display = ImGui::GetIO().DisplaySize;
-    const imshell::Rect content = headless ? imshell::Rect{ImVec2(0, 28), ImVec2(display.x, display.y - 28)}
-                                          : imshell::ContentRect();
+    const imshell::Rect content =
+        headless ? imshell::Rect{ImVec2(0, barHeight), ImVec2(display.x, display.y - barHeight)}
+                 : imshell::ContentRect();
     const bool narrow = content.size.x < 720; // one pane at a time
-    imshell::TitleBar bar{ImVec2(0, 0), ImVec2(display.x, 28), 78, 0};
+    imshell::TitleBar bar{ImVec2(0, 0), ImVec2(display.x, barHeight), 78, 0};
     if (headless) {
         ImGui::SetNextWindowPos(bar.pos);
         ImGui::SetNextWindowSize(bar.size);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 2));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, (barHeight - ImGui::GetFrameHeight()) * 0.5f));
         ImGui::Begin("##bar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
         ImGui::PopStyleVar();
         ImGui::SetCursorPosX(bar.leftInset);
@@ -591,6 +594,7 @@ int main() {
     config.title = "imcode";
     config.appName = "imcode";
     config.titleBar = true;
+    config.titleBarHeight = barHeight;
     // IMCODE_WINDOW=<width>x<height>: the first window size (ui checks of narrow layouts)
     if (const char* size = std::getenv("IMCODE_WINDOW")) {
         std::sscanf(size, "%dx%d", &config.width, &config.height);

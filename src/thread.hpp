@@ -38,6 +38,7 @@ public:
     const std::string agentId;
     const std::string host;
     std::vector<Item> items;
+    std::vector<std::string> queue; // sent one by one as turns end
     std::vector<acp::ConfigOption> config; // model, mode, ... as the agent offers them
 
     void poll(); // once per frame
