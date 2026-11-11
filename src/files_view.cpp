@@ -261,70 +261,36 @@ namespace {
         }
     }
 
-    // the file's lines with their numbers; only the lines in view are drawn
-    // shortcut: no selection; copy takes the whole file. a text widget of its own when
-    // lines are to be selected or commented on
+    // the file in imshell's editor, read-only: line numbers, selection, copy, find
     void code(Files& f) {
-        const Files::Doc& doc = f.doc;
-        const auto& colors = Theme::Current()->colors;
-        const int count = static_cast<int>(doc.lines.size()) - 1;
-        const float cell = ImGui::CalcTextSize("0").x;
-        const float lineHeight = ImGui::GetTextLineHeight() + 4;
-        const float gutter = cell * (static_cast<float>(std::to_string(count).size()) + 3);
-        const auto lineOf = [&](int i) {
-            int length = doc.lines[i + 1] - doc.lines[i] - 1;
-            length -= length > 0 && doc.text[doc.lines[i] + length - 1] == '\r';
-            // shortcut: a line is drawn up to 2000 bytes (a minified file is one long line);
-            // draw only the columns in view when such files matter
-            return std::string_view(doc.text).substr(doc.lines[i], std::min(length, maxLineBytes));
-        };
-        const std::string_view widest = lineOf(doc.widest);
-        const float width = gutter + ImGui::CalcTextSize(widest.data(), widest.data() + widest.size()).x + 24;
-        const Syntax::Lang lang = Syntax::langOf(fs::path(doc.path).filename().string());
-        const ImU32 kinds[] = {ImGui::GetColorU32(colors.text), ImGui::GetColorU32(colors.overlay1),
-                               ImGui::GetColorU32(colors.green), ImGui::GetColorU32(colors.peach),
-                               ImGui::GetColorU32(colors.purple)};
-
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-        ImGui::BeginChild("code", ImVec2(0, 0), 0, ImGuiWindowFlags_HorizontalScrollbar);
-        if (std::exchange(f.toTop, false)) {
-            ImGui::SetScrollX(0);
-            ImGui::SetScrollY(0);
-        }
-        const ImVec2 window = ImGui::GetWindowPos();
-        ImDrawList* draw = ImGui::GetWindowDrawList();
-        // the numbers stay put over text scrolled sideways
-        draw->ChannelsSplit(2);
-        draw->ChannelsSetCurrent(1);
-        draw->AddRectFilled(window, ImVec2(window.x + gutter - cell, window.y + ImGui::GetWindowHeight()),
-                            ImGui::GetColorU32(ImGuiCol_WindowBg));
-        std::vector<Syntax::Span> spans;
-        ImGuiListClipper clipper;
-        clipper.Begin(count, lineHeight);
-        while (clipper.Step()) {
-            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
-                const ImVec2 at = ImGui::GetCursorScreenPos();
-                ImGui::Dummy(ImVec2(width, lineHeight));
-                const std::string number = std::to_string(i + 1);
-                draw->AddText(ImVec2(window.x + gutter - cell * static_cast<float>(number.size() + 2), at.y + 2),
-                              ImGui::GetColorU32(colors.overlay0), number.c_str());
-                draw->ChannelsSetCurrent(0);
-                const std::string_view line = lineOf(i);
-                bool carry = doc.carry[i];
-                Syntax::line(lang, line, carry, spans);
-                float x = at.x + gutter;
-                for (const auto& span : spans) {
-                    const char* begin = line.data() + span.begin;
-                    const char* end = line.data() + span.end;
-                    draw->AddText(ImVec2(x, at.y + 2), kinds[static_cast<int>(span.kind)], begin, end);
-                    x += ImGui::CalcTextSize(begin, end).x;
+        if (f.shownPath != f.doc.path || f.shownSize != f.doc.text.size()) {
+            const Syntax::Lang lang = Syntax::langOf(fs::path(f.doc.path).filename().string());
+            f.editor.SetReadOnly(true);
+            f.editor.SetShowLineNumbers(true);
+            // our line tokenizer, a line at a time over the whole text
+            f.editor.SetHighlighter([lang](std::string_view text, std::span<imshell::TextEditor::Token> tokens,
+                                           const imshell::TextEditor::Edit&) {
+                using Token = imshell::TextEditor::Token;
+                static const Token kinds[] = {Token::Text, Token::Comment, Token::String, Token::Number,
+                                              Token::Keyword};
+                std::vector<Syntax::Span> spans;
+                bool carry = false;
+                for (size_t at = 0; at < text.size();) {
+                    const size_t end = std::min(text.find('\n', at), text.size());
+                    Syntax::line(lang, text.substr(at, end - at), carry, spans);
+                    for (const auto& span : spans) {
+                        std::fill(tokens.begin() + static_cast<long>(at) + span.begin,
+                                  tokens.begin() + static_cast<long>(at) + span.end,
+                                  kinds[static_cast<int>(span.kind)]);
+                    }
+                    at = end + 1;
                 }
-                draw->ChannelsSetCurrent(1);
-            }
+            });
+            f.editor.SetText(f.doc.text);
+            f.shownPath = f.doc.path;
+            f.shownSize = f.doc.text.size();
         }
-        draw->ChannelsMerge();
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
+        f.editor.Render("##code", ImVec2(0, 0));
     }
 } // namespace
 

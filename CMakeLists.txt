@@ -54,7 +54,7 @@ add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sideba
                src/terminal.cpp src/terminal_view.cpp src/files_view.cpp src/syntax.cpp
                ${EMBEDDED_FONTS_FILE} ${EMBEDDED_IMAGES_FILE} ${IMGUI_CORE})
 target_include_directories(imcode PRIVATE external/IconFontCppHeaders)
-target_link_libraries(imcode PRIVATE imshell::imshell imshell::components acp::host imgui_rich_md ${IMCODE_SSH} ghostty-vt-static)
+target_link_libraries(imcode PRIVATE imshell::imshell imshell::components imshell::editor acp::host imgui_rich_md ${IMCODE_SSH} ghostty-vt-static)
 
 # ctest: configure with -DIMCODE_BUILD_TESTS=ON (turns on the echo agent it talks to)
 if(IMCODE_BUILD_TESTS)

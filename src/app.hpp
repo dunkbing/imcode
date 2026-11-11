@@ -5,6 +5,7 @@
 #include "acp_host/registry.hpp"
 #include "history.hpp"
 #include "imshell/app.hpp"
+#include "imshell/editor.hpp"
 #include "ssh.hpp"
 #include "store.hpp"
 #include "terminal.hpp"
@@ -60,6 +61,9 @@ struct App : imshell::Delegate {
             std::vector<bool> carry;      // per line: it starts inside a block comment
             int widest = 0;               // index of the longest line
         };
+        imshell::TextEditor editor; // shows doc
+        std::string shownPath;      // what the editor holds
+        size_t shownSize = 0;
         bool open = false;
         bool treeOver = true; // narrow windows: the tree covers the file
         bool toTop = false;   // a new file: scroll back
