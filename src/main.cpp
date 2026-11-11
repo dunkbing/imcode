@@ -578,8 +578,9 @@ void App::frame() {
         const bool list = !narrow || sidebarOpen || current < 0;
         bool resized = false; // a panel was dragged to a new size: saved when let go
         if (list) {
-            // the list keeps its width; the thread beside it keeps at least 420
-            sidebarWidth = std::clamp(sidebarWidth, 200.0f, std::max(200.0f, content.size.x - 420));
+            // the list keeps its width; the chat beside it keeps 420, the files 360 when open
+            sidebarWidth = std::clamp(sidebarWidth, 200.0f,
+                                      std::max(200.0f, content.size.x - (files.open ? 780.0f : 420.0f)));
             ImGui::BeginChild("sidebar", ImVec2(narrow ? 0 : sidebarWidth, 0), ImGuiChildFlags_Borders);
             sidebar();
             ImGui::EndChild();

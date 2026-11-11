@@ -380,8 +380,10 @@ bool App::filesPanel(Thread& t, float splitWidth) {
     const auto& colors = Theme::Current()->colors;
     const ImVec2 avail = ImGui::GetContentRegionAvail();
     if (splitWidth > 0) {
+        // the chat keeps 420 (its status line fits), the files 360; the chat wins when both cannot
+        const float least = std::min(1.0f, 420 / splitWidth);
         f.split = std::clamp(f.split + sideSplitter("##files-split", avail.y, true, &released) / splitWidth,
-                             280 / splitWidth, 1 - 360 / splitWidth);
+                             least, std::max(least, 1 - 360 / splitWidth));
     }
     ImGui::BeginChild("files");
     const bool alone = splitWidth <= 0;
