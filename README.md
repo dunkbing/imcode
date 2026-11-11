@@ -15,6 +15,10 @@ Tests (no window): add `-DIMCODE_BUILD_TESTS=ON`, then `ctest --test-dir build`.
 
 To look at the ui without a window (a locked screen, a build machine): `IMCODE_SHOT=out.ppm IMCODE_DATA_DIR=<scratch folder> ./build/imcode` draws the real ui in memory and writes the last frame; `IMCODE_WINDOW=420x800` sets the size, `IMCODE_SHOT_FRAMES` how long it runs, and `IMCODE_DEV="new;palette;files;demo;..."` opens things first (see `src/main.cpp`).
 
+## A build for another Mac
+
+`VCPKG_ROOT=<vcpkg> scripts/package-macos.sh` makes `dist/imcode.app` and `dist/imcode-macos-arm64.zip`: a release build for Apple Silicon and macOS 14 or later, with nothing to install beside it. It is signed ad hoc, so on another Mac open it the first time with right-click > Open.
+
 ## Use
 
 "Open folder": a folder on this machine, or a host over ssh (a name from `~/.ssh/config` or `user@host`) and then a folder there. Press + beside the folder and pick an agent. On a remote host the agent runs there: it must be signed in, with `bun` or `npx` on the login `PATH`.
