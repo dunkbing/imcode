@@ -16,6 +16,7 @@ struct Item {
     enum class Kind { User, Assistant, Thought, Tool, Plan, Permission, Auth, Info, Error };
     Kind kind{};
     std::string text;
+    std::vector<std::string> files; // User: what was attached, by name
     // Tool
     std::string toolId, toolTitle, toolStatus, toolOutput;
     struct Change { // a file the tool edited
@@ -51,7 +52,11 @@ public:
     const std::string agentId;
     const std::string host;
     std::vector<Item> items;
-    std::vector<std::string> queue; // sent one by one as turns end
+    struct Queued {
+        std::string text;
+        std::vector<std::string> files;
+    };
+    std::vector<Queued> queue; // sent one by one as turns end
     std::string terminalCommand;    // a sign-in to run in this thread's terminal: taken by the app
     std::vector<acp::ConfigOption> config; // model, mode, ... as the agent offers them
     std::vector<AcpCommand> commands;      // its slash commands
@@ -69,7 +74,8 @@ public:
     // shown for the first time: start the agent, so its settings (model, mode) are there
     // before the first message and a saved thread replays its history
     void open();
-    void send(const std::string& text);
+    // files: local paths. images go along as pictures, other files as links (not over ssh)
+    void send(const std::string& text, const std::vector<std::string>& files = {});
     void cancel();
     void setConfig(const std::string& id, const std::string& value);
     void answerPermission(Item& item, const AcpPermissionOption& option);
@@ -102,6 +108,7 @@ private:
     // connected. what was sent meanwhile waits in heldPrompt_
     AcpHost::AsyncOp<std::string> connectOp_;
     std::string heldPrompt_;
+    std::vector<std::string> heldFiles_;
     bool changed_ = false;
     int revision_ = 0;
 };

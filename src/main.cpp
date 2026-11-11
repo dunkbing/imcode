@@ -238,6 +238,11 @@ void App::startScan() {
     });
 }
 
+void App::openFile(const std::string& path) {
+    attachments.push_back(path); // ui thread only, like the composer that reads it
+    focusInput = true;
+}
+
 bool App::wantsFrames() {
     // called by the loop, outside a frame: the host may be changing the threads
     std::unique_lock lock(hostMutex, std::try_to_lock);
@@ -589,7 +594,8 @@ void App::frame() {
             paletteOpen((all.find(";actions;") != std::string::npos));
         }
         if (const auto at = all.find(";send:"); frames == 40 && at != std::string::npos && current >= 0) {
-            data.threads[current]->send(all.substr(at + 6, all.find(';', at + 1) - at - 6));
+            data.threads[current]->send(all.substr(at + 6, all.find(';', at + 1) - at - 6),
+                                        std::exchange(attachments, {}));
         }
         devOpenModels = frames == 40 && (all.find(";models;") != std::string::npos);
         if (const auto at = all.find(";remote:"); frames == 40 && at != std::string::npos) {
@@ -603,6 +609,9 @@ void App::frame() {
         }
         if (frames == 39 && all.find(";worktree;") != std::string::npos && current >= 0) {
             data.threads[current]->wantWorktree = true;
+        }
+        if (const auto at = all.find(";attach:"); frames == 39 && at != std::string::npos) {
+            attachments.push_back(all.substr(at + 8, all.find(';', at + 1) - at - 8));
         }
         if (frames == 40 && all.find(";settings;") != std::string::npos) {
             settingsWant = true;

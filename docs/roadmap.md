@@ -15,7 +15,7 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly.
 - [x] Tool call details: diffs for edits, output for commands, files that open in the viewer
 - [ ] Agents install themselves: managed Bun and registry binaries, with progress
 - [~] Queue a message while a turn runs (done); edit and resend the last one
-- [ ] Images and files as attachments (paste, drop)
+- [~] Images and files as attachments: picked or dropped on the window (done); pasted from the clipboard
 - [~] Context and cost from `usage_update`, and the agent's own title for a thread (done); compaction notices
 - [x] Rename, archive, search threads
 - [~] Detect installed agents: turn on, install, sign in, update; browse the ACP registry

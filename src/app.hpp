@@ -39,6 +39,7 @@ struct App : imshell::Delegate {
     int renaming = -1;         // the thread whose name is being edited in the list
     std::string renameText;
     char input[8192] = {};
+    std::vector<std::string> attachments; // files for the next message: picked, or dropped on the window
     char search[128] = {};
     int shownRevision = -1; // of the current thread: scroll down when it moves on
     bool focusInput = false;
@@ -140,6 +141,7 @@ struct App : imshell::Delegate {
     void setup() override;
     void frame() override;
     bool wantsFrames() override;
+    void openFile(const std::string& path) override; // dropped on the window: attached
 
     void save();
     void startScan();
@@ -180,6 +182,7 @@ struct App : imshell::Delegate {
     AcpHost::AsyncOp<std::pair<std::string, Git::Status>> gitOp;
     // under the composer: the project (click to pick another) and its branch
     void statusLine(Thread& t, float left);
+    void attachedRows(float left);
 
     // the agent's own mark, tinted like text; a generic one when there is none
     // rowHeight: the height of the row it sits in (a frame-height row of buttons), 0 = a text line

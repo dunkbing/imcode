@@ -2,6 +2,7 @@
 
 #include "imshell/markdown.hpp"
 #include "imshell/button.hpp"
+#include "imshell/file_dialog.hpp"
 #include "imshell/components.hpp"
 #include "imshell/themes.hpp"
 #include <algorithm>
@@ -106,7 +107,13 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         ImGui::TextUnformatted(it.text.c_str());
         ImGui::PopTextWrapPos();
         ImGui::SetCursorScreenPos(ImVec2(at.x, max.y));
-        ImGui::Dummy(ImVec2(width, Theme::Spacing::M));
+        ImGui::Dummy(ImVec2(width, it.files.empty() ? Theme::Spacing::M : 2));
+        // what went with it, under the bubble at the right
+        for (const auto& file : it.files) {
+            const std::string label = std::string(ICON_FA_PAPERCLIP "  ") + file;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + width - ImGui::CalcTextSize(label.c_str()).x);
+            ImGui::TextColored(colors.overlay1, "%s", label.c_str());
+        }
         break;
     }
     case Item::Kind::Assistant:
@@ -427,6 +434,19 @@ void App::composer(Thread& t, float width) {
         ImGui::SetCursorPos(after);
     }
 
+    // attach: pictures and files, picked here or dropped on the window
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+    if (ImGui::Button(ICON_FA_PAPERCLIP, ImVec2(button, button))) {
+        imshell::OpenFileDialog({{"Any file", "*"}}, [this](const std::string& path) { attachments.push_back(path); });
+    }
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(2);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Attach a picture or a file");
+    }
+    ImGui::SameLine();
     // how full the agent's context is, at the left of the row
     if (t.contextSize > 0) {
         const int percent = static_cast<int>(100 * t.contextUsed / t.contextSize);
@@ -536,10 +556,35 @@ void App::composer(Thread& t, float width) {
     ImGui::EndChild();
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar();
-    if (send && input[0]) { // while a turn runs this queues
-        t.send(input);
+    if (send && (input[0] || !attachments.empty())) { // while a turn runs this queues
+        t.send(input, std::exchange(attachments, {}));
         input[0] = 0;
         focusInput = true;
+    }
+}
+
+// what will go with the next message, each removable
+void App::attachedRows(float left) {
+    const auto& colors = Theme::Current()->colors;
+    int drop = -1;
+    for (size_t i = 0; i < attachments.size(); ++i) {
+        ImGui::SetCursorPosX(left + 8);
+        ImGui::PushID(static_cast<int>(1000 + i));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Text, colors.overlay1);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+        if (ImGui::SmallButton(ICON_FA_XMARK)) {
+            drop = static_cast<int>(i);
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(2);
+        ImGui::PopID();
+        ImGui::SameLine();
+        ImGui::TextColored(colors.subtext0, ICON_FA_PAPERCLIP "  %s",
+                           std::filesystem::path(attachments[i]).filename().string().c_str());
+    }
+    if (drop >= 0) {
+        attachments.erase(attachments.begin() + drop);
     }
 }
 
@@ -643,6 +688,7 @@ void App::threadView(Thread& t) {
         ImGui::TextUnformatted(ask.c_str());
         ImGui::PopFont();
         ImGui::Dummy(ImVec2(0, Theme::Spacing::L));
+        attachedRows(left);
         ImGui::SetCursorPosX(left);
         composer(t, width);
         statusLine(t, left);
@@ -654,7 +700,8 @@ void App::threadView(Thread& t) {
         return;
     }
 
-    const float queued = static_cast<float>(t.queue.size()) * ImGui::GetFrameHeightWithSpacing();
+    const float queued =
+        static_cast<float>(t.queue.size() + attachments.size()) * ImGui::GetFrameHeightWithSpacing();
     ImGui::BeginChild("transcript", ImVec2(0, -(composerHeight + Theme::Spacing::L + queued +
                                                 ImGui::GetFrameHeightWithSpacing())));
     ImGui::Dummy(ImVec2(0, Theme::Spacing::L));
@@ -691,11 +738,12 @@ void App::threadView(Thread& t) {
         ImGui::PopID();
         ImGui::SameLine();
         ImGui::TextColored(colors.overlay1, "Queued: %s",
-                           t.queue[i].substr(0, std::min(t.queue[i].find('\n'), size_t{90})).c_str());
+                           t.queue[i].text.substr(0, std::min(t.queue[i].text.find('\n'), size_t{90})).c_str());
     }
     if (drop >= 0) {
         t.queue.erase(t.queue.begin() + drop);
     }
+    attachedRows(left);
     ImGui::SetCursorPosX(left);
     composer(t, width);
     statusLine(t, left);

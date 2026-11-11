@@ -5,7 +5,11 @@
 #include "remote.hpp"
 #include "ssh.hpp"
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <ctime>
 #include <utility>
 
@@ -29,6 +33,24 @@ std::string Thread::underProject(std::string path) const {
     }
     return path;
 }
+
+namespace {
+    std::string base64(const std::string& bytes) {
+        static const char digits[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string out;
+        out.reserve((bytes.size() + 2) / 3 * 4);
+        for (size_t i = 0; i < bytes.size(); i += 3) {
+            const unsigned a = static_cast<unsigned char>(bytes[i]);
+            const unsigned b = i + 1 < bytes.size() ? static_cast<unsigned char>(bytes[i + 1]) : 0;
+            const unsigned c = i + 2 < bytes.size() ? static_cast<unsigned char>(bytes[i + 2]) : 0;
+            out += digits[a >> 2];
+            out += digits[((a & 3) << 4) | (b >> 4)];
+            out += i + 1 < bytes.size() ? digits[((b & 15) << 2) | (c >> 6)] : '=';
+            out += i + 2 < bytes.size() ? digits[c & 63] : '=';
+        }
+        return out;
+    }
+} // namespace
 
 Item* Thread::findTool(const std::string& id) {
     for (auto it = items.rbegin(); it != items.rend(); ++it) {
@@ -134,12 +156,12 @@ void Thread::open() {
     }
 }
 
-void Thread::send(const std::string& text) {
-    if (text.empty()) {
+void Thread::send(const std::string& text, const std::vector<std::string>& files) {
+    if (text.empty() && files.empty()) {
         return;
     }
     if (busy()) {
-        queue.push_back(text); // a turn is running: this one goes after it
+        queue.push_back({text, files}); // a turn is running: this one goes after it
         ++revision_;
         return;
     }
@@ -161,22 +183,54 @@ void Thread::send(const std::string& text) {
         add({.kind = Item::Kind::Info, .text = "Working in a new worktree: " + made});
     }
     if (title.empty()) {
-        title = text.substr(0, text.find('\n'));
+        title = text.empty() ? "Attachment" : text.substr(0, text.find('\n'));
     }
     updatedAt = std::time(nullptr);
     changed_ = true;
     if (!ensureStarted()) {
         if (connectOp_.isRunning()) {
             heldPrompt_ = text; // sent from poll() once the host answers
+            heldFiles_ = files;
         }
         return;
+    }
+    // the message's parts: its text, pictures as data, other files as links
+    json blocks = json::array({acp::textBlock(text)});
+    std::vector<std::string> names;
+    for (const auto& file : files) {
+        const std::filesystem::path path(file);
+        std::string ext = path.extension().string();
+        std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return std::tolower(c); });
+        static const std::pair<const char*, const char*> images[] = {
+            {".png", "image/png"}, {".jpg", "image/jpeg"}, {".jpeg", "image/jpeg"},
+            {".gif", "image/gif"}, {".webp", "image/webp"}};
+        const auto image = std::ranges::find(images, ext, [](const auto& i) { return std::string(i.first); });
+        std::error_code ec;
+        if (image != std::end(images)) {
+            // shortcut: sent whether or not the agent said it reads pictures; one that
+            // does not answers with its own error
+            if (std::filesystem::file_size(path, ec) > 5'000'000 || ec) {
+                add({.kind = Item::Kind::Info, .text = path.filename().string() + " was not attached (over 5 MB)."});
+                continue;
+            }
+            std::ifstream in(path, std::ios::binary);
+            const std::string bytes((std::istreambuf_iterator<char>(in)), {});
+            blocks.push_back({{"type", "image"}, {"mimeType", image->second}, {"data", base64(bytes)}});
+        } else if (host.empty()) {
+            blocks.push_back(acp::resourceLinkBlock("file://" + file, path.filename().string()));
+        } else {
+            add({.kind = Item::Kind::Info,
+                 .text = path.filename().string() + " was not attached: it is on this machine, the agent is on " + host + "."});
+            continue;
+        }
+        names.push_back(path.filename().string());
     }
     if (replaying_) {
         heldUser_ = text;
     } else {
-        add({.kind = Item::Kind::User, .text = text});
+        add({.kind = Item::Kind::User, .text = text, .files = names});
     }
-    acp_->prompt(json::array({acp::textBlock(text)})); // held until the session is ready
+    acp_->prompt(blocks); // held until the session is ready
 }
 
 void Thread::setConfig(const std::string& id, const std::string& value) {
@@ -269,10 +323,11 @@ void Thread::continueAfterTerminalSignIn(Item& item) {
 void Thread::poll() {
     connectOp_.check([this](std::string error) {
         const std::string text = std::exchange(heldPrompt_, {});
+        const auto files = std::exchange(heldFiles_, {});
         if (!error.empty()) {
             add({.kind = Item::Kind::Error, .text = error});
-        } else if (ensureStarted() && !text.empty()) {
-            send(text);
+        } else if (ensureStarted() && (!text.empty() || !files.empty())) {
+            send(text, files);
         }
     });
     if (!acp_) {
@@ -418,9 +473,9 @@ void Thread::poll() {
         }
     }
     if (next && !gone && !queue.empty() && !busy()) {
-        const std::string text = queue.front();
+        const Queued waiting = queue.front();
         queue.erase(queue.begin());
-        send(text);
+        send(waiting.text, waiting.files);
     }
     if (gone) {
         acp_.reset();
