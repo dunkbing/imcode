@@ -88,6 +88,43 @@ namespace {
     }
 } // namespace
 
+namespace {
+    bool foldable(const Item& it) {
+        return it.kind == Item::Kind::Tool && it.changes.empty() &&
+               (it.toolStatus == "completed" || it.toolStatus == "failed");
+    }
+} // namespace
+
+// the line standing for tool calls [from, to): how many, and what kinds. true when clicked
+bool App::toolGroupRow(Thread& t, size_t from, size_t to, float width, bool shown) {
+    const auto& colors = Theme::Current()->colors;
+    std::vector<std::string> kinds; // the first word of each title, once each
+    int failed = 0;
+    for (size_t k = from; k < to; ++k) {
+        const std::string& title = t.items[k].toolTitle;
+        const std::string kind = title.substr(0, title.find(' '));
+        if (!kind.empty() && std::ranges::find(kinds, kind) == kinds.end() && kinds.size() < 4) {
+            kinds.push_back(kind);
+        }
+        failed += t.items[k].toolStatus == "failed";
+    }
+    std::string label = std::format("{}  {} tool calls", shown ? ICON_FA_CHEVRON_DOWN : ICON_FA_CHEVRON_RIGHT, to - from);
+    for (size_t k = 0; k < kinds.size(); ++k) {
+        label += (k == 0 ? "  ·  " : ", ") + kinds[k];
+    }
+    if (failed > 0) {
+        label += std::format("  ·  {} failed", failed);
+    }
+    ImGui::PushID(static_cast<int>(from));
+    ImGui::PushStyleColor(ImGuiCol_Text, failed > 0 ? colors.peach : colors.overlay1);
+    const bool clicked = ImGui::Selectable((label + "##group").c_str(), false, 0,
+                                           ImVec2(width, ImGui::GetTextLineHeight() + 10));
+    ImGui::PopStyleColor();
+    ImGui::PopID();
+    ImGui::Spacing();
+    return clicked;
+}
+
 void App::transcriptItem(Thread& t, Item& it, int index, float width) {
     const auto& colors = Theme::Current()->colors;
     ImGui::PushID(index);
@@ -845,10 +882,40 @@ void App::threadView(Thread& t) {
     ImGui::PushTextWrapPos(left + width);
     // by index: answering a sign-in can add an item and move the rest
     for (size_t i = 0; i < t.items.size(); ++i) {
+        // finished tool calls in a row, with nothing to look at (no edits), fold into one line
+        size_t end = i;
+        while (end < t.items.size() && foldable(t.items[end])) {
+            ++end;
+        }
+        if (end - i >= 3) {
+            auto& open = openGroups[&t];
+            const bool shown = open.contains(i);
+            if (toolGroupRow(t, i, end, width, shown)) {
+                if (shown) {
+                    open.erase(i);
+                } else {
+                    open.insert(i);
+                }
+            }
+            for (size_t k = i; shown && k < end; ++k) {
+                transcriptItem(t, t.items[k], static_cast<int>(k), width);
+            }
+            i = end - 1;
+            continue;
+        }
         transcriptItem(t, t.items[i], static_cast<int>(i), width);
     }
+    // how long the turn has run
+    std::string working = "Working";
+    if (t.busy() && !t.starting()) {
+        const auto since = turnSince.try_emplace(&t, std::chrono::steady_clock::now()).first->second;
+        const auto secs = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - since).count();
+        working += secs < 60 ? std::format("  ·  {}s", secs) : std::format("  ·  {}m {:02}s", secs / 60, secs % 60);
+    } else {
+        turnSince.erase(&t);
+    }
     if (t.busy() || t.starting()) {
-        ui::Progress(-1, t.starting() ? "Starting" : "Working", 160);
+        ui::Progress(-1, t.starting() ? "Starting" : working.c_str(), 160);
         ImGui::Dummy(ImVec2(0, Theme::Spacing::M)); // clear of the child's bottom edge
     }
     ImGui::PopTextWrapPos();
@@ -857,6 +924,8 @@ void App::threadView(Thread& t) {
         ImGui::SetScrollHereY(1.0f);
         // a few frames: what was just added is laid out by then; history still arriving restarts it
         shownRevision = t.replaying() ? -3 : shownRevision + 1;
+    } else if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 2) {
+        ImGui::SetScrollHereY(1.0f); // at the end: a reply that grows stays in view
     }
     const bool away = ImGui::GetScrollY() < ImGui::GetScrollMaxY() - 80;
     const ImVec2 viewAt = ImGui::GetWindowPos(), viewSize = ImGui::GetWindowSize();

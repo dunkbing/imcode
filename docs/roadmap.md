@@ -44,14 +44,14 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly.
 - [ ] Side chat: ask about a thread without adding to it, bring the answer back
 - [ ] Voice dictation in the composer: on this machine or a host, with transcript cleanup
 - [ ] Send key: enter or mod+enter; send and start the next thread in the background
-- [ ] Tool calls grouped into an expandable summary; hide successful or all; a mode with only the last reply
+- [~] Finished tool calls in a row folded into one expandable line (done); hide successful or all; a mode with only the last reply
 - [ ] Live output of a running command
 - [ ] Find in thread; a minimap of the timeline
 - [~] Copy a message as markdown (done); copy a link to a thread
 - [ ] Math, mermaid diagrams, tables, images and video in replies; image zoom
 - [ ] Visual replies: an agent's HTML page rendered sandboxed in the thread; MCP apps
 - [ ] Preview attached files: code, markdown, CSV, PDF, audio, zip
-- [ ] Status line: elapsed time, goal, errors; a details card with context, usage, servers, pull requests
+- [~] Elapsed time of the running turn (done); goal, errors; a details card with context, usage, servers, pull requests
 - [ ] Usage-limit stops: resume at reset, snooze until reset
 - [ ] Compact idle threads automatically (Claude Code)
 - [ ] Generated thread titles; regenerate; title instructions

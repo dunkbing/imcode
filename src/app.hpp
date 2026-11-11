@@ -18,6 +18,7 @@
 #include <optional>
 #include <thread>
 #include <map>
+#include <chrono>
 #include <set>
 #include <string>
 #include <vector>
@@ -55,6 +56,9 @@ struct App : imshell::Delegate {
     std::string switchAgentTo; // picked in the model popup: applied after the frame's ui
     // a shell per thread in its folder, started when its panel is first shown
     std::map<const Thread*, std::unique_ptr<Terminal>> terminals;
+    // per thread: the runs of tool calls opened (by their first item), and when the running turn began
+    std::map<const Thread*, std::set<size_t>> openGroups;
+    std::map<const Thread*, std::chrono::steady_clock::time_point> turnSince;
     bool terminalOpen = false;
     bool focusTerminal = false;
     std::string terminalRun; // typed into the open thread's terminal once it is up
@@ -204,6 +208,7 @@ struct App : imshell::Delegate {
 
     void threadView(Thread& t);
     void transcriptItem(Thread& t, Item& item, int index, float width);
+    bool toolGroupRow(Thread& t, size_t from, size_t to, float width, bool shown);
     void composer(Thread& t, float width);
 
     void toggleTerminal();
