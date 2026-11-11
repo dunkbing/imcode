@@ -43,6 +43,10 @@ struct Item {
 std::vector<std::pair<std::string, std::string>> dueChoices(const std::vector<acp::ConfigOption>& config,
                                                             std::map<std::string, std::string>& wanted);
 
+// a permission mode that lets the agent do anything unasked (bypass, full access, ...): shown
+// as a warning, and never carried over to new threads
+bool riskyMode(std::string nameOrValue);
+
 class Thread {
 public:
     // host: empty = this machine, else an ssh host (see Ssh::session) and cwd is a folder there

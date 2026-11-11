@@ -166,7 +166,11 @@ namespace {
             } else if (s.what == "type" && age == 0) {
                 io.AddInputCharactersUTF8(s.args.c_str());
             } else if (s.what == "key" && (age == 0 || age == 1)) {
+                if (s.args == "shift+tab") {
+                    io.AddKeyEvent(ImGuiMod_Shift, age == 0);
+                }
                 const ImGuiKey key = s.args == "enter"       ? ImGuiKey_Enter
+                                     : s.args == "shift+tab" ? ImGuiKey_Tab
                                      : s.args == "esc"       ? ImGuiKey_Escape
                                      : s.args == "tab"       ? ImGuiKey_Tab
                                      : s.args == "down"      ? ImGuiKey_DownArrow

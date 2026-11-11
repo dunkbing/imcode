@@ -80,6 +80,17 @@ int main(int argc, char** argv) {
         std::printf("FAILED: remembered choices: %zu due, %zu left\n", due.size(), wanted.size());
         return 1;
     }
+    // a mode that allows everything stays with its thread
+    Thread v(".", "claude-code");
+    v.config.resize(1);
+    v.config[0].id = "mode";
+    v.config[0].category = "mode";
+    v.setConfig("mode", "bypassPermissions");
+    v.setConfig("model", "big");
+    if (v.picked != std::map<std::string, std::string>{{"model", "big"}} || !riskyMode("Full access") || riskyMode("Auto")) {
+        std::printf("FAILED: risky mode remembered\n");
+        return 1;
+    }
     if (!ok || !stored) {
         std::printf("FAILED: busy=%d items=%zu stored=%d\n", t.busy(), t.items.size(), stored);
         for (const auto& item : t.items) {

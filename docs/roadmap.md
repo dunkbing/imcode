@@ -22,13 +22,13 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly.
 - [ ] Add a local ACP command as an agent; several accounts or configs of one agent
 - [~] Import projects and recent threads from agent CLI history (Claude Code and Codex done, Pi)
 - [~] Model, effort and mode remembered for new threads (done); custom models per agent
-- [ ] Permission mode per thread: supervised, auto-accept edits, auto, full access; a default for new threads
-- [ ] Approve or reject requests in the transcript; a subagent's requests asked in the parent
+- [x] Permission mode per thread, shown by the composer, shift+tab to change; remembered for new threads except modes that allow everything
+- [~] Approve or reject requests in the transcript (done); a subagent's requests asked in the parent
 - [ ] Agent questions: pick an option or type an answer, with files attached
-- [ ] Plan mode: a proposed plan card to accept or revise; task lists
-- [ ] Steer the running turn or queue, per message; send a queued message now
+- [~] Plan and task lists as a card (done); a proposed plan to accept or revise
+- [~] Send a queued message now, stopping the running turn (done); steer or queue, per message
 - [ ] Queued messages held after a stop or restart, with resume
-- [ ] Interrupt a turn; force-stop an unresponsive one
+- [~] Interrupt a turn (done); force-stop an unresponsive one
 - [ ] `$skill` mentions; skills in the slash menu; restart the agent session after changing skills or MCP
 - [ ] `/compact`, `/clear` (a fresh session in the same thread), `/goal` with progress
 - [ ] `@thread` mentions and thread links as context; drag a thread onto the composer
@@ -68,7 +68,7 @@ The agent runs on the remote machine in the remote folder; nothing is installed 
 - [x] Existing sessions of a host and folder (`session/list`) appear as threads: continue what was started in a terminal
 - [~] Sign in to an agent in the thread's own terminal, local or remote (done; not tried against a real sign-in)
 - [~] Reconnect with resume after a drop or sleep (done), the ssh handshake off the ui thread (done); making a worktree still blocks
-- [ ] Install an agent on the remote (bun or a registry binary) from the app
+- [~] Install an agent on the remote: npm agents on a managed bun (done); registry binaries
 - [ ] Passwords and passphrases in the system keychain; Windows sockets
 - [ ] Runs that survive a disconnect: a small host process on the remote (phase 3) that the app installs and attaches to
 - [ ] Host picker on a new thread; cycle hosts with a key

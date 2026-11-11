@@ -279,9 +279,18 @@ std::vector<std::pair<std::string, std::string>> dueChoices(const std::vector<ac
     return due;
 }
 
+bool riskyMode(std::string text) {
+    std::ranges::transform(text, text.begin(), [](unsigned char c) { return std::tolower(c); });
+    return std::ranges::any_of(std::initializer_list<const char*>{"bypass", "full", "yolo", "danger"},
+                               [&](const char* word) { return text.find(word) != std::string::npos; });
+}
+
 void Thread::setConfig(const std::string& id, const std::string& value) {
-    picked[id] = value;
-    changed_ = true;
+    const bool modeOption = std::ranges::any_of(config, [&](const auto& o) { return o.id == id && o.category == "mode"; });
+    if (!(modeOption && riskyMode(value))) { // this thread only
+        picked[id] = value;
+        changed_ = true;
+    }
     if (acp_) {
         acp_->setConfigOption(id, value);
     }

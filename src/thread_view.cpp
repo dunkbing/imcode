@@ -550,8 +550,42 @@ void App::composer(Thread& t, float width) {
         label += "  " + currentName(effort);
     }
     const float labelWidth = ImGui::CalcTextSize(label.c_str()).x + 24;
+    // the permission mode, beside the picker: it decides what the agent may do unasked.
+    // the ones that let it do anything stand out
+    const acp::ConfigOption* mode = optionOf(t, "mode");
+    std::string modeLabel = mode ? currentName(mode) : "";
+    const bool risky = mode && (riskyMode(modeLabel) || riskyMode(mode->currentValue.get<std::string>()));
+    if (!modeLabel.empty()) {
+        modeLabel = std::string(risky ? ICON_FA_TRIANGLE_EXCLAMATION "  " : ICON_FA_SHIELD_HALVED "  ") + modeLabel;
+    }
+    const float modeWidth = modeLabel.empty() ? 0 : ImGui::CalcTextSize(modeLabel.c_str()).x + 8 +
+                                                        ImGui::GetStyle().ItemSpacing.x;
     ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - labelWidth - button - 16 - 6 -
-                         ImGui::GetStyle().ItemSpacing.x);
+                         ImGui::GetStyle().ItemSpacing.x - modeWidth);
+    if (!modeLabel.empty()) {
+        ImGui::AlignTextToFramePadding();
+        ImGui::PushStyleColor(ImGuiCol_Text, risky ? colors.peach : colors.overlay1);
+        const bool clicked = ImGui::Selectable((modeLabel + "##mode").c_str(), false, 0,
+                                               ImVec2(modeWidth - ImGui::GetStyle().ItemSpacing.x, button));
+        ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Permission mode (shift+tab to change)");
+        }
+        if (clicked) {
+            devOpenModels = true; // the picker, where modes are listed
+        }
+        ImGui::SameLine();
+    }
+    // shift+tab in the input: the next mode
+    if (mode && !mode->options.empty() && ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
+        ImGui::IsKeyChordPressed(ImGuiMod_Shift | ImGuiKey_Tab)) {
+        const std::string now = mode->currentValue.get<std::string>();
+        size_t at = 0;
+        while (at < mode->options.size() && mode->options[at].value != now) {
+            ++at;
+        }
+        t.setConfig(mode->id, mode->options[(at + 1) % mode->options.size()].value);
+    }
     agentIcon(t.agentId, 16, button);
     ImGui::SameLine(0, 6);
     if (imshell::Button((label + "##models").c_str(), imshell::ButtonVariant::Secondary,

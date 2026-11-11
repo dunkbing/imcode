@@ -792,11 +792,11 @@ int main(int argc, char** argv) {
     }
     static App app;
     // imcode <folder>: that folder as a project, with a new thread
-    if (std::error_code ec; argc > 1 && std::filesystem::is_directory(argv[1], ec)) {
-        app.openFolder = std::filesystem::canonical(argv[1], ec).string();
-    } else if (argc > 1) {
-        std::fprintf(stderr, "imcode: %s is not a folder\n", argv[1]);
-        return 2;
+    // anything else is ignored: the system passes arguments of its own on some launches
+    for (int i = 1; i < argc; ++i) {
+        if (std::error_code ec; app.openFolder.empty() && std::filesystem::is_directory(argv[i], ec)) {
+            app.openFolder = std::filesystem::canonical(argv[i], ec).string();
+        }
     }
     // IMCODE_SHOT=<file.ppm>: no window; the ui after IMCODE_SHOT_FRAMES frames (240) as a picture
     if (const char* shot = std::getenv("IMCODE_SHOT")) {
