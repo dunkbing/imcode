@@ -8,6 +8,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <string>
 #include <fstream>
 #include <thread>
 #include <vector>
@@ -126,6 +128,69 @@ namespace {
     }
 } // namespace
 
+namespace {
+    // IMCODE_INPUT="90 type echo hi;95 key enter;100 click 600 300;110 drag 700 507 700 300":
+    // "<frame> <what> <args>" steps, played into imgui as a user's mouse and keys
+    struct Step {
+        int frame = 0;
+        std::string what, args;
+    };
+    std::vector<Step> inputSteps() {
+        std::vector<Step> out;
+        const char* env = std::getenv("IMCODE_INPUT");
+        std::string all = env ? env : "";
+        for (size_t at = 0; at < all.size();) {
+            const size_t end = std::min(all.find(';', at), all.size());
+            const std::string part = all.substr(at, end - at);
+            char what[16] = {};
+            int frame = 0, used = 0;
+            if (std::sscanf(part.c_str(), "%d %15s %n", &frame, what, &used) >= 2) {
+                out.push_back({frame, what, part.substr(static_cast<size_t>(used))});
+            }
+            at = end + 1;
+        }
+        return out;
+    }
+
+    void play(const std::vector<Step>& steps, int frame) {
+        ImGuiIO& io = ImGui::GetIO();
+        for (const Step& s : steps) {
+            const int age = frame - s.frame;
+            float x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+            if (s.what == "type" && age == 0) {
+                io.AddInputCharactersUTF8(s.args.c_str());
+            } else if (s.what == "key" && (age == 0 || age == 1)) {
+                const ImGuiKey key = s.args == "enter"       ? ImGuiKey_Enter
+                                     : s.args == "esc"       ? ImGuiKey_Escape
+                                     : s.args == "tab"       ? ImGuiKey_Tab
+                                     : s.args == "down"      ? ImGuiKey_DownArrow
+                                     : s.args == "up"        ? ImGuiKey_UpArrow
+                                     : s.args == "backspace" ? ImGuiKey_Backspace
+                                                             : ImGuiKey_None;
+                io.AddKeyEvent(key, age == 0);
+            } else if (s.what == "click" && std::sscanf(s.args.c_str(), "%f %f", &x1, &y1) == 2) {
+                if (age == 0) {
+                    io.AddMousePosEvent(x1, y1);
+                } else if (age == 1 || age == 3) {
+                    io.AddMouseButtonEvent(0, age == 1);
+                }
+            } else if (s.what == "drag" &&
+                       std::sscanf(s.args.c_str(), "%f %f %f %f", &x1, &y1, &x2, &y2) == 4) {
+                if (age == 0) {
+                    io.AddMousePosEvent(x1, y1);
+                } else if (age == 2) {
+                    io.AddMouseButtonEvent(0, true);
+                } else if (age > 2 && age <= 12) {
+                    const float t = static_cast<float>(age - 2) / 10;
+                    io.AddMousePosEvent(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t);
+                } else if (age == 14) {
+                    io.AddMouseButtonEvent(0, false);
+                }
+            }
+        }
+    }
+} // namespace
+
 // `frames` frames at 60 a second (agents and hooks get real time), the last one to `out`
 int runHeadless(App& app, const char* out, int width, int height, int frames) {
     const float scale = 2; // as a retina window: crisp text
@@ -145,7 +210,9 @@ int runHeadless(App& app, const char* out, int width, int height, int frames) {
     app.setup();
 
     Canvas canvas{static_cast<int>(width * scale), static_cast<int>(height * scale), {}};
+    const std::vector<Step> steps = inputSteps();
     for (int i = 0; i < frames; ++i) {
+        play(steps, i);
         ImGui::NewFrame();
         app.frame();
         ImGui::Render();

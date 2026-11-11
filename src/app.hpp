@@ -146,7 +146,8 @@ struct App : mydear::Delegate {
     void sidebar();
 
     // the agent's own mark, tinted like text; a generic one when there is none
-    void agentIcon(const std::string& agentId, float size = 16);
+    // rowHeight: the height of the row it sits in (a frame-height row of buttons), 0 = a text line
+    void agentIcon(const std::string& agentId, float size = 16, float rowHeight = 0);
 
     void threadView(Thread& t);
     void transcriptItem(Thread& t, Item& item, int index, float width);

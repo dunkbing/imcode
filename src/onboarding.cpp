@@ -108,9 +108,9 @@ void App::onboarding() {
     for (size_t i = 0; scanned && i < catalog.size(); ++i) {
         const AcpAgentDef& def = catalog[i];
         ImGui::PushID(static_cast<int>(i));
-        ImGui::AlignTextToFramePadding();
-        agentIcon(def.id);
+        agentIcon(def.id, 16, ImGui::GetFrameHeight());
         ImGui::SameLine(0, 10);
+        ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(def.name.c_str());
         const bool on = agentOn(def.id);
         if (installing == def.id) {

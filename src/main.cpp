@@ -15,6 +15,7 @@
 #include "mydear/title_bar.hpp"
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -65,7 +66,7 @@ void App::setup() {
     host = std::thread([this] { hostLoop(); });
 }
 
-void App::agentIcon(const std::string& agentId, float size) {
+void App::agentIcon(const std::string& agentId, float size, float rowHeight) {
     auto it = icons.find(agentId);
     if (it == icons.end()) {
         const EmbeddedImage* image = findEmbeddedImage(("agent-" + agentId).c_str());
@@ -73,16 +74,28 @@ void App::agentIcon(const std::string& agentId, float size) {
             image && upload ? mydear::LoadTexture(image->data, image->size, upload) : ImTextureID{};
         it = icons.emplace(agentId, texture).first;
     }
+    // an item as tall as its row, the mark drawn in its middle: no cursor nudging, which
+    // drifts by a pixel or two against buttons
+    const float height = rowHeight > 0 ? rowHeight : ImGui::GetTextLineHeight();
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    ImGui::Dummy(ImVec2(size, height));
+    const ImVec2 min(at.x, std::floor(at.y + (height - size) * 0.5f));
+    // the agent's own colour where its mark has one; the others are drawn like text
+    static const std::map<std::string, ImVec4> brand = {
+        {"claude-code", ImVec4(0.85f, 0.47f, 0.34f, 1)}, // #d97757
+        {"gemini", ImVec4(0.28f, 0.59f, 0.89f, 1)},      // #4796e3
+        {"antigravity-acp", ImVec4(0.26f, 0.52f, 0.96f, 1)},
+    };
+    ImVec4 tint = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+    if (const auto colour = brand.find(agentId); colour != brand.end()) {
+        tint = colour->second;
+    }
     if (it->second == ImTextureID{}) {
-        ImGui::TextUnformatted(ICON_FA_ROBOT);
+        ImGui::GetWindowDrawList()->AddText(min, ImGui::GetColorU32(tint), ICON_FA_ROBOT);
         return;
     }
-    // centred on the text of the line it sits in (which a frame-height row pushes down)
-    const float line = ImGui::GetTextLineHeight();
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() +
-                         ImGui::GetCurrentWindow()->DC.CurrLineTextBaseOffset + (line - size) * 0.5f);
-    ImGui::ImageWithBg(it->second, ImVec2(size, size), ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0),
-                       ImGui::GetStyleColorVec4(ImGuiCol_Text));
+    ImGui::GetWindowDrawList()->AddImage(it->second, min, ImVec2(min.x + size, min.y + size), ImVec2(0, 0),
+                                         ImVec2(1, 1), ImGui::GetColorU32(tint));
 }
 
 void App::startScan() {
@@ -284,7 +297,7 @@ void App::frame() {
         bar = mydear::BeginTitleBar();
     }
     if (data.onboarded && narrow) {
-        if (mydear::SmallButton(ICON_FA_BARS)) {
+        if (mydear::IconButton(ICON_FA_BARS, mydear::ButtonVariant::Secondary, ImVec2(30, 22))) {
             sidebarOpen = !sidebarOpen;
         }
         ImGui::SameLine();
@@ -298,18 +311,28 @@ void App::frame() {
         ImGui::TextUnformatted(t.title.empty() ? "New thread" : t.title.substr(0, narrow ? 22 : 70).c_str());
         // at the right end, before the os's own buttons
         ImGui::SameLine();
-        ImGui::SetCursorScreenPos(ImVec2(bar.pos.x + bar.size.x - bar.rightInset - 84,
+        ImGui::SetCursorScreenPos(ImVec2(bar.pos.x + bar.size.x - bar.rightInset - 76,
                                          ImGui::GetCursorScreenPos().y));
-        if (mydear::SmallButton(ICON_FA_TERMINAL, terminalOpen ? mydear::ButtonVariant::Primary
-                                                               : mydear::ButtonVariant::Secondary)) {
+        // flat, with room around the icon; filled while its panel is open
+        auto barButton = [&](const char* icon, bool on) {
+            ImGui::PushStyleColor(ImGuiCol_Button, on ? colors.surface1 : ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
+            ImGui::PushStyleColor(ImGuiCol_Text, on ? colors.text : colors.subtext0);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+            const bool pressed = ImGui::Button(icon, ImVec2(30, 22));
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(3);
+            return pressed;
+        };
+        if (barButton(ICON_FA_TERMINAL, terminalOpen)) {
             toggleTerminal();
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Terminal (Ctrl+`)");
         }
         ImGui::SameLine(0, 6);
-        if (mydear::SmallButton(ICON_FA_FOLDER_TREE, files.open ? mydear::ButtonVariant::Primary
-                                                                : mydear::ButtonVariant::Secondary)) {
+        if (barButton(ICON_FA_FOLDER_TREE, files.open)) {
             files.open = !files.open;
         }
         if (ImGui::IsItemHovered()) {
@@ -384,7 +407,7 @@ void App::frame() {
         files.open = !files.open;
     }
     // ui checks: IMCODE_DEV="new;palette;actions;models;send:<text>" (any of them), each once
-    if (const char* dev = std::getenv("IMCODE_DEV"); dev && data.onboarded) {
+    if (const char* dev = std::getenv("IMCODE_DEV"); dev) {
         static int frames = 0;
         ++frames;
         const std::string all = std::string(";") + dev + ";";
@@ -398,6 +421,15 @@ void App::frame() {
             data.threads[current]->send(all.substr(at + 6, all.find(';', at + 1) - at - 6));
         }
         devOpenModels = frames == 40 && (all.find(";models;") != std::string::npos);
+        if (const auto at = all.find(";remote:"); frames == 40 && at != std::string::npos) {
+            paletteOpen();
+            palette.step = Palette::Step::Host;
+            palette.host = all.substr(at + 8, all.find(';', at + 1) - at - 8);
+            paletteGo(palette.host, "");
+        }
+        if (frames == 40 && all.find(";installing;") != std::string::npos) {
+            installing = "cursor"; // the row's progress, without a download
+        }
         if (frames == 40 && all.find(";hosts;") != std::string::npos) {
             paletteOpen();
             palette.step = Palette::Step::Host;
@@ -424,6 +456,11 @@ void App::frame() {
                                       {"c", "Reject", "reject_once", {}}};
             t.items.push_back(ask);
             t.items.push_back({.kind = Item::Kind::Assistant, .text = "Renamed `loadConfig` to `readConfig` in **3 files**."});
+            Item auth{.kind = Item::Kind::Auth};
+            auth.authMethods.resize(2);
+            auth.authMethods[0].name = "Log in with your account";
+            auth.authMethods[1].name = "Use an API key";
+            t.items.push_back(auth);
             t.items.push_back({.kind = Item::Kind::Info, .text = "Turn stopped: max_tokens"});
             t.items.push_back({.kind = Item::Kind::Error, .text = "The agent exited: connection reset"});
         }

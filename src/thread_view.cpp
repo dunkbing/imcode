@@ -232,8 +232,7 @@ void App::composer(Thread& t, float width) {
     const float labelWidth = ImGui::CalcTextSize(label.c_str()).x + 24;
     ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - labelWidth - button - 16 - 6 -
                          ImGui::GetStyle().ItemSpacing.x);
-    ImGui::AlignTextToFramePadding();
-    agentIcon(t.agentId);
+    agentIcon(t.agentId, 16, button);
     ImGui::SameLine(0, 6);
     if (mydear::Button((label + "##models").c_str(), mydear::ButtonVariant::Secondary,
                        ImVec2(labelWidth, 0))) {
@@ -296,14 +295,28 @@ void App::composer(Thread& t, float width) {
     }
     ImGui::PopStyleColor();
     ImGui::SameLine();
-    if (t.busy()) {
-        if (mydear::IconButton(ICON_FA_STOP, mydear::ButtonVariant::Danger, ImVec2(button, button))) {
-            t.cancel();
-        }
-    } else {
-        send |= mydear::IconButton(ICON_FA_ARROW_UP, mydear::ButtonVariant::Primary,
-                                   ImVec2(button, button));
+    // send (or stop): a filled circle, lit when there is something to send
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    const bool pressed = ImGui::InvisibleButton("##send", ImVec2(button, button));
+    const bool ready = t.busy() || input[0];
+    const ImVec4 fill = t.busy() ? colors.red : ready ? colors.blue : colors.surface1;
+    const ImVec2 centre(at.x + button * 0.5f, at.y + button * 0.5f);
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    draw->AddCircleFilled(centre, button * 0.5f,
+                          ImGui::GetColorU32(ImGui::IsItemHovered() && ready
+                                                 ? ImVec4(fill.x, fill.y, fill.z, 0.85f)
+                                                 : fill));
+    const char* glyph = t.busy() ? ICON_FA_STOP : ICON_FA_ARROW_UP;
+    const ImVec2 size = ImGui::CalcTextSize(glyph);
+    draw->AddText(ImVec2(centre.x - size.x * 0.5f, centre.y - size.y * 0.5f),
+                  ImGui::GetColorU32(ready ? colors.crust : colors.overlay1), glyph);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", t.busy() ? "Stop" : "Send (Enter)");
     }
+    if (pressed && t.busy()) {
+        t.cancel();
+    }
+    send |= pressed && !t.busy();
     ImGui::EndChild();
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar();
@@ -328,7 +341,10 @@ void App::threadView(Thread& t) {
         const std::string ask = "What should we build in " + name + "?";
         ImGui::PushFont(nullptr, 24.0f);
         const float askWidth = ImGui::CalcTextSize(ask.c_str()).x;
-        ImGui::SetCursorPos(ImVec2((avail.x - askWidth) * 0.5f, avail.y * 0.36f));
+        // a third of the way down, or centred when the area is short (a tall terminal)
+        const float block = composerHeight + 90;
+        ImGui::SetCursorPos(ImVec2((avail.x - askWidth) * 0.5f,
+                                   std::max(0.0f, std::min(avail.y * 0.36f, (avail.y - block) * 0.5f))));
         ImGui::TextUnformatted(ask.c_str());
         ImGui::PopFont();
         ImGui::Dummy(ImVec2(0, Theme::Spacing::L));

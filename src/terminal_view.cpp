@@ -84,6 +84,9 @@ void App::terminalPanel(Thread& t) {
                       ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar |
                           ImGuiWindowFlags_NoScrollWithMouse);
     if (std::exchange(focusTerminal, false)) {
+        // the composer is in the same window tree: focusing this child alone would leave
+        // its text field active, and typing would go there
+        ImGui::ClearActiveID();
         ImGui::SetWindowFocus();
     }
     const bool focused = ImGui::IsWindowFocused();
