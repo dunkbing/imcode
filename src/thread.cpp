@@ -196,27 +196,54 @@ void Thread::signIn(Item& item, const acp::AuthMethod& method) {
         acp_->authenticate(method.id);
         return;
     }
-    // the agent's own command plus the method's args, in a terminal
-    // shortcut: the terminal runs the local agent; a remote one needs a terminal over ssh
+    // the agent's own command plus the method's args, typed into this thread's terminal:
+    // the same for a folder here and one over ssh
     const AcpAgentDef* def = AcpAgents::find(agentId);
-    auto argv = def && host.empty() ? AcpAgents::resolveInvocation(*def) : std::nullopt;
-    if (!argv) {
-        add({.kind = Item::Kind::Error,
-             .text = "Sign in on " + (host.empty() ? "this machine" : host) + ": " +
-                     (def ? def->authHint : std::string())});
+    const char* testCmd = std::getenv("IMCODE_AGENT_CMD"); // as in ensureStarted
+    auto quote = [](const std::string& s) {
+        std::string out = "'";
+        for (const char c : s) {
+            out += c == '\'' ? std::string("'\\''") : std::string(1, c);
+        }
+        return out + "'";
+    };
+    std::string command;
+    for (const auto& [name, value] : method.env) {
+        command += name + "=" + quote(value) + " ";
+    }
+    if (testCmd && *testCmd) {
+        command += quote(testCmd);
+    } else if (!def) {
+        return;
+    } else if (!host.empty() && !def->npmPackage.empty()) {
+        // on the host: whichever runner it has, as the agent itself is started there
+        command += "$(command -v bun >/dev/null 2>&1 && echo 'bun x --bun' || echo 'npx -y') " +
+                   quote(def->npmPackage);
+    } else if (!host.empty()) {
+        for (const auto& part : def->runCmd) {
+            command += quote(part) + " ";
+        }
+    } else if (const auto argv = AcpAgents::resolveInvocation(*def)) {
+        if (const auto bun = AcpRegistry::bunPath(); bun && argv->front() == *bun) {
+            for (const auto& [name, value] : AcpRegistry::bunEnv()) {
+                command += name + "=" + quote(value) + " ";
+            }
+        }
+        for (const auto& part : *argv) {
+            command += quote(part) + " ";
+        }
+    } else {
+        add({.kind = Item::Kind::Error, .text = def->authHint}); // invalidates `item`
         return;
     }
-    argv->insert(argv->end(), method.args.begin(), method.args.end());
-    auto env = method.env;
-    if (const auto bun = AcpRegistry::bunPath(); bun && argv->front() == *bun) {
-        const auto extra = AcpRegistry::bunEnv();
-        env.insert(env.end(), extra.begin(), extra.end());
+    for (const auto& arg : def && !(testCmd && *testCmd) ? def->runArgs : std::vector<std::string>{}) {
+        command += " " + quote(arg);
     }
-    const std::string err = AcpAgents::openInTerminal(*argv, env);
-    item.terminalSignIn = err.empty();
-    if (!err.empty()) {
-        add({.kind = Item::Kind::Error, .text = err}); // invalidates `item`
+    for (const auto& arg : method.args) {
+        command += " " + quote(arg);
     }
+    terminalCommand = command;
+    item.terminalSignIn = true;
 }
 
 void Thread::continueAfterTerminalSignIn(Item& item) {

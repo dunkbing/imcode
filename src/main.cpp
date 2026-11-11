@@ -646,6 +646,8 @@ void App::frame() {
             Item auth{.kind = Item::Kind::Auth};
             auth.authMethods.resize(2);
             auth.authMethods[0].name = "Log in with your account";
+            auth.authMethods[0].type = "terminal";
+            auth.authMethods[0].args = {"--login"};
             auth.authMethods[1].name = "Use an API key";
             t.items.push_back(auth);
             t.items.push_back({.kind = Item::Kind::Info, .text = "Turn stopped: max_tokens"});
@@ -670,6 +672,12 @@ void App::frame() {
                           all.substr(at + 8, all.find(';', at + 1) - at - 8).c_str());
         }
         imshell::requestFrames();
+    }
+    // a sign-in the open thread wants run: in its terminal, opened for it
+    if (current >= 0 && !data.threads[current]->terminalCommand.empty()) {
+        terminalRun = std::exchange(data.threads[current]->terminalCommand, {});
+        terminalOpen = true;
+        focusTerminal = true;
     }
     paletteDraw();
     settingsDraw();

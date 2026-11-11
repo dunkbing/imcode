@@ -51,6 +51,7 @@ struct App : imshell::Delegate {
     std::map<const Thread*, std::unique_ptr<Terminal>> terminals;
     bool terminalOpen = false;
     bool focusTerminal = false;
+    std::string terminalRun; // typed into the open thread's terminal once it is up
     bool terminalExited = false; // the open thread's shell ended this frame
     float terminalSplit = 0.62f; // share of the height the chat keeps above the terminal
 

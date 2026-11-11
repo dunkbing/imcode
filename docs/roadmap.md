@@ -66,7 +66,7 @@ The agent runs on the remote machine in the remote folder; nothing is installed 
 - [x] Open folder: pick a host (from `~/.ssh/config` or typed), then browse its folders
 - [x] A thread in a remote folder: the agent runs there with the login shell's `PATH`
 - [x] Existing sessions of a host and folder (`session/list`) appear as threads: continue what was started in a terminal
-- [ ] Sign in to an agent on the remote (a terminal over ssh)
+- [~] Sign in to an agent in the thread's own terminal, local or remote (done; not tried against a real sign-in)
 - [ ] Reconnect with resume after a drop or sleep, without freezing the window
 - [ ] Install an agent on the remote (bun or a registry binary) from the app
 - [ ] Passwords and passphrases in the system keychain; Windows sockets

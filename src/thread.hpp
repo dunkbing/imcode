@@ -51,6 +51,7 @@ public:
     const std::string host;
     std::vector<Item> items;
     std::vector<std::string> queue; // sent one by one as turns end
+    std::string terminalCommand;    // a sign-in to run in this thread's terminal: taken by the app
     std::vector<acp::ConfigOption> config; // model, mode, ... as the agent offers them
     std::vector<AcpCommand> commands;      // its slash commands
     long long contextUsed = 0, contextSize = 0; // tokens, as the agent last reported

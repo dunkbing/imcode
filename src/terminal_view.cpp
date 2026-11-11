@@ -119,6 +119,11 @@ void App::terminalPanel(Thread& t) {
     // the user left the shell (exit, ctrl+d): the panel goes with it. one that never started
     // stays, with its reason
     terminalExited = term->ended() && !term->failed();
+    // once the shell has printed its prompt: typed earlier, the line shows twice
+    if (!terminalRun.empty() && !term->ended() &&
+        !(term->rowText(0) + term->rowText(1) + term->rowText(2)).empty()) {
+        term->write(std::exchange(terminalRun, {}) + "\r");
+    }
     if (focused && !restart && !term->ended()) { // that enter is not the new shell's
         sendKeys(*term);
     }

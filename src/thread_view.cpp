@@ -250,7 +250,7 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         if (it.answered) {
             ImGui::TextColored(colors.subtext0, "-> %s", it.choice.c_str());
             if (it.terminalSignIn) {
-                ImGui::TextWrapped("Finish signing in in the Terminal window, then continue.");
+                ImGui::TextWrapped("Finish signing in in the terminal below, then continue.");
                 if (imshell::SmallButton("Continue", imshell::ButtonVariant::Primary)) {
                     t.continueAfterTerminalSignIn(it);
                 }
