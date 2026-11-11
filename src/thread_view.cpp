@@ -352,6 +352,34 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
     case Item::Kind::Error:
         ui::Callout("Error", it.text.c_str(), ui::Tone::Danger);
         break;
+    case Item::Kind::TurnChanges: {
+        // what the turn did to the folder: click for the files and their diffs
+        const std::string label = std::format("{}  {} {} changed", ICON_FA_CODE_COMPARE, it.filesChanged,
+                                              it.filesChanged == 1 ? "file" : "files");
+        const std::string counts = std::format("+{}  -{}", it.linesAdded, it.linesRemoved);
+        const ImVec2 size(ImGui::CalcTextSize(label.c_str()).x + ImGui::CalcTextSize(counts.c_str()).x + 32,
+                          ImGui::GetFrameHeight());
+        const bool clicked = ImGui::InvisibleButton("##turn", size);
+        const ImVec2 at = ImGui::GetItemRectMin();
+        const bool hot = ImGui::IsItemHovered();
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+        draw->AddRect(at, ImVec2(at.x + size.x, at.y + size.y), ImGui::GetColorU32(hot ? colors.surface2 : colors.surface1),
+                      ImGui::GetStyle().FrameRounding + 3);
+        const float y = at.y + (size.y - ImGui::GetTextLineHeight()) * 0.5f;
+        draw->AddText(ImVec2(at.x + 10, y), ImGui::GetColorU32(hot ? colors.text : colors.subtext0), label.c_str());
+        const float x = at.x + 10 + ImGui::CalcTextSize(label.c_str()).x + 12;
+        const std::string plus = std::format("+{}", it.linesAdded);
+        draw->AddText(ImVec2(x, y), ImGui::GetColorU32(colors.green), plus.c_str());
+        draw->AddText(ImVec2(x + ImGui::CalcTextSize((plus + "  ").c_str()).x, y), ImGui::GetColorU32(colors.red),
+                      std::format("-{}", it.linesRemoved).c_str());
+        if (hot) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        }
+        if (clicked) {
+            changesOpen(t, it.treeFrom, it.treeTo);
+        }
+        break;
+    }
     }
     if (boxed) {
         ImGui::EndChild();

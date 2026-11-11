@@ -14,7 +14,7 @@
 // one conversation with one agent in one folder, here or on another machine. no ui in
 // here: this is the part a remote client will later drive through commands.
 struct Item {
-    enum class Kind { User, Assistant, Thought, Tool, Plan, Permission, Auth, Info, Error };
+    enum class Kind { User, Assistant, Thought, Tool, Plan, Permission, Auth, Info, Error, TurnChanges };
     Kind kind{};
     std::string text;
     std::vector<std::string> files; // User: what was attached, by name
@@ -35,6 +35,9 @@ struct Item {
     bool answered = false;
     std::string choice;
     bool terminalSignIn = false; // a terminal sign-in is open: offer Continue
+    // TurnChanges: the folder before and after a turn (git trees), and what differs
+    std::string treeFrom, treeTo;
+    int filesChanged = 0, linesAdded = 0, linesRemoved = 0;
 };
 
 // the remembered choices to apply now that these options arrived. they leave `wanted`, as do
@@ -129,6 +132,7 @@ private:
     std::string heldPrompt_;
     bool sendNow_ = false; // the turn was stopped for a queued message: the queue moves on
     bool bunTried_ = false; // the managed bun was asked for once
+    std::string turnBefore_; // the folder as the running turn found it (a git tree); empty: not a repository
     std::vector<std::string> heldFiles_;
     bool changed_ = false;
     int revision_ = 0;

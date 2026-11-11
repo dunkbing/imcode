@@ -69,6 +69,24 @@ int main() {
         }
         ok = false;
     }
+    // what a turn changed: two snapshots, the files between them (new ones too), the index untouched
+    const std::string before = Git::snapshot("", repo.string());
+    std::ofstream(repo / "a.txt") << "one\n2\nthree\nfour\nfive\n";
+    std::ofstream(repo / "turn.txt") << "made by the turn\n";
+    const std::string after = Git::snapshot("", repo.string());
+    const auto turn = Git::changes("", repo.string(), before, after);
+    const auto turnNew = std::ranges::find(turn, std::string("turn.txt"), &Git::Change::path);
+    const auto turnDiff = turnNew == turn.end() ? std::vector<Diff::Line>{} : Git::fileDiff("", repo.string(), *turnNew, before, after);
+    const bool indexUntouched = Git::changes("", repo.string()).size() == 3; // a.txt, b c.txt, turn.txt
+    if (before.size() < 40 || after == before || turn.size() != 2 || turnNew == turn.end() || turnNew->kind != 'A' ||
+        turnDiff.size() != 1 || !indexUntouched) {
+        std::printf("FAILED: turn %zu files, before %s after %s\n", turn.size(), before.c_str(), after.c_str());
+        ok = false;
+    }
+    fs::remove(repo / "turn.txt");
+    const bool renamed = Git::nameStatusToPorcelain("R100\told.txt\tnew.txt\nM\tx\n") == "R  old.txt -> new.txt\nM  x\n";
+    ok = ok && renamed && Git::snapshot("", home.string()).empty();
+
     // committed and pushed to a remote of its own: the first push sets the upstream
     const fs::path bare = home / "remote.git";
     const auto q = [](const fs::path& p) {

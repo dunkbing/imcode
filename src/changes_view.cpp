@@ -26,10 +26,13 @@ namespace {
     }
 } // namespace
 
-void App::changesOpen(Thread& t) {
+void App::changesOpen(Thread& t, const std::string& from, const std::string& to) {
     changes.want = true;
     changes.host = t.host;
     changes.cwd = t.cwd;
+    changes.from = from;
+    changes.to = to;
+    changes.pushed = false;
     changes.list.clear();
     changes.lines.clear();
     changes.selected = -1;
@@ -46,7 +49,7 @@ void App::changesDraw() {
         c.diffFor.clear();
     });
     if (std::exchange(c.reload, false) && !c.listOp.isRunning()) {
-        c.listOp.start([host = c.host, cwd = c.cwd] { return Git::changes(host, cwd); });
+        c.listOp.start([host = c.host, cwd = c.cwd, from = c.from, to = c.to] { return Git::changes(host, cwd, from, to); });
     }
     c.diffOp.check([&](std::pair<std::string, std::vector<Diff::Line>> got) {
         if (got.first == c.diffFor) {
@@ -57,8 +60,8 @@ void App::changesDraw() {
         !c.diffOp.isRunning()) {
         c.diffFor = c.list[c.selected].path;
         c.lines.clear();
-        c.diffOp.start([host = c.host, cwd = c.cwd, change = c.list[c.selected]] {
-            return std::pair{change.path, Git::fileDiff(host, cwd, change)};
+        c.diffOp.start([host = c.host, cwd = c.cwd, change = c.list[c.selected], from = c.from, to = c.to] {
+            return std::pair{change.path, Git::fileDiff(host, cwd, change, from, to)};
         });
     }
 
@@ -101,7 +104,7 @@ void App::changesDraw() {
     const float button = ImGui::GetFrameHeight();
     ImGui::AlignTextToFramePadding();
     ImGui::PushFont(nullptr, 18.0f);
-    ImGui::TextUnformatted("Changes");
+    ImGui::TextUnformatted(c.from.empty() ? "Changes" : "Changes in this turn");
     ImGui::PopFont();
     ImGui::SameLine();
     ImGui::AlignTextToFramePadding();
@@ -131,7 +134,7 @@ void App::changesDraw() {
     if (c.listOp.isRunning() && c.list.empty()) {
         ui::Progress(-1, "Reading the changes");
     } else if (c.list.empty()) {
-        ImGui::TextColored(colors.overlay1, "Nothing has changed since the last commit.");
+        ImGui::TextColored(colors.overlay1, c.from.empty() ? "Nothing has changed since the last commit." : "Nothing changed.");
     } else if (imshell::BeginResizable("changes", {.size = ImVec2(0, -(ImGui::GetFrameHeightWithSpacing() + 10)),
                                                    .line = ImGui::GetColorU32(colors.surface1),
                                                    .lit = ImGui::GetColorU32(colors.blue)})) {
@@ -189,7 +192,7 @@ void App::changesDraw() {
     }
     // the commit bar
     const bool busy = c.commitOp.isRunning();
-    if (!c.list.empty() || c.pushed) {
+    if (c.from.empty() && (!c.list.empty() || c.pushed)) { // committing is for the folder, not a turn
         ImGui::Dummy(ImVec2(0, 4));
         // after a push with nothing left: the pull request alone
         bool enter = false;

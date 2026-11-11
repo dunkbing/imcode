@@ -34,12 +34,21 @@ namespace Git {
     };
     // from `git status --porcelain=v1 -z`-less output and `git diff HEAD --numstat`
     std::vector<Change> parseChanges(std::string_view porcelain, std::string_view numstat);
-    // the changes of a folder's repository, here or on an ssh host; blocks
-    std::vector<Change> changes(const std::string& host, const std::string& cwd);
+    // the changes of a folder's repository, here or on an ssh host; blocks. with from and to
+    // (trees from snapshot()), what changed between them instead of since the last commit
+    std::vector<Change> changes(const std::string& host, const std::string& cwd, const std::string& from = "",
+                                const std::string& to = "");
+    // every file of the folder as it is now (untracked ones too), as a git tree, without
+    // touching the index or the history: what a turn changed is the diff of two of these.
+    // empty outside a repository; blocks
+    std::string snapshot(const std::string& host, const std::string& cwd);
+    // from `git diff --name-status`: as status lines for parseChanges
+    std::string nameStatusToPorcelain(std::string_view nameStatus);
     // a unified diff as lines to show: hunk headers become '~', file headers are dropped
     std::vector<Diff::Line> parseDiff(std::string_view unified);
     // one file's diff against the last commit (all added when it is not tracked); blocks
-    std::vector<Diff::Line> fileDiff(const std::string& host, const std::string& cwd, const Change& change);
+    std::vector<Diff::Line> fileDiff(const std::string& host, const std::string& cwd, const Change& change,
+                                     const std::string& from = "", const std::string& to = "");
 
     // every change committed with `message`; then, with push, the branch pushed (its upstream
     // set the first time). false with git's own words in `output`; blocks

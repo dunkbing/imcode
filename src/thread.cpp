@@ -259,6 +259,9 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
     } else {
         add({.kind = Item::Kind::User, .text = text, .files = names});
     }
+    // the folder as it is now: what the turn changes is measured against it
+    // shortcut: blocks for git (and ssh); move to the host thread with the other blocking starts
+    turnBefore_ = Git::snapshot(host, cwd);
     acp_->prompt(blocks); // held until the session is ready
 }
 
@@ -505,6 +508,22 @@ void Thread::poll() {
             sendNow_ = false;
             if (ev.text != "end_turn" && ev.text != "cancelled" && !ev.text.empty()) {
                 add({.kind = Item::Kind::Info, .text = "Turn stopped: " + ev.text});
+            }
+            // what the turn changed in the folder, as a line under it
+            if (!turnBefore_.empty()) {
+                const std::string after = Git::snapshot(host, cwd);
+                if (!after.empty() && after != turnBefore_) {
+                    Item item{.kind = Item::Kind::TurnChanges, .treeFrom = turnBefore_, .treeTo = after};
+                    for (const auto& change : Git::changes(host, cwd, turnBefore_, after)) {
+                        ++item.filesChanged;
+                        item.linesAdded += std::max(0, change.added);
+                        item.linesRemoved += std::max(0, change.removed);
+                    }
+                    if (item.filesChanged > 0) {
+                        add(std::move(item));
+                    }
+                }
+                turnBefore_.clear();
             }
             break;
         case AcpEvent::Type::Info:

@@ -725,6 +725,8 @@ void App::frame() {
             t.items.push_back(plan);
             t.items.push_back({.kind = Item::Kind::Tool, .toolId = "1", .toolTitle = "grep -rn loadConfig src",
                                .toolStatus = "completed", .toolOutput = "src/a.cpp:12\nsrc/b.cpp:40"});
+            // what the turn changed (trees made up: the dialog shows nothing for them)
+            t.items.push_back({.kind = Item::Kind::TurnChanges, .filesChanged = 3, .linesAdded = 24, .linesRemoved = 9});
             // a run of reads: folded into one line
             for (const char* file : {"Read src/a.cpp", "Read src/b.cpp", "Read src/config.hpp", "ls src"}) {
                 t.items.push_back({.kind = Item::Kind::Tool, .toolId = file, .toolTitle = file,

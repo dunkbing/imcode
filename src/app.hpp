@@ -185,6 +185,7 @@ struct App : imshell::Delegate {
     struct Changes {
         bool want = false, reload = false;
         std::string host, cwd;
+        std::string from, to; // a turn's trees: what it changed; empty: since the last commit
         std::vector<Git::Change> list;
         int selected = 0;
         float listWidth = 280;
@@ -202,7 +203,7 @@ struct App : imshell::Delegate {
         };
         AcpHost::AsyncOp<Done> commitOp;
     } changes;
-    void changesOpen(Thread& t);
+    void changesOpen(Thread& t, const std::string& from = "", const std::string& to = "");
     void changesDraw();
     void projectPopup(); // "projects": pick the folder a new thread goes to
     void installAgent(const AcpAgentDef& def);

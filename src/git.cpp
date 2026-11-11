@@ -183,22 +183,63 @@ namespace Git {
         return out;
     }
 
-    std::vector<Change> changes(const std::string& host, const std::string& cwd) {
+    std::string nameStatusToPorcelain(std::string_view nameStatus) {
+        // "M\tpath", "R100\told\tnew" -> "M  path", "R  old -> new"
+        std::string out;
+        for (size_t at = 0; at < nameStatus.size();) {
+            const size_t end = std::min(nameStatus.find('\n', at), nameStatus.size());
+            const std::string_view line = nameStatus.substr(at, end - at);
+            at = end + 1;
+            const size_t t1 = line.find('\t');
+            if (line.empty() || t1 == std::string_view::npos) {
+                continue;
+            }
+            std::string path(line.substr(t1 + 1));
+            if (const size_t t2 = path.find('\t'); t2 != std::string::npos) {
+                path = path.substr(0, t2) + " -> " + path.substr(t2 + 1);
+            }
+            out += std::string(1, line[0]) + "  " + path + "\n";
+        }
+        return out;
+    }
+
+    std::vector<Change> changes(const std::string& host, const std::string& cwd, const std::string& from,
+                                const std::string& to) {
         // both in one run, split by a marker line
-        const std::string out = run(host, "cd " + quote(cwd) + " && git status --porcelain=v1 -uall && echo __imcode__ && "
-                                          "git diff HEAD --numstat 2>/dev/null");
+        const std::string range = quote(from) + " " + quote(to);
+        const std::string out = run(host, from.empty() ? "cd " + quote(cwd) + " && git status --porcelain=v1 -uall && echo __imcode__ && "
+                                                                       "git diff HEAD --numstat 2>/dev/null"
+                                                     : "cd " + quote(cwd) + " && git diff --name-status " + range +
+                                                           " && echo __imcode__ && git diff --numstat " + range);
         const size_t mark = out.find("__imcode__\n");
         if (mark == std::string::npos) {
             return {};
         }
-        return parseChanges(std::string_view(out).substr(0, mark), std::string_view(out).substr(mark + 10));
+        const std::string_view status = std::string_view(out).substr(0, mark);
+        return parseChanges(from.empty() ? std::string(status) : nameStatusToPorcelain(status),
+                            std::string_view(out).substr(mark + 10));
     }
 
-    std::vector<Diff::Line> fileDiff(const std::string& host, const std::string& cwd, const Change& change) {
+    std::string snapshot(const std::string& host, const std::string& cwd) {
+        // a copy of the index takes every file, then becomes a tree; the real index is untouched
+        std::string out = run(host, "cd " + quote(cwd) + " && idx=$(git rev-parse --git-path index) && t=$(mktemp) && "
+                                    "{ cp \"$idx\" \"$t\" 2>/dev/null; GIT_INDEX_FILE=\"$t\" git add -A >/dev/null 2>&1 && "
+                                    "GIT_INDEX_FILE=\"$t\" git write-tree; rm -f \"$t\"; }");
+        while (!out.empty() && out.back() == '\n') {
+            out.pop_back();
+        }
+        out = out.substr(out.find_last_of('\n') + 1);
+        const bool hash = out.size() >= 40 && std::ranges::all_of(out, [](char c) { return std::isxdigit(static_cast<unsigned char>(c)); });
+        return hash ? out : "";
+    }
+
+    std::vector<Diff::Line> fileDiff(const std::string& host, const std::string& cwd, const Change& change,
+                                     const std::string& from, const std::string& to) {
         // shortcut: one file's whole diff in memory; a huge one is cut at 4000 lines
         const std::string script =
-            change.kind == '?' ? "cd " + quote(cwd) + " && git diff --no-index -- /dev/null " + quote(change.path) + " | head -4000"
-                               : "cd " + quote(cwd) + " && git diff HEAD -- " + quote(change.path) + " | head -4000";
+            !from.empty()       ? "cd " + quote(cwd) + " && git diff " + quote(from) + " " + quote(to) + " -- " + quote(change.path) + " | head -4000"
+            : change.kind == '?' ? "cd " + quote(cwd) + " && git diff --no-index -- /dev/null " + quote(change.path) + " | head -4000"
+                                 : "cd " + quote(cwd) + " && git diff HEAD -- " + quote(change.path) + " | head -4000";
         return parseDiff(run(host, script));
     }
 

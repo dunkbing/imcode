@@ -119,7 +119,7 @@ One host per machine owns the agents and the threads; every screen is a client o
 - [ ] Copy-on-write worktree checkout on macOS
 - [ ] Keep the default branch pulled when it can fast-forward
 - [ ] Diff panel: file tree, split or unified, find, hide test files, one commit at a time
-- [ ] Changed-files tree under each turn
+- [~] What each turn changed, as a line under it that opens its diffs (done); a changed-files tree
 - [ ] Comment on lines of a diff or file; the comments go to the agent
 - [ ] Generated commit messages, pull request titles and descriptions; repo conventions or custom instructions
 - [ ] Pull requests page: list, filters, checks, timeline, comments, reviewers, labels, merge, auto-merge
