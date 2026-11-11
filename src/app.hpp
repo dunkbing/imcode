@@ -144,6 +144,7 @@ struct App : imshell::Delegate {
     void openFile(const std::string& path) override; // dropped on the window: attached
 
     void save();
+    void applyTheme(const std::string& id); // an imshell theme, kept in the saved data
     void startScan();
     [[nodiscard]] bool agentOn(const std::string& id) const;
     [[nodiscard]] std::vector<const AcpAgentDef*> agentsOn() const;

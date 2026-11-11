@@ -22,6 +22,7 @@ namespace Store {
         out.onboarded = root.value("onboarded", false);
         out.agents = root.value("agents", std::vector<std::string>{});
         out.lastSession = root.value("last", "");
+        out.theme = root.value("theme", out.theme);
         for (const auto& row : root.value("projects", json::array())) {
             addProject({row.value("host", ""), row.value("cwd", "")});
         }
@@ -62,6 +63,7 @@ namespace Store {
         std::ofstream(tmp) << json{{"onboarded", data.onboarded},
                                    {"agents", data.agents},
                                    {"last", data.lastSession},
+                                   {"theme", data.theme},
                                    {"projects", projects},
                                    {"threads", threads}}.dump(2) << "\n";
         std::error_code ec;

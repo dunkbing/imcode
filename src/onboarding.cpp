@@ -161,6 +161,20 @@ void App::settingsDraw() {
     ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - button);
     bool close = imshell::IconButton(ICON_FA_XMARK, imshell::ButtonVariant::Secondary, ImVec2(button, button));
     ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
+    // the look: one of imshell's themes
+    ImGui::TextColored(colors.subtext0, "Theme");
+    ImGui::SameLine(narrow ? 90.0f : 140.0f);
+    ImGui::SetNextItemWidth(220);
+    if (ImGui::BeginCombo("##theme", Theme::Current()->name)) {
+        for (const auto& theme : Theme::THEMES) {
+            if (ImGui::Selectable(theme.name, theme.id == data.theme)) {
+                applyTheme(theme.id);
+                save();
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
     ImGui::TextColored(colors.subtext0, "Agents");
     ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
     agentRows(narrow);

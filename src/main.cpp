@@ -90,9 +90,6 @@ std::string ago(long long unixSeconds) {
 }
 
 void App::setup() {
-    Theme::Current() = &Theme::themeById("tokyo-night");
-    Theme::ApplyTheme(Theme::Current()->colors);
-    ImGui::GetStyle().ScrollbarSize = 8; // thin: the lists are narrow and many
     static const ImWchar iconRanges[] = {ICON_MIN_FA, ICON_MAX_16_FA, 0};
     const EmbeddedFont* text = findEmbeddedFont("JetBrainsMono-Medium");
     const EmbeddedFont* icons = findEmbeddedFont("fa-solid-900");
@@ -125,6 +122,7 @@ void App::setup() {
     AcpRegistry::setInstallRoot(dir / "agents");
     dataFile = dir / "threads.json";
     data = Store::load(dataFile);
+    applyTheme(data.theme);
     project = data.projects.empty() ? -1 : 0;
     startScan();
     // back where the user was: the thread that was open comes up again, with its history
@@ -221,6 +219,13 @@ void App::projectPopup() {
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();
+}
+
+void App::applyTheme(const std::string& id) {
+    Theme::Current() = &Theme::themeById(id);
+    Theme::ApplyTheme(Theme::Current()->colors);
+    ImGui::GetStyle().ScrollbarSize = 8; // thin: the lists are narrow and many
+    data.theme = Theme::Current()->id;
 }
 
 void App::startScan() {

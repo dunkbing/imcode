@@ -189,7 +189,7 @@ One host per machine owns the agents and the threads; every screen is a client o
 
 ## 7. Shipping
 
-- [ ] Settings: theme, font size, keys, default agent and permissions
+- [~] Settings: theme (done), font size, keys, default agent and permissions
 - [ ] ACP log view (every line in and out)
 - [ ] App bundle, icon, installers; CI on macOS, Windows, Linux
 - [ ] Auto-update (imshell's updater)
