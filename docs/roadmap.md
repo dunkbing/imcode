@@ -96,7 +96,7 @@ One host per machine owns the agents and the threads; every screen is a client o
 - [ ] Guest link: someone follows one thread in a browser and proposes messages you send or dismiss
 - [ ] Prompt links: a URL that opens a draft with a prompt, repo and model, never sent by itself
 - [ ] The host as an MCP server: outside agents read, start and message threads, with a scoped sign-in
-- [ ] `imcode <folder>` opens a project from a terminal; thread ids for scripts
+- [~] `imcode <folder>` opens a project from a terminal (done); thread ids for scripts
 - [ ] Storage page: database and attachment size, reclaim space
 
 ## 4. Workspace

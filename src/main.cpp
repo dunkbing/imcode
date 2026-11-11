@@ -161,6 +161,10 @@ void App::setup() {
             break;
         }
     }
+    // shortcut: a second window when the app already runs; hand the folder to the running one when that matters
+    if (!openFolder.empty() && data.onboarded) {
+        newThread(addProject("", openFolder));
+    }
     // ui checks: IMCODE_DEV_SEND=<text> starts a thread in the first project before any frame
     if (const char* text = std::getenv("IMCODE_DEV_SEND"); text && !data.projects.empty()) {
         const Store::Project& p = data.projects.front();
@@ -776,7 +780,7 @@ void App::frame() {
     imshell::Alert::render(); // last: over everything
 }
 
-int main() {
+int main(int argc, char** argv) {
     imshell::Config config;
     config.title = "imcode";
     config.appName = "imcode";
@@ -787,6 +791,13 @@ int main() {
         std::sscanf(size, "%dx%d", &config.width, &config.height);
     }
     static App app;
+    // imcode <folder>: that folder as a project, with a new thread
+    if (std::error_code ec; argc > 1 && std::filesystem::is_directory(argv[1], ec)) {
+        app.openFolder = std::filesystem::canonical(argv[1], ec).string();
+    } else if (argc > 1) {
+        std::fprintf(stderr, "imcode: %s is not a folder\n", argv[1]);
+        return 2;
+    }
     // IMCODE_SHOT=<file.ppm>: no window; the ui after IMCODE_SHOT_FRAMES frames (240) as a picture
     if (const char* shot = std::getenv("IMCODE_SHOT")) {
         const char* frames = std::getenv("IMCODE_SHOT_FRAMES");
