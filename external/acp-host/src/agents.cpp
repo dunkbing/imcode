@@ -1,0 +1,287 @@
+#include "acp_host/agents.hpp"
+#include "acp_host/registry.hpp"
+#include "acp_host/process_runner.hpp"
+
+#include <array>
+#include <cstdlib>
+#include "acp_host/host.hpp"
+
+#if !defined(_WIN32)
+#include <unistd.h>
+#else
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
+namespace AcpAgents {
+
+    namespace {
+
+#if defined(_WIN32)
+        std::wstring toWide(const std::string& value) {
+            if (value.empty()) {
+                return {};
+            }
+            const int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
+                                                 static_cast<int>(value.size()), nullptr, 0);
+            if (size <= 0) {
+                return {};
+            }
+            std::wstring out(static_cast<size_t>(size), L'\0');
+            MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
+                                static_cast<int>(value.size()), out.data(), size);
+            return out;
+        }
+
+        std::string toUtf8(const std::wstring& value) {
+            if (value.empty()) {
+                return {};
+            }
+            const int size =
+                WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()),
+                                    nullptr, 0, nullptr, nullptr);
+            if (size <= 0) {
+                return {};
+            }
+            std::string out(static_cast<size_t>(size), '\0');
+            WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()),
+                                out.data(), size, nullptr, nullptr);
+            return out;
+        }
+
+        std::optional<std::string> findExecutable(const std::string& name) {
+            const std::wstring wide = toWide(name);
+            if (wide.empty() && !name.empty()) {
+                return std::nullopt;
+            }
+            const std::array<const wchar_t*, 4> extensions = {nullptr, L".exe", L".cmd", L".bat"};
+            std::array<wchar_t, 32768> path{};
+            for (const wchar_t* extension : extensions) {
+                const DWORD size =
+                    SearchPathW(nullptr, wide.c_str(), extension, static_cast<DWORD>(path.size()),
+                                path.data(), nullptr);
+                if (size > 0 && size < path.size()) {
+                    return toUtf8(std::wstring(path.data(), size));
+                }
+            }
+            return std::nullopt;
+        }
+#endif
+    } // namespace
+
+    const std::vector<AgentDef>& catalog() {
+        static const std::vector<AgentDef> defs = {
+            {
+                "claude-code",
+                "Claude Code",
+                {},
+                "@agentclientprotocol/claude-agent-acp",
+                {},
+                "Log in by running `claude /login` in a terminal, or set ANTHROPIC_API_KEY.",
+            },
+            {
+                "gemini",
+                "Gemini CLI",
+                {},
+                "@google/gemini-cli",
+                {"--acp"},
+                "Run `gemini` once in a terminal to sign in.",
+            },
+            {
+                "codex",
+                "Codex",
+                {},
+                "@agentclientprotocol/codex-acp",
+                {},
+                "Sign in with `codex login` or set OPENAI_API_KEY.",
+            },
+            {
+                "grok",
+                "Grok",
+                {},
+                "@xai-official/grok",
+                {"agent", "stdio"},
+                "Run `grok` once in a terminal to sign in.",
+            },
+            // binary-only: the registry archive already carries its args ("acp")
+            {
+                "cursor",
+                "Cursor",
+                {"cursor-agent", "acp"},
+                "",
+                {},
+                "Run `cursor-agent login` in a terminal.",
+                "cursor",
+            },
+            {
+                "antigravity-acp",
+                "Google Antigravity",
+                {},
+                "",
+                {},
+                "Sign in with your Google account when Antigravity asks.",
+                "antigravity-acp",
+            },
+        };
+        return defs;
+    }
+
+    const AgentDef* find(const std::string& id) {
+        for (const auto& def : catalog()) {
+            if (def.id == id) {
+                return &def;
+            }
+        }
+        return nullptr;
+    }
+
+    const std::string& loginShellPath() {
+        static const std::string path = [] {
+#if defined(_WIN32)
+            const char* envPath = std::getenv("PATH");
+            return std::string(envPath ? envPath : "");
+#else
+            const char* shell = std::getenv("SHELL");
+            // a hung shell profile must not block agent lookup forever
+            const ProcessResult res = ProcessRunner::run(
+                // interactive too: tools are often put on PATH in .zshrc, which a plain
+                // login shell skips. a marker line, as profiles print things of their own
+                {.args = {shell && *shell ? shell : "/bin/sh", "-l", "-i", "-c",
+                          "printf '\\n__path__%s\\n' \"$PATH\""},
+                 .timeout = std::chrono::seconds(8)});
+            if (res.output.empty()) {
+                AcpHost::logf(acp::LogLevel::Warn, "ACP: could not read login shell PATH: {}", res.errorMessage);
+                const char* envPath = std::getenv("PATH");
+                return std::string(envPath ? envPath : "");
+            }
+            std::string p;
+            if (const auto at = res.output.rfind("__path__"); at != std::string::npos) {
+                p = res.output.substr(at + 8, res.output.find('\n', at) - at - 8);
+            }
+            if (p.empty()) {
+                const char* envPath = std::getenv("PATH");
+                p = envPath ? envPath : "";
+            }
+            return p;
+#endif
+        }();
+        return path;
+    }
+
+    // the full path: posix_spawnp searches the app's own PATH, which is minimal when
+    // the host app is opened from Finder or the Dock, not the login PATH the agent is given
+    std::optional<std::string> locateExecutable(const std::string& name) {
+#if defined(_WIN32)
+        return findExecutable(name);
+#else
+        if (name.find('/') != std::string::npos) {
+            return access(name.c_str(), X_OK) == 0 ? std::optional(name) : std::nullopt;
+        }
+        const std::string& path = loginShellPath();
+        size_t pos = 0;
+        while (pos <= path.size()) {
+            auto colon = path.find(':', pos);
+            if (colon == std::string::npos) {
+                colon = path.size();
+            }
+            const std::string dir = path.substr(pos, colon - pos);
+            if (!dir.empty() && access((dir + "/" + name).c_str(), X_OK) == 0) {
+                return dir + "/" + name;
+            }
+            pos = colon + 1;
+        }
+        return std::nullopt;
+#endif
+    }
+
+    std::optional<std::vector<std::string>> resolveInvocation(const AgentDef& def) {
+        // a registry binary wins: it needs no runtime at all
+        if (auto managed = AcpRegistry::installedCommand(def.id)) {
+            managed->insert(managed->end(), def.runArgs.begin(), def.runArgs.end());
+            return managed;
+        }
+        if (!def.npmPackage.empty()) {
+            // the user's own bun first; ours only when there is none
+            auto bun = locateExecutable("bun");
+            if (!bun)
+                bun = AcpRegistry::bunPath();
+            if (!bun)
+                return std::nullopt;
+            // --bun: bun x otherwise honours the package's `#!/usr/bin/env node` and runs an old
+            // node
+            std::vector<std::string> argv = {*bun, "x", "--bun", def.npmPackage};
+            argv.insert(argv.end(), def.runArgs.begin(), def.runArgs.end());
+            return argv;
+        }
+        if (!def.runCmd.empty()) {
+            if (auto executable = locateExecutable(def.runCmd.front())) {
+                std::vector<std::string> argv = def.runCmd;
+                argv.front() = std::move(*executable);
+                return argv;
+            }
+        }
+        return std::nullopt;
+    }
+
+} // namespace AcpAgents
+
+namespace AcpAgents {
+
+    std::string openInTerminal(const std::vector<std::string>& argv,
+                               const std::vector<std::pair<std::string, std::string>>& env) {
+        if (argv.empty())
+            return "nothing to run";
+#if defined(_WIN32)
+        std::string cmd;
+        for (const auto& [k, v] : env)
+            cmd += "set \"" + k + "=" + v + "\" && ";
+        for (const auto& a : argv)
+            cmd += "\"" + a + "\" ";
+        // ponytail: cmd quoting, fine for paths and flags; a quote inside an arg breaks it
+        return std::system(("start \"\" cmd /k " + cmd).c_str()) == 0 ? "" : "could not open cmd";
+#else
+        auto quote = [](const std::string& s) {
+            std::string out = "'";
+            for (char c : s)
+                out += c == '\'' ? std::string("'\\''") : std::string(1, c);
+            return out + "'";
+        };
+        std::string cmd;
+        if (!env.empty()) {
+            cmd = "env";
+            for (const auto& [k, v] : env)
+                cmd += " " + quote(k + "=" + v);
+            cmd += " ";
+        }
+        for (const auto& a : argv)
+            cmd += quote(a) + " ";
+#if defined(__APPLE__)
+        std::string escaped; // an applescript string
+        for (char c : cmd) {
+            if (c == '"' || c == '\\')
+                escaped += '\\';
+            escaped += c;
+        }
+        const auto r = ProcessRunner::run(
+            {.args = {"/usr/bin/osascript", "-e",
+                      "tell application \"Terminal\" to do script \"" + escaped + "\"", "-e",
+                      "tell application \"Terminal\" to activate"},
+             .timeout = std::chrono::seconds(10)});
+        return r.success ? "" : "could not open Terminal: " + r.output + r.errorMessage;
+#else
+        // ponytail: the debian alternative, else xterm; other terminals can add themselves
+        for (const char* term : {"x-terminal-emulator", "xterm"}) {
+            if (const auto path = locateExecutable(term)) {
+                const std::string line = quote(*path) + " -e sh -c " + quote(cmd) + " &";
+                if (std::system(line.c_str()) == 0)
+                    return "";
+            }
+        }
+        return "no terminal found (x-terminal-emulator or xterm)";
+#endif
+#endif
+    }
+
+} // namespace AcpAgents

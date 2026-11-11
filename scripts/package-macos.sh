@@ -1,5 +1,5 @@
 #!/bin/sh
-# a release build as dist/imcode.app and dist/imcode-macos-arm64.zip, for macos 14 and later.
+# a release build as dist/ImCode.app and dist/imcode-macos-arm64.zip, for macos 14 and later.
 # VCPKG_ROOT must point at vcpkg. the app is signed ad hoc: on another mac, open it the
 # first time with right-click > Open (or clear the quarantine flag)
 set -e
@@ -10,7 +10,7 @@ cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TA
     -DVCPKG_TARGET_TRIPLET=arm64-osx-release -DVCPKG_OVERLAY_TRIPLETS=cmake/triplets
 cmake --build build-release -j 4 --target imcode
 
-app=dist/imcode.app
+app=dist/ImCode.app
 rm -rf dist && mkdir -p "$app/Contents/MacOS"
 cp build-release/imcode "$app/Contents/MacOS/imcode"
 strip -x "$app/Contents/MacOS/imcode"
@@ -19,8 +19,8 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>imcode</string>
-    <key>CFBundleDisplayName</key><string>imcode</string>
+    <key>CFBundleName</key><string>ImCode</string>
+    <key>CFBundleDisplayName</key><string>ImCode</string>
     <key>CFBundleIdentifier</key><string>io.github.dunkbing.imcode</string>
     <key>CFBundleExecutable</key><string>imcode</string>
     <key>CFBundlePackageType</key><string>APPL</string>

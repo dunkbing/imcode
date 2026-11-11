@@ -42,7 +42,7 @@ namespace Keychain {
         CFDataRef data = CFDataCreate(nullptr, reinterpret_cast<const UInt8*>(secret.data()),
                                       static_cast<CFIndex>(secret.size()));
         CFDictionarySetValue(q, kSecValueData, data);
-        CFDictionarySetValue(q, kSecAttrLabel, CFSTR("imcode ssh sign-in"));
+        CFDictionarySetValue(q, kSecAttrLabel, CFSTR("ImCode ssh sign-in"));
         const bool ok = SecItemAdd(q, nullptr) == errSecSuccess;
         CFRelease(data);
         CFRelease(q);

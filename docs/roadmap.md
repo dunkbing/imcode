@@ -145,17 +145,23 @@ One host per machine owns the agents and the threads; every screen is a client o
 - [ ] Capture another window by a global key, attached to the draft with its accessibility text
 - [ ] Right panel: tabs, maximize, resize
 
-## 5. Phone
+## 5. Phone (iOS and Android)
 
-- [ ] iOS and Android builds; a narrow layout (thread list as a drawer)
-- [ ] Remote threads over built-in ssh, and as a client of a host
-- [ ] A notification when a thread needs an answer or ends
+The phone is remote only: it runs no agent and keeps no project of its own. It reaches agents on other machines, either over ssh (the agent runs on that machine, as on the desktop) or as a client of a host (phase 3), which keeps the run going when the phone sleeps or loses its connection. Both platforms come from the same code through imshell's iOS and Android shells.
+
+- [ ] iOS and Android builds from the same code; the narrow layout (thread list as a drawer) as the phone's layout
+- [ ] Remote only: no local projects, terminal or agent installs; local-only features hidden
+- [ ] Hosts: saved ssh hosts with keys kept in the Keychain (iOS) or Keystore (Android); add one by scanning a code from the desktop
+- [ ] Threads over built-in ssh, as on the desktop
+- [ ] Client of a host (phase 3): pick up the desktop's threads, live, and keep runs going when the phone sleeps
+- [ ] Touch: long press for a message's actions, swipe a thread to archive, pull to refresh, the composer above the keyboard
+- [ ] A notification when a thread needs an answer or ends (through the host, so it arrives while the app is closed)
+- [ ] Answer a permission or question from the notification
 - [ ] Voice input; haptics
-- [ ] Phone setup from the desktop: scan a code to install and pair
 - [ ] Ongoing agent activity: live activity on iOS, live update on Android, a home-screen widget
 - [ ] Drafts, attachments and queued messages kept offline, sent on reconnect
-- [ ] Files from another app through the share sheet
-- [ ] Arrange threads by drag in a sheet
+- [ ] Photos and files from another app through the share sheet
+- [ ] Diffs and changes readable on a phone: one file at a time, wrapped lines
 - [ ] Pull request review on the phone, readable offline
 - [ ] Tablet layout: a side inspector, hardware-keyboard shortcuts
 - [ ] Wallpaper colors as a theme on Android

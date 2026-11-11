@@ -181,7 +181,7 @@ void App::settingsDraw() {
     agentRows(narrow);
     ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
     // which build this is: what to quote when something is off
-    ImGui::TextColored(colors.overlay0, "imcode " IMCODE_VERSION "  " IMCODE_COMMIT);
+    ImGui::TextColored(colors.overlay0, "ImCode " IMCODE_VERSION "  " IMCODE_COMMIT);
     close |= ImGui::IsKeyPressed(ImGuiKey_Escape);
     close |= ImGui::IsMouseClicked(0) &&
              !ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows |
@@ -205,7 +205,7 @@ void App::onboarding() {
         *dot = 0; // "name.local"
     }
     ImGui::PushFont(nullptr, 24.0f);
-    ImGui::TextUnformatted("Welcome to imcode");
+    ImGui::TextUnformatted("Welcome to ImCode");
     ImGui::PopFont();
     ImGui::TextColored(colors.subtext0, "Setting up %s.", hostName);
     ImGui::Dummy(ImVec2(0, Theme::Spacing::XL));

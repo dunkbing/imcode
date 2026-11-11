@@ -550,7 +550,7 @@ void App::frame() {
             ImGui::SetTooltip("Files (Ctrl+B)");
         }
     } else {
-        ImGui::TextColored(colors.subtext0, "imcode");
+        ImGui::TextColored(colors.subtext0, "ImCode");
     }
     if (headless) {
         ImGui::End();
@@ -803,7 +803,7 @@ void App::frame() {
 
 int main(int argc, char** argv) {
     imshell::Config config;
-    config.title = "imcode";
+    config.title = "ImCode";
     config.appName = "imcode";
     config.titleBar = true;
     config.titleBarHeight = barHeight;
