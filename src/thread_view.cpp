@@ -2,7 +2,7 @@
 #include "imgui_internal.h" // RenderArrow
 #include "text.hpp"
 
-#include "clipboard.hpp"
+#include "imshell/clipboard.hpp"
 #include <fstream>
 #include <cstring>
 #include <chrono>
@@ -494,7 +494,21 @@ void App::composer(Thread& t, float width) {
     if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
         ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_V)) {
         const auto tempDir = std::filesystem::temp_directory_path() / "imcode-pasted";
-        auto pasted = clipboardFiles(tempDir, std::getenv("IMCODE_PASTEBOARD")); // a named one: ui checks
+        // copied files as they are; a picture (a screenshot, a copied image) saved as a png
+        std::vector<std::string> pasted;
+        for (const auto& item : imshell::Clipboard::Read()) {
+            if (const std::string file = item.file(); !file.empty()) {
+                pasted.push_back(file);
+            } else if (item.has("image/png")) {
+                std::error_code made;
+                std::filesystem::create_directories(tempDir, made);
+                const auto stamp = std::chrono::system_clock::now().time_since_epoch().count();
+                const auto png = tempDir / std::format("pasted-{}-{}.png", stamp, pasted.size());
+                if (std::ofstream(png, std::ios::binary) << item.get("image/png")) {
+                    pasted.push_back(png.string());
+                }
+            }
+        }
         // a wall of text (a log, a file) goes along as a file, not into the message
         const char* text = ImGui::GetClipboardText();
         if (pasted.empty() && text && std::strlen(text) > 4000) {

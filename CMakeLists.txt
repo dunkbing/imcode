@@ -56,13 +56,6 @@ add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sideba
                src/history.cpp src/diff.cpp src/git.cpp src/git_local.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp src/keychain.cpp
                src/terminal.cpp src/terminal_view.cpp src/files_view.cpp src/changes_view.cpp src/syntax.cpp
                ${EMBEDDED_FONTS_FILE} ${EMBEDDED_IMAGES_FILE} ${IMGUI_CORE})
-# pictures and files from the clipboard: appkit on macos, nothing elsewhere yet
-if(APPLE)
-    target_sources(imcode PRIVATE src/clipboard_mac.mm)
-    set_source_files_properties(src/clipboard_mac.mm tests/clipboard_check.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
-else()
-    target_sources(imcode PRIVATE src/clipboard.cpp)
-endif()
 target_include_directories(imcode PRIVATE external/IconFontCppHeaders)
 # the commit it was built from, shown in settings
 execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -84,12 +77,6 @@ if(IMCODE_BUILD_TESTS)
     add_executable(imcode-git-test tests/git_test.cpp src/git.cpp src/git_local.cpp src/ssh.cpp src/ssh_config.cpp src/keychain.cpp)
     target_link_libraries(imcode-git-test PRIVATE acp::host ${IMCODE_SSH})
     add_test(NAME imcode-git COMMAND imcode-git-test)
-    if(APPLE)
-        add_executable(imcode-clipboard-check tests/clipboard_check.mm src/clipboard_mac.mm)
-        target_link_libraries(imcode-clipboard-check PRIVATE "-framework AppKit")
-        target_compile_features(imcode-clipboard-check PRIVATE cxx_std_20)
-        add_test(NAME imcode-clipboard COMMAND imcode-clipboard-check ${CMAKE_CURRENT_SOURCE_DIR}/assets/images/agent-codex.png)
-    endif()
     add_executable(imcode-history-test tests/history_test.cpp src/history.cpp)
     target_link_libraries(imcode-history-test PRIVATE nlohmann_json::nlohmann_json)
     add_test(NAME imcode-history COMMAND imcode-history-test)
