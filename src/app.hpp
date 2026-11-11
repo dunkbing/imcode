@@ -181,6 +181,20 @@ struct App : imshell::Delegate {
     void onboarding();
     void agentRows(bool narrow);
     void settingsDraw();
+    // the changes of the open thread's folder since the last commit, in a dialog
+    struct Changes {
+        bool want = false, reload = false;
+        std::string host, cwd;
+        std::vector<Git::Change> list;
+        int selected = 0;
+        float listWidth = 280;
+        std::string diffFor; // the file `lines` is (being) read for
+        std::vector<Diff::Line> lines;
+        AcpHost::AsyncOp<std::vector<Git::Change>> listOp;
+        AcpHost::AsyncOp<std::pair<std::string, std::vector<Diff::Line>>> diffOp;
+    } changes;
+    void changesOpen(Thread& t);
+    void changesDraw();
     void projectPopup(); // "projects": pick the folder a new thread goes to
     void installAgent(const AcpAgentDef& def);
     void pollInstall();
@@ -216,6 +230,7 @@ struct App : imshell::Delegate {
 
     void threadView(Thread& t);
     void transcriptItem(Thread& t, Item& item, int index, float width);
+    bool diffBlock(const std::string& path, int added, int removed, const std::vector<Diff::Line>& lines, float maxHeight);
     bool toolGroupRow(Thread& t, size_t from, size_t to, float width, bool shown);
     void composer(Thread& t, float width);
 

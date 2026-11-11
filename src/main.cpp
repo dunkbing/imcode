@@ -702,6 +702,9 @@ void App::frame() {
                 }
             }
         }
+        if (frames == 40 && all.find(";changes;") != std::string::npos && current >= 0) {
+            changesOpen(*data.threads[current]);
+        }
         if (frames == 40 && all.find(";hosts;") != std::string::npos) {
             paletteOpen();
             palette.step = Palette::Step::Host;
@@ -781,6 +784,7 @@ void App::frame() {
     }
     paletteDraw();
     settingsDraw();
+    changesDraw();
     if (switchProjectTo >= 0) {
         newThread(std::exchange(switchProjectTo, -1));
     }

@@ -125,6 +125,67 @@ bool App::toolGroupRow(Thread& t, size_t from, size_t to, float width, bool show
     return clicked;
 }
 
+// a file's diff in a dark box: its name (true when clicked), +added -removed, then the lines
+// tinted. at most maxHeight tall (0: fills the room), scrolling inside
+bool App::diffBlock(const std::string& path, int added, int removed, const std::vector<Diff::Line>& lines, float maxHeight) {
+    const auto& colors = Theme::Current()->colors;
+    bool clicked = false;
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, colors.crust);
+    ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 0));
+    const float lineHeight = ImGui::GetTextLineHeight() + 4;
+    const float height = maxHeight > 0 ? std::min(maxHeight, lineHeight * static_cast<float>(lines.size() + 1) + 20) + 16 : 0;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 8));
+    ImGui::BeginChild("change", ImVec2(0, height), ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding,
+                      ImGuiWindowFlags_HorizontalScrollbar);
+    ImGui::PopStyleVar();
+    // the file: click to read it in the viewer
+    const std::string label = std::string(ICON_FA_FILE "  ") + path;
+    ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
+    clicked = ImGui::Selectable(label.c_str(), false, 0, ImGui::CalcTextSize(label.c_str()));
+    ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    }
+    if (added >= 0) {
+        ImGui::SameLine();
+        ImGui::TextColored(colors.green, "+%d", added);
+        ImGui::SameLine();
+        ImGui::TextColored(colors.red, "-%d", removed);
+    }
+    ImGui::Dummy(ImVec2(0, 4));
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    const float width = std::max(ImGui::GetContentRegionAvail().x, 2000.0f);
+    // only the lines in view are drawn: a long diff stays cheap
+    ImGuiListClipper clipper;
+    clipper.Begin(static_cast<int>(lines.size()), lineHeight);
+    while (clipper.Step()) {
+        for (int k = clipper.DisplayStart; k < clipper.DisplayEnd; ++k) {
+            const Diff::Line& line = lines[static_cast<size_t>(k)];
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            if (line.kind == '+' || line.kind == '-') {
+                ImVec4 tint = line.kind == '+' ? colors.green : colors.red;
+                tint.w = 0.14f;
+                draw->AddRectFilled(at, ImVec2(at.x + width, at.y + lineHeight), ImGui::GetColorU32(tint));
+            }
+            ImGui::SetCursorScreenPos(ImVec2(at.x + 4, at.y + 2));
+            if (line.kind == '~') {
+                ImGui::TextColored(colors.overlay0, "...");
+            } else {
+                ImGui::TextColored(line.kind == '+' ? colors.green : line.kind == '-' ? colors.red : colors.subtext0,
+                                   "%c %s", line.kind, line.text.c_str());
+            }
+            ImGui::SetCursorScreenPos(ImVec2(at.x, at.y + lineHeight));
+            ImGui::Dummy(ImVec2(0, 0)); // imgui wants an item after a cursor move
+        }
+    }
+    ImGui::EndChild();
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
+    return clicked;
+}
+
 void App::transcriptItem(Thread& t, Item& it, int index, float width) {
     const auto& colors = Theme::Current()->colors;
     ImGui::PushID(index);
@@ -214,58 +275,9 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         for (size_t c = 0; c < it.changes.size(); ++c) {
             const Item::Change& change = it.changes[c];
             ImGui::PushID(static_cast<int>(c));
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, colors.crust);
-            ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
-            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6);
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 0));
-            const float lineHeight = ImGui::GetTextLineHeight() + 4;
-            const float height = std::min(320.0f, lineHeight * static_cast<float>(change.lines.size() + 1) + 20);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 8));
-            ImGui::BeginChild("change", ImVec2(0, height + 16),
-                              ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding,
-                              ImGuiWindowFlags_HorizontalScrollbar);
-            ImGui::PopStyleVar();
-            // the file, then how much was added and removed
-            // the file: click to read it in the viewer
-            ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
-            if (ImGui::Selectable((std::string(ICON_FA_FILE "  ") + change.path).c_str(), false, 0,
-                                  ImGui::CalcTextSize((std::string(ICON_FA_FILE "  ") + change.path).c_str())) &&
-                !change.path.starts_with("/")) {
+            if (diffBlock(change.path, change.added, change.removed, change.lines, 320) && !change.path.starts_with("/")) {
                 showFile(change.path);
             }
-            ImGui::PopStyleColor();
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-            }
-            ImGui::SameLine();
-            ImGui::TextColored(colors.green, "+%d", change.added);
-            ImGui::SameLine();
-            ImGui::TextColored(colors.red, "-%d", change.removed);
-            ImGui::Dummy(ImVec2(0, 4));
-            ImDrawList* draw = ImGui::GetWindowDrawList();
-            const float width = std::max(ImGui::GetContentRegionAvail().x, 2000.0f);
-            for (const auto& line : change.lines) {
-                const ImVec2 at = ImGui::GetCursorScreenPos();
-                if (line.kind == '+' || line.kind == '-') {
-                    ImVec4 tint = line.kind == '+' ? colors.green : colors.red;
-                    tint.w = 0.14f;
-                    draw->AddRectFilled(at, ImVec2(at.x + width, at.y + lineHeight), ImGui::GetColorU32(tint));
-                }
-                ImGui::SetCursorScreenPos(ImVec2(at.x + 4, at.y + 2));
-                if (line.kind == '~') {
-                    ImGui::TextColored(colors.overlay0, "...");
-                } else {
-                    ImGui::TextColored(line.kind == '+'   ? colors.green
-                                       : line.kind == '-' ? colors.red
-                                                          : colors.subtext0,
-                                       "%c %s", line.kind, line.text.c_str());
-                }
-                ImGui::SetCursorScreenPos(ImVec2(at.x, at.y + lineHeight));
-                ImGui::Dummy(ImVec2(0, 0)); // imgui wants an item after a cursor move
-            }
-            ImGui::EndChild();
-            ImGui::PopStyleVar(2);
-            ImGui::PopStyleColor(2);
             ImGui::PopID();
         }
         break;
@@ -805,8 +817,18 @@ void App::statusLine(Thread& t, float left) {
         ImGui::AlignTextToFramePadding();
         ImGui::TextColored(colors.subtext0, ICON_FA_CODE_BRANCH "  %s", git.branch.c_str());
         if (git.changed > 0) {
+            // click: what changed, file by file
             ImGui::SameLine(0, 10);
-            ImGui::TextColored(colors.yellow, "%d changed", git.changed);
+            ImGui::PushStyleColor(ImGuiCol_Text, colors.yellow);
+            if (ImGui::Selectable(std::format("{} changed##changes", git.changed).c_str(), false, 0,
+                                  ImGui::CalcTextSize(std::format("{} changed", git.changed).c_str()))) {
+                changesOpen(t);
+            }
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                ImGui::SetTooltip("See what changed");
+            }
         }
         // before the first message: work in this checkout, or in a worktree of its own
         if (t.items.empty() && t.root.empty()) {
