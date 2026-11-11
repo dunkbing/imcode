@@ -50,6 +50,9 @@ public:
     std::vector<Item> items;
     std::vector<std::string> queue; // sent one by one as turns end
     std::vector<acp::ConfigOption> config; // model, mode, ... as the agent offers them
+    // other conversations the agent holds for this folder (started elsewhere, e.g. in a
+    // terminal); asked once when the session opens. taken by the app, which lists them
+    std::vector<acp::SessionInfo> found;
 
     // the project this belongs to: its folder, also when the work happens in a worktree
     [[nodiscard]] const std::string& projectDir() const {

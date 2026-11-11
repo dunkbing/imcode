@@ -65,7 +65,7 @@ The agent runs on the remote machine in the remote folder; nothing is installed 
 - [x] Built-in ssh (libssh2), one connection per host: the ssh agent, `~/.ssh/config`, default keys, a password or passphrase; new host keys are remembered, a changed one is refused
 - [x] Open folder: pick a host (from `~/.ssh/config` or typed), then browse its folders
 - [x] A thread in a remote folder: the agent runs there with the login shell's `PATH`
-- [ ] Existing sessions of a host and folder (`session/list`): continue what was started in a terminal
+- [x] Existing sessions of a host and folder (`session/list`) appear as threads: continue what was started in a terminal
 - [ ] Sign in to an agent on the remote (a terminal over ssh)
 - [ ] Reconnect with resume after a drop or sleep, without freezing the window
 - [ ] Install an agent on the remote (bun or a registry binary) from the app

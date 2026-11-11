@@ -249,6 +249,7 @@ void Thread::poll() {
                 sessionId = id;
                 changed_ = true;
             }
+            acp_->listSessions();
             if (!heldUser_.empty()) {
                 add({.kind = Item::Kind::User, .text = std::exchange(heldUser_, {})});
             }
@@ -345,6 +346,9 @@ void Thread::poll() {
             }
             add({.kind = Item::Kind::Info, .text = "Agent exited. The next message restarts it."});
             gone = true;
+            break;
+        case AcpEvent::Type::Sessions:
+            found = std::move(ev.sessions);
             break;
         case AcpEvent::Type::ConfigOptions:
             config = std::move(ev.configOptions);

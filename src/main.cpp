@@ -22,6 +22,8 @@
 #include <cstdlib>
 #include <ctime>
 #include <format>
+#include <iomanip>
+#include <sstream>
 
 namespace Theme = imshell::Theme;
 namespace ui = imshell::ui;
@@ -342,11 +344,20 @@ void App::hostLoop() {
     std::unique_lock lock(hostMutex);
     while (!hostStop) {
         bool changed = false;
+        // sessions an agent reported for its folder, and the thread that asked
+        std::vector<acp::SessionInfo> fresh;
+        const Thread* from = nullptr;
         const bool watched = nowMs() - lastFrameMs < 1500;
         std::map<const Thread*, Seen> now;
         for (auto& t : data.threads) {
             t->poll(); // every thread, shown or not
             changed |= t->takeChanged();
+            fresh.insert(fresh.end(), std::make_move_iterator(t->found.begin()),
+                         std::make_move_iterator(t->found.end()));
+            if (!t->found.empty()) {
+                from = t.get();
+                t->found.clear();
+            }
             const Seen state{t->busy(), t->needsAnswer()};
             const auto before = seen.find(t.get());
             // tell the user what they did not see happen
@@ -360,6 +371,28 @@ void App::hostLoop() {
             now[t.get()] = state;
         }
         seen = std::move(now);
+        // each one not listed yet becomes a thread of the same project and agent: what was
+        // started in a terminal can be continued here
+        for (const auto& session : from ? fresh : std::vector<acp::SessionInfo>{}) {
+            const bool have = std::ranges::any_of(data.threads, [&](const auto& t) {
+                return t->sessionId == session.sessionId;
+            });
+            if (have || session.sessionId.empty() || session.title.empty()) {
+                continue;
+            }
+            auto thread = std::make_unique<Thread>(from->cwd, from->agentId, from->host);
+            thread->root = from->root;
+            thread->title = session.title.substr(0, 80);
+            thread->sessionId = session.sessionId;
+            // "2026-11-11T02:07:30.123Z": to the second is enough to sort by
+            std::tm when{};
+            std::istringstream stamp(session.updatedAt);
+            if (stamp >> std::get_time(&when, "%Y-%m-%dT%H:%M:%S")) {
+                thread->updatedAt = timegm(&when);
+            }
+            data.threads.push_back(std::move(thread));
+            changed = true;
+        }
         if (changed) {
             save();
             imshell::requestFrames();
