@@ -49,6 +49,9 @@ bool Thread::ensureStarted() {
     const AcpAgentDef* def = AcpAgents::find(agentId);
     // tests: IMCODE_AGENT_CMD=<binary> stands in for the picked agent (acp-echo-agent)
     const char* testCmd = std::getenv("IMCODE_AGENT_CMD");
+    if (testCmd && !*testCmd) {
+        testCmd = nullptr;
+    }
     std::string error;
     std::string command;                          // remote
     std::optional<std::vector<std::string>> argv; // local

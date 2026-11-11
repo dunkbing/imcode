@@ -6,6 +6,7 @@
 #include "mydear/themes.hpp"
 #include <algorithm>
 #include <format>
+#include <functional>
 #include <optional>
 
 namespace Theme = mydear::Theme;
@@ -35,7 +36,35 @@ namespace {
         return value;
     }
 
-    // one setting as a list; true when a choice was clicked
+    // a row of a picker list: padded, the whole row lit when chosen, a check at its right.
+    // lead draws what goes before the label (an icon)
+    bool pickRow(const std::string& id, const std::string& label, bool chosen,
+                 const std::function<void()>& lead = nullptr) {
+        const auto& colors = Theme::Current()->colors;
+        const float line = ImGui::GetTextLineHeight();
+        const float height = line + 8;
+        const ImVec2 at = ImGui::GetCursorPos();
+        const float width = ImGui::GetContentRegionAvail().x;
+        const bool clicked = ImGui::Selectable(("##" + id).c_str(), chosen,
+                                               ImGuiSelectableFlags_DontClosePopups, ImVec2(0, height));
+        const ImVec2 next = ImGui::GetCursorPos();
+        ImGui::SetCursorPos(ImVec2(at.x + 8, at.y + 4));
+        if (lead) {
+            lead();
+            ImGui::SameLine(0, 8);
+        }
+        ImGui::TextUnformatted(label.c_str());
+        if (chosen) {
+            ImGui::SetCursorPos(ImVec2(at.x + width - 24, at.y + 4));
+            ImGui::TextColored(colors.blue, ICON_FA_CHECK);
+        }
+        // imgui wants an item after a cursor move; placed so it adds no second row gap
+        ImGui::SetCursorPos(ImVec2(next.x, next.y - ImGui::GetStyle().ItemSpacing.y));
+        ImGui::Dummy(ImVec2(0, 0));
+        return clicked;
+    }
+
+    // one setting as a list
     void choices(Thread& t, const acp::ConfigOption& option, const char* filter = "") {
         const std::string value = option.currentValue.get<std::string>();
         for (const auto& choice : option.options) {
@@ -46,11 +75,7 @@ namespace {
             if (filter[0] && found.empty()) {
                 continue;
             }
-            const bool current = choice.value == value;
-            if (ImGui::Selectable(
-                    std::format("{}{}##{}", choice.name, current ? "   " ICON_FA_CHECK : "", option.id)
-                        .c_str(),
-                    current, ImGuiSelectableFlags_DontClosePopups)) {
+            if (pickRow(option.id + "/" + choice.value, choice.name, choice.value == value)) {
                 t.setConfig(option.id, choice.value);
             }
         }
@@ -248,6 +273,7 @@ void App::composer(Thread& t, float width) {
                             ImGuiCond_Always, ImVec2(1, 1));
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
+    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, 6); // three lists side by side: thin bars
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12, 12));
     ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 12);
     const bool modelsOpen = ImGui::BeginPopup("models");
@@ -259,10 +285,8 @@ void App::composer(Thread& t, float width) {
         ImGui::BeginChild("agents", ImVec2(ImGui::GetContentRegionAvail().x * 0.27f, 300));
         ImGui::TextColored(colors.subtext0, "Agent");
         for (const AcpAgentDef* agent : agentsOn()) {
-            agentIcon(agent->id);
-            ImGui::SameLine(0, 8);
-            if (ImGui::Selectable(agent->name.c_str(), agent->id == t.agentId,
-                                  ImGuiSelectableFlags_DontClosePopups) &&
+            if (pickRow(agent->id, agent->name, agent->id == t.agentId,
+                        [&] { agentIcon(agent->id); }) &&
                 agent->id != t.agentId) {
                 switchAgentTo = agent->id; // a thread keeps its agent: this starts a new one
                 ImGui::CloseCurrentPopup();
@@ -294,6 +318,7 @@ void App::composer(Thread& t, float width) {
         ImGui::EndChild();
         ImGui::EndPopup();
     }
+    ImGui::PopStyleVar();
     ImGui::PopStyleColor();
     ImGui::SameLine();
     // send (or stop): a filled circle, lit when there is something to send
