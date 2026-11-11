@@ -33,6 +33,8 @@ namespace Ssh {
         std::vector<Entry> list(const std::string& path, std::string& error);
         // the first `cap` bytes of a file
         std::string read(const std::string& path, size_t cap, std::string& error);
+        // a file with these bytes, replacing one of that name; its folder is made (one level)
+        bool write(const std::string& path, const std::string& bytes, std::string& error);
         // runs command; its stdin and stdout are the transport, stderr goes to onStderr
         std::unique_ptr<acp::Transport> exec(const std::string& command,
                                              std::function<void(const std::string&)> onStderr,

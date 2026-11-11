@@ -1,5 +1,6 @@
 #include "app.hpp"
 
+#include "clipboard.hpp"
 #include "imshell/markdown.hpp"
 #include "imshell/button.hpp"
 #include "imshell/file_dialog.hpp"
@@ -317,6 +318,17 @@ void App::composer(Thread& t, float width) {
     ImGui::PushStyleColor(ImGuiCol_NavCursor, ImVec4(0, 0, 0, 0));
     const ImVec2 inputAt = ImGui::GetCursorPos();
     const ImVec2 boxAt = ImGui::GetWindowPos();
+    // paste: a picture or copied files on the clipboard become attachments. the field would
+    // also paste a copied file's name as text: its text is put back
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
+        ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_V)) {
+        const auto pasted = clipboardFiles(std::filesystem::temp_directory_path() / "imcode-pasted",
+                                           std::getenv("IMCODE_PASTEBOARD")); // a named one: ui checks
+        if (!pasted.empty()) {
+            attachments.insert(attachments.end(), pasted.begin(), pasted.end());
+            picker.replace = std::string(input);
+        }
+    }
     bool send = ImGui::InputTextMultiline(
         "##input", input, sizeof(input), ImVec2(-FLT_MIN, inputHeight),
         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CtrlEnterForNewLine |

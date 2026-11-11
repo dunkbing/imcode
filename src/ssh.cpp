@@ -663,6 +663,35 @@ namespace Ssh {
         return out;
     }
 
+    bool Session::write(const std::string& path, const std::string& bytes, std::string& error) {
+        LIBSSH2_SFTP* s = sftp(*impl, error);
+        if (!s) {
+            return false;
+        }
+        const std::string dir = path.substr(0, path.find_last_of('/'));
+        retry(*impl, [&] { return static_cast<long>(libssh2_sftp_mkdir(s, dir.c_str(), 0700)); }); // there already: fine
+        LIBSSH2_SFTP_HANDLE* file = retry(*impl, [&] {
+            return libssh2_sftp_open(s, path.c_str(), LIBSSH2_FXF_WRITE | LIBSSH2_FXF_CREAT | LIBSSH2_FXF_TRUNC, 0600);
+        });
+        if (!file) {
+            error = "Could not write " + path;
+            return false;
+        }
+        size_t sent = 0;
+        while (sent < bytes.size()) {
+            const long n = retry(*impl, [&] {
+                return static_cast<long>(libssh2_sftp_write(file, bytes.data() + sent, bytes.size() - sent));
+            });
+            if (n <= 0) {
+                error = "Could not write " + path;
+                break;
+            }
+            sent += static_cast<size_t>(n);
+        }
+        retry(*impl, [&] { return static_cast<long>(libssh2_sftp_close(file)); });
+        return sent == bytes.size();
+    }
+
     std::unique_ptr<acp::Transport> Session::exec(const std::string& command,
                                                   std::function<void(const std::string&)> onStderr,
                                                   std::string& error) {

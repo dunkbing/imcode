@@ -230,9 +230,27 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
         } else if (host.empty()) {
             blocks.push_back(acp::resourceLinkBlock("file://" + file, path.filename().string()));
         } else {
-            add({.kind = Item::Kind::Info,
-                 .text = path.filename().string() + " was not attached: it is on this machine, the agent is on " + host + "."});
-            continue;
+            // the agent is on the host: the file goes there first, into a temp folder
+            // shortcut: blocks the ui while it uploads; files over 20 MB are refused
+            std::string failed;
+            if (std::filesystem::file_size(path, ec) > 20'000'000 || ec) {
+                failed = "over 20 MB";
+            } else {
+                std::ifstream in(path, std::ios::binary);
+                const std::string bytes((std::istreambuf_iterator<char>(in)), {});
+                const std::string remote = "/tmp/imcode-uploads/" + path.filename().string();
+                Ssh::Error sshError;
+                const auto session = Ssh::session(host, "", sshError);
+                if (!session) {
+                    failed = sshError.message;
+                } else if (session->write(remote, bytes, failed)) {
+                    blocks.push_back(acp::resourceLinkBlock("file://" + remote, path.filename().string()));
+                }
+            }
+            if (!failed.empty()) {
+                add({.kind = Item::Kind::Info, .text = path.filename().string() + " was not attached: " + failed + "."});
+                continue;
+            }
         }
         names.push_back(path.filename().string());
     }

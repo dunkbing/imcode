@@ -156,7 +156,14 @@ namespace {
         for (const Step& s : steps) {
             const int age = frame - s.frame;
             float x1 = 0, y1 = 0, x2 = 0, y2 = 0;
-            if (s.what == "type" && age == 0) {
+            if (s.what == "paste" && (age == 0 || age == 1)) { // cmd+v on a mac, ctrl+v elsewhere
+#if defined(__APPLE__)
+                io.AddKeyEvent(ImGuiMod_Super, age == 0); // the physical key: imgui maps it to ctrl
+#else
+                io.AddKeyEvent(ImGuiMod_Ctrl, age == 0);
+#endif
+                io.AddKeyEvent(ImGuiKey_V, age == 0);
+            } else if (s.what == "type" && age == 0) {
                 io.AddInputCharactersUTF8(s.args.c_str());
             } else if (s.what == "key" && (age == 0 || age == 1)) {
                 const ImGuiKey key = s.args == "enter"       ? ImGuiKey_Enter
