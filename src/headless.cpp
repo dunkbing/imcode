@@ -163,6 +163,8 @@ namespace {
                 io.AddKeyEvent(ImGuiMod_Ctrl, age == 0);
 #endif
                 io.AddKeyEvent(ImGuiKey_V, age == 0);
+            } else if (s.what == "move" && age == 0 && std::sscanf(s.args.c_str(), "%f %f", &x1, &y1) == 2) {
+                io.AddMousePosEvent(x1, y1); // a hover, nothing pressed
             } else if (s.what == "type" && age == 0) {
                 io.AddInputCharactersUTF8(s.args.c_str());
             } else if (s.what == "key" && (age == 0 || age == 1)) {

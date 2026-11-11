@@ -21,7 +21,8 @@ namespace Store {
         std::string theme = "tokyo-night"; // an imshell theme id
         // panel sizes as the user dragged them: the list's width, the chat's share beside the
         // files, the file tree's width, the chat's share above the terminal
-        float sidebarWidth = 264, filesSplit = 0.42f, treeWidth = 220, terminalSplit = 0.62f;
+        // pixels; 0: not sized yet (the panels share the room)
+        float sidebarWidth = 264, filesWidth = 0, treeWidth = 220, terminalHeight = 240;
         std::string lastSession;         // the thread that was open: opened again at launch
         // per agent, the model, mode, ... last picked: what its next new thread starts with
         std::map<std::string, std::map<std::string, std::string>> defaults;

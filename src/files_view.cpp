@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "imshell/resizable.hpp"
 
 #include "imshell/image.hpp"
 
@@ -374,30 +375,17 @@ void App::filesPoll() {
     }
 }
 
-bool App::filesPanel(Thread& t, float splitWidth) {
+bool App::filesPanel(Thread& t, bool beside) {
     Files& f = files;
     bool released = false;
     const auto& colors = Theme::Current()->colors;
-    const ImVec2 avail = ImGui::GetContentRegionAvail();
-    if (splitWidth > 0) {
-        // the chat keeps 420 (its status line fits), the files 360; the chat wins when both cannot
-        const float least = std::min(1.0f, 420 / splitWidth);
-        f.split = std::clamp(f.split + sideSplitter("##files-split", avail.y, true, &released) / splitWidth,
-                             least, std::max(least, 1 - 360 / splitWidth));
-    }
     ImGui::BeginChild("files");
     // no room for the file beside its tree: one at a time, as when the panel has the window
-    const bool alone = splitWidth <= 0 || ImGui::GetContentRegionAvail().x < 400;
+    const bool alone = !beside || ImGui::GetContentRegionAvail().x < 400;
     const bool showTree = !alone || f.treeOver || f.doc.path.empty();
     std::string opened;
 
-    if (!alone || !showTree) {
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 6));
-        const float room = ImGui::GetContentRegionAvail().x;
-        f.treeWidth = std::clamp(f.treeWidth, 140.0f, std::max(140.0f, room - 200));
-        ImGui::BeginChild("file", ImVec2(alone ? 0 : room - f.treeWidth - 5, 0),
-                          ImGuiChildFlags_AlwaysUseWindowPadding);
-        ImGui::PopStyleVar();
+    const auto fileView = [&] {
         if (f.doc.path.empty()) {
             ImGui::TextColored(colors.overlay1, "Pick a file in the tree to read it here.");
         } else {
@@ -447,15 +435,8 @@ bool App::filesPanel(Thread& t, float splitWidth) {
                 code(f);
             }
         }
-        ImGui::EndChild();
-        if (alone) {
-            ImGui::SameLine(0, 0);
-        } else {
-            f.treeWidth -= sideSplitter("##tree-split", ImGui::GetContentRegionAvail().y, false, &released);
-        }
-    }
-    if (showTree) {
-        ImGui::BeginChild("tree", ImVec2(0, 0), ImGuiChildFlags_Borders);
+    };
+    const auto treeView = [&] {
         ImGui::SetNextItemWidth(-FLT_MIN);
         ImGui::InputTextWithHint("##filter", ICON_FA_MAGNIFYING_GLASS "  Search files", f.filter,
                                  sizeof(f.filter));
@@ -467,6 +448,31 @@ bool App::filesPanel(Thread& t, float splitWidth) {
             tree(f, "", 0, opened);
         }
         ImGui::EndChild();
+    };
+    if (!alone) {
+        if (imshell::BeginResizable("split", {.line = ImGui::GetColorU32(colors.surface1),
+                                              .lit = ImGui::GetColorU32(colors.blue)})) {
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 6));
+            const bool file = imshell::ResizablePanel({.min = 200, .childFlags = ImGuiChildFlags_AlwaysUseWindowPadding});
+            ImGui::PopStyleVar();
+            if (file) {
+                fileView();
+            }
+            if (imshell::ResizablePanel({.size = &f.treeWidth, .min = 140, .fixed = true,
+                                         .childFlags = ImGuiChildFlags_Borders})) {
+                treeView();
+            }
+            released |= imshell::EndResizable();
+        }
+    } else if (showTree) {
+        ImGui::BeginChild("tree", ImVec2(0, 0), ImGuiChildFlags_Borders);
+        treeView();
+        ImGui::EndChild();
+    } else {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 6));
+        ImGui::BeginChild("file", ImVec2(0, 0), ImGuiChildFlags_AlwaysUseWindowPadding);
+        ImGui::PopStyleVar();
+        fileView();
         ImGui::EndChild();
     }
     ImGui::EndChild();
