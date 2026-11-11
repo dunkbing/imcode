@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "ssh.hpp"
 
 #include "imshell/button.hpp"
 #include "imshell/components.hpp"
@@ -215,8 +216,22 @@ void App::sidebar() {
         ImGui::PushStyleColor(ImGuiCol_Text, colors.overlay1);
         agentIcon(t.agentId, 13);
         ImGui::SameLine(0, 6);
-        ImGui::Text("%s%s%s", def ? def->name.c_str() : t.agentId.c_str(),
-                    t.host.empty() ? "" : "  on ", t.host.c_str());
+        ImGui::TextUnformatted(def ? def->name.c_str() : t.agentId.c_str());
+        if (!t.host.empty()) {
+            // the host, with a dot: green while the app holds a connection to it
+            ImGui::SameLine(0, 8);
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            const float r = 3;
+            const bool live = Ssh::connected(t.host);
+            ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(at.x + r, at.y + ImGui::GetTextLineHeight() * 0.5f), r,
+                                                        ImGui::GetColorU32(live ? colors.green : colors.surface2));
+            ImGui::Dummy(ImVec2(2 * r, 0));
+            ImGui::SameLine(0, 5);
+            ImGui::TextUnformatted(t.host.c_str());
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip(live ? "Connected to %s" : "Not connected to %s: opening the thread connects", t.host.c_str());
+            }
+        }
         ImGui::PopStyleColor();
         if (t.needsAnswer() || t.busy()) {
             ImGui::SameLine();

@@ -73,7 +73,7 @@ The agent runs on the remote machine in the remote folder; nothing is installed 
 - [ ] Runs that survive a disconnect: a small host process on the remote (phase 3) that the app installs and attaches to
 - [ ] Host picker on a new thread; cycle hosts with a key
 - [ ] Add a project that exists on one host to another host
-- [ ] Saved hosts with a name and icon; a status dot and a connection diagnosis
+- [~] A status dot for each host, in the host list and on remote threads (done); saved hosts with a name and icon; a connection diagnosis
 - [ ] A remote local server opened in the browser panel through a forward
 
 ## 3. Host and sync

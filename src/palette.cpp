@@ -14,6 +14,7 @@ namespace fs = std::filesystem;
 namespace {
     struct Row {
         std::string icon, title, detail;
+        bool live = false; // a host the app holds a connection to: a green dot
     };
 
     bool matches(const std::string& text, const std::string& query) {
@@ -196,7 +197,13 @@ void App::paletteDraw() {
         }
         for (const auto& name : known) {
             if (matches(name, p.query)) {
-                rows.push_back({ICON_FA_SERVER, name, ""});
+                const auto there = std::ranges::count(data.projects, name, &Store::Project::host);
+                const bool live = Ssh::connected(name);
+                std::string detail = live ? "Connected" : "";
+                if (there > 0) {
+                    detail += (detail.empty() ? "" : "  ·  ") + std::to_string(there) + (there == 1 ? " project" : " projects");
+                }
+                rows.push_back({ICON_FA_SERVER, name, detail, live});
             }
         }
     } else {
@@ -308,6 +315,12 @@ void App::paletteDraw() {
         ImGui::TextUnformatted(rows[i].icon.c_str());
         ImGui::SameLine(at.x + 10 + 30);
         ImGui::TextUnformatted(rows[i].title.c_str());
+        if (rows[i].live) {
+            const ImVec2 end = ImGui::GetItemRectMax();
+            const float r = 3.5f;
+            ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(end.x + 10 + r, end.y - ImGui::GetTextLineHeight() * 0.5f), r,
+                                                        ImGui::GetColorU32(colors.green));
+        }
         if (!rows[i].detail.empty()) {
             ImGui::SetCursorPosX(at.x + 10 + 30);
             ImGui::TextColored(colors.overlay1, "%s", rows[i].detail.c_str());
