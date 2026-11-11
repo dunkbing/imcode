@@ -481,6 +481,31 @@ void Thread::follow() {
     }
 }
 
+void Thread::noticeElsewhere() {
+    if (!acp_ || !acp_->isSessionReady() || watching_ || !host.empty() || busy() || sessionId.empty() ||
+        nowMs() - idleCheckMs_ < 1000) {
+        return;
+    }
+    idleCheckMs_ = nowMs();
+    const std::string path = History::transcript(agentId, cwd, sessionId);
+    std::error_code ec;
+    const auto size = path.empty() ? 0 : static_cast<size_t>(std::filesystem::file_size(path, ec));
+    if (path.empty() || ec) {
+        return;
+    }
+    // the agent may still write a line or two just after its turn: a few seconds' grace
+    if (idleSize_ == 0 || nowMs() - idleSinceMs_ < 5000) {
+        idleSize_ = size;
+        return;
+    }
+    if (size > idleSize_) { // written, and not by this app: follow it there, read only
+        acp_.reset();
+        replaying_ = false;
+        idleSize_ = 0;
+        watch();
+    }
+}
+
 void Thread::poll() {
     connectOp_.check([this](std::string error) {
         const std::string text = std::exchange(heldPrompt_, {});
@@ -509,6 +534,8 @@ void Thread::poll() {
     for (auto& ev : acp_->drainEvents()) {
         switch (ev.type) {
         case AcpEvent::Type::SessionReady:
+            idleSize_ = 0; // measured again once it has been idle a moment
+            idleSinceMs_ = nowMs();
             replaying_ = false;
             queued_ = false;
             if (const std::string id = acp_->sessionId(); id != sessionId) {
@@ -587,6 +614,8 @@ void Thread::poll() {
             break;
         }
         case AcpEvent::Type::TurnEnded:
+            idleSize_ = 0;
+            idleSinceMs_ = nowMs();
             updatedAt = std::time(nullptr);
             changed_ = true;
             // a stop keeps the queue for the user to decide, unless it was made for "send now"
@@ -687,4 +716,5 @@ void Thread::poll() {
         }
     }
     follow();
+    noticeElsewhere();
 }

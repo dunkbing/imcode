@@ -153,6 +153,10 @@ private:
     long long watchCheckMs_ = 0;
     bool watch(); // start following the transcript; false when there is none
     void follow(); // what the followed transcript gained since the last look
+    // while this app's agent sits idle: the transcript growing means another client writes it
+    size_t idleSize_ = 0;
+    long long idleSinceMs_ = 0, idleCheckMs_ = 0;
+    void noticeElsewhere();
     std::vector<std::string> heldFiles_;
     bool changed_ = false;
     int revision_ = 0;
