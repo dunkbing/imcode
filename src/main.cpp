@@ -773,7 +773,7 @@ void App::frame() {
                          {"Rename the function", "medium", "in_progress", {}},
                          {"Run the tests", "medium", "pending", {}}};
             t.items.push_back(plan);
-            t.items.push_back({.kind = Item::Kind::Tool, .toolId = "1", .toolTitle = "grep -rn loadConfig src",
+            t.items.push_back({.kind = Item::Kind::Tool, .toolId = "1", .toolTitle = "grep -rn loadConfig src /private/tmp/claude-501/-Users-dunkbing-code-dunkbing-t3cpp/8eee8e67-f825-496c-a55d-f9af24913174/scratchpad/a-long-folder/and-more",
                                .toolStatus = "completed", .toolOutput = "src/a.cpp:12\nsrc/b.cpp:40"});
             // what the turn changed (trees made up: the dialog shows nothing for them)
             t.items.push_back({.kind = Item::Kind::TurnChanges, .filesChanged = 3, .linesAdded = 24, .linesRemoved = 9});

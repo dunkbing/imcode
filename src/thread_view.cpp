@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "imgui_internal.h" // RenderArrow
 #include "text.hpp"
 
 #include "clipboard.hpp"
@@ -239,27 +240,51 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         ImGui::PopStyleColor();
         break;
     case Item::Kind::Tool: {
-        // taller than its text, so the hover band clears the badge
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 7));
-        const bool open = ImGui::TreeNodeEx(
-            "tool", ImGuiTreeNodeFlags_FramePadding | (it.toolOutput.empty() ? ImGuiTreeNodeFlags_Leaf : 0), "%s",
-            it.toolTitle.empty() ? "Tool" : it.toolTitle.c_str());
-        ImGui::PopStyleVar();
-        // what follows on the row sits at its top: moved down to the row's middle
-        const float rowTop = ImGui::GetItemRectMin().y, rowHeight = ImGui::GetItemRectSize().y;
-        const auto centred = [&](float height) {
-            ImGui::SameLine();
-            ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, rowTop + (rowHeight - height) * 0.5f));
-        };
-        centred(ImGui::GetTextLineHeight() + imshell::Theme::Spacing::XS * 2); // the badge's height
-        ui::Badge(it.toolStatus.empty()            ? "pending"
-                  : it.toolStatus == "in_progress" ? "running"
-                                                   : it.toolStatus.c_str(),
-                  it.toolStatus == "failed"      ? ui::Tone::Danger
-                  : it.toolStatus == "completed" ? ui::Tone::Success
-                                                 : ui::Tone::Info);
+        // the title wraps in the column: an arrow (when there is output to open), the title, its
+        // status and a button to open its file beside the first line
+        const char* status = it.toolStatus.empty()            ? "pending"
+                             : it.toolStatus == "in_progress" ? "running"
+                                                              : it.toolStatus.c_str();
+        const ui::Tone tone = it.toolStatus == "failed"      ? ui::Tone::Danger
+                              : it.toolStatus == "completed" ? ui::Tone::Success
+                                                             : ui::Tone::Info;
+        const std::string title = it.toolTitle.empty() ? "Tool" : it.toolTitle;
+        const bool canOpen = !it.toolOutput.empty();
+        const ImGuiID openId = ImGui::GetID("tool-open");
+        bool open = ImGui::GetStateStorage()->GetBool(openId, false);
+        const float line = ImGui::GetTextLineHeight();
+        const float pad = 7, arrow = 22;
+        const float badgeWidth = ImGui::CalcTextSize(status).x + 2 * imshell::Theme::Spacing::S + 8;
+        const float buttonWidth = it.toolPath.empty() ? 0 : ImGui::GetFrameHeight() + 4;
+        const float wrap = std::max(80.0f, ImGui::GetContentRegionAvail().x - arrow - badgeWidth - buttonWidth - 16);
+        const ImVec2 textSize = ImGui::CalcTextSize(title.c_str(), nullptr, false, wrap);
+        const ImVec2 top = ImGui::GetCursorScreenPos();
+        const float rowHeight = textSize.y + 2 * pad;
+        if (ImGui::InvisibleButton("tool", ImVec2(arrow + textSize.x + 8, rowHeight)) && canOpen) {
+            open = !open;
+            ImGui::GetStateStorage()->SetBool(openId, open);
+        }
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+        if (ImGui::IsItemHovered() && canOpen) {
+            draw->AddRectFilled(top, ImGui::GetItemRectMax(), ImGui::GetColorU32(colors.surface0), 6);
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        }
+        if (canOpen) {
+            ImGui::RenderArrow(draw, ImVec2(top.x + 6, top.y + pad + (line - ImGui::GetFontSize()) * 0.5f),
+                               ImGui::GetColorU32(colors.overlay1), open ? ImGuiDir_Down : ImGuiDir_Right, 0.7f);
+        }
+        draw->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(top.x + arrow, top.y + pad), ImGui::GetColorU32(colors.text),
+                      title.c_str(), nullptr, wrap);
+        // the badge and the button: right after a one-line title; at the column's right, level
+        // with the first line, when it wraps
+        const bool wrapped = textSize.y > line * 1.5f;
+        const float afterTitle = top.x + arrow + (wrapped ? wrap : textSize.x) + 10;
+        const float badgeHeight = line + imshell::Theme::Spacing::XS * 2;
+        ImGui::SetCursorScreenPos(ImVec2(afterTitle, top.y + pad + (line - badgeHeight) * 0.5f));
+        ui::Badge(status, tone);
         if (!it.toolPath.empty()) {
-            centred(rowHeight); // from the row's top: a small button already drops to the text's line
+            ImGui::SameLine();
+            ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, top.y + pad)); // a small button is a line tall
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
             ImGui::PushStyleColor(ImGuiCol_Text, colors.overlay1);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
@@ -272,14 +297,17 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
                 ImGui::SetTooltip("Open %s", it.toolPath.c_str());
             }
         }
+        ImGui::SetCursorScreenPos(ImVec2(top.x, top.y + rowHeight));
+        ImGui::Dummy(ImVec2(0, 0));
         if (open) {
             // an edit shows as its diff; the text only says "diff: <path>" then
             if (!it.toolOutput.empty() && it.changes.empty()) {
+                ImGui::Indent(arrow);
                 ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
                 ImGui::TextWrapped("%s", it.toolOutput.c_str());
                 ImGui::PopStyleColor();
+                ImGui::Unindent(arrow);
             }
-            ImGui::TreePop();
         }
         for (size_t c = 0; c < it.changes.size(); ++c) {
             const Item::Change& change = it.changes[c];
