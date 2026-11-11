@@ -23,6 +23,28 @@ int main(int argc, char** argv) {
     const bool ok = !t.busy() && t.title == "one two" && t.items.size() == 4 && t.items[2].text == "three" && t.items[3].text == "three " &&
                     t.items[0].kind == Item::Kind::User && t.items[0].text == "one two" &&
                     t.items[1].kind == Item::Kind::Assistant && t.items[1].text == "one two ";
+    // send now: the running turn is stopped and the picked message goes before the other
+    Thread u(".", "claude-code");
+    u.send("a b c d e f g h i j k l m n o p q r s t u v w x y z a b c d e f g h i j k l m n o p q r s t u v w x y z");
+    const auto wait = [&](auto done) {
+        const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (!done() && std::chrono::steady_clock::now() < until) {
+            u.poll();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    };
+    wait([&] { return u.items.size() >= 2; }); // the reply has begun
+    u.send("first");
+    u.send("second");
+    u.sendNow(1);
+    wait([&] { return !u.busy() && u.queue.empty(); });
+    u.poll();
+    const bool sentNow = u.items.size() == 6 && u.items[1].text.size() < 100 && // the long reply was cut short
+                         u.items[2].text == "second" && u.items[4].text == "first";
+    if (!sentNow) {
+        std::printf("FAILED: send now, items=%zu\n", u.items.size());
+        return 1;
+    }
     // the list survives a save and a load; the echo agent gave the session an id
     const auto file = std::filesystem::temp_directory_path() / "imcode-threads-test.json";
     Store::Data saved;

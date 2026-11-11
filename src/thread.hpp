@@ -77,6 +77,8 @@ public:
     // files: local paths. images go along as pictures, other files as links (not over ssh)
     void send(const std::string& text, const std::vector<std::string>& files = {});
     void cancel();
+    // a queued message goes ahead of the rest right away: the running turn is stopped for it
+    void sendNow(size_t queued);
     void setConfig(const std::string& id, const std::string& value);
     void answerPermission(Item& item, const AcpPermissionOption& option);
     void signIn(Item& item, const acp::AuthMethod& method);
@@ -108,6 +110,7 @@ private:
     // connected. what was sent meanwhile waits in heldPrompt_
     AcpHost::AsyncOp<std::string> connectOp_;
     std::string heldPrompt_;
+    bool sendNow_ = false; // the turn was stopped for a queued message: the queue moves on
     bool bunTried_ = false; // the managed bun was asked for once
     std::vector<std::string> heldFiles_;
     bool changed_ = false;

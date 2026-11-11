@@ -744,7 +744,7 @@ void App::threadView(Thread& t) {
     }
     ImGui::EndChild();
     // what waits for the running turn, each removable
-    int drop = -1;
+    int drop = -1, now = -1;
     for (size_t i = 0; i < t.queue.size(); ++i) {
         ImGui::SetCursorPosX(left + 8);
         ImGui::PushID(static_cast<int>(i));
@@ -753,6 +753,16 @@ void App::threadView(Thread& t) {
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
         if (ImGui::SmallButton(ICON_FA_XMARK)) {
             drop = static_cast<int>(i);
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Remove from the queue");
+        }
+        ImGui::SameLine(0, 2);
+        if (ImGui::SmallButton(ICON_FA_ARROW_UP)) {
+            now = static_cast<int>(i);
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Send now: stops the running turn");
         }
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(2);
@@ -763,6 +773,8 @@ void App::threadView(Thread& t) {
     }
     if (drop >= 0) {
         t.queue.erase(t.queue.begin() + drop);
+    } else if (now >= 0) {
+        t.sendNow(static_cast<size_t>(now));
     }
     attachedRows(left);
     ImGui::SetCursorPosX(left);

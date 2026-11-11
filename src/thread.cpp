@@ -274,6 +274,22 @@ void Thread::cancel() {
     }
 }
 
+void Thread::sendNow(size_t queued) {
+    if (queued >= queue.size()) {
+        return;
+    }
+    std::rotate(queue.begin(), queue.begin() + static_cast<std::ptrdiff_t>(queued),
+                queue.begin() + static_cast<std::ptrdiff_t>(queued) + 1);
+    if (busy()) {
+        sendNow_ = true; // sent when the stop comes back
+        cancel();
+    } else { // left over from a stop: nothing to wait for
+        const Queued waiting = queue.front();
+        queue.erase(queue.begin());
+        send(waiting.text, waiting.files);
+    }
+}
+
 void Thread::answerPermission(Item& item, const AcpPermissionOption& option) {
     if (acp_) {
         acp_->respondPermission(item.permission.rpcId, option.optionId);
@@ -454,7 +470,9 @@ void Thread::poll() {
         case AcpEvent::Type::TurnEnded:
             updatedAt = std::time(nullptr);
             changed_ = true;
-            next = ev.text != "cancelled"; // a stop keeps the queue for the user to decide
+            // a stop keeps the queue for the user to decide, unless it was made for "send now"
+            next = ev.text != "cancelled" || sendNow_;
+            sendNow_ = false;
             if (ev.text != "end_turn" && ev.text != "cancelled" && !ev.text.empty()) {
                 add({.kind = Item::Kind::Info, .text = "Turn stopped: " + ev.text});
             }
