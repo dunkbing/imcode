@@ -195,6 +195,15 @@ bool Thread::watch() {
     }
     items.clear();
     watchOffset_ = 0;
+    // a long conversation: its last few megabytes only (the first line read there is cut, and
+    // fails to parse). the rest is in the agent's own history
+    std::error_code ec;
+    const size_t size = static_cast<size_t>(std::filesystem::file_size(watchPath_, ec));
+    constexpr size_t tail = 4 * 1024 * 1024;
+    if (!ec && size > tail) {
+        watchOffset_ = size - tail;
+        add({.kind = Item::Kind::Info, .text = "A long conversation: its earlier messages are not shown here."});
+    }
     watchCheckMs_ = 0;
     watching_ = true;
     live_ = true;
@@ -476,8 +485,9 @@ void Thread::continueAfterTerminalSignIn(Item& item) {
 
 void Thread::follow() {
     // following another client's transcript: what it wrote since, twice a second
-    if (watching_ && nowMs() - watchCheckMs_ > 500) {
+    if (watching_ && (nowMs() - watchCheckMs_ > 500 || catchingUp_)) {
         watchCheckMs_ = nowMs();
+        const size_t before = watchOffset_;
         for (auto& e : History::readFrom(agentId, watchPath_, watchOffset_)) {
             add({.kind = e.kind == History::Entry::Kind::User        ? Item::Kind::User
                          : e.kind == History::Entry::Kind::Assistant ? Item::Kind::Assistant
@@ -487,6 +497,7 @@ void Thread::follow() {
                  .toolStatus = "completed"});
         }
         const bool live = History::quietFor(watchPath_) < quietSeconds;
+        catchingUp_ = watchOffset_ - before >= History::maxRead / 2; // more waiting: read again next poll
         // quiet there: the composer opens; written there again: read only again
         if (live != live_) {
             live_ = live;

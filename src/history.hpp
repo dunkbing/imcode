@@ -23,7 +23,9 @@ namespace History {
     };
     // the session's transcript file on this machine; empty when there is none
     std::string transcript(const std::string& agentId, const std::string& cwd, const std::string& sessionId);
-    // the entries in the complete lines from `offset`, which moves past them
+    // the entries in the complete lines from `offset`, which moves past them; at most maxRead
+    // bytes a call (a line longer than that is skipped)
+    inline constexpr size_t maxRead = 2 * 1024 * 1024;
     std::vector<Entry> readFrom(const std::string& agentId, const std::string& path, size_t& offset);
     // seconds since the file was last written; a large number when it is not there
     long long quietFor(const std::string& path);

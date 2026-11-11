@@ -116,12 +116,23 @@ namespace History {
 
     std::vector<Entry> readFrom(const std::string& agentId, const std::string& path, size_t& offset) {
         std::vector<Entry> out;
-        std::ifstream in(path, std::ios::binary);
+        // at most a few megabytes a call, read in one go: a long conversation (screenshots in
+        // it) runs to a hundred megabytes and is taken a piece at a time
+        std::ifstream in(path, std::ios::binary | std::ios::ate);
+        const auto size = static_cast<size_t>(std::max<std::streamoff>(0, in.tellg()));
+        if (offset >= size) {
+            return out;
+        }
+        std::string chunk(std::min(size - offset, maxRead), '\0');
         in.seekg(static_cast<std::streamoff>(offset));
-        std::string chunk((std::istreambuf_iterator<char>(in)), {});
+        in.read(chunk.data(), static_cast<std::streamsize>(chunk.size()));
+        chunk.resize(static_cast<size_t>(in.gcount()));
         // only complete lines: the writer may be in the middle of one
         const size_t end = chunk.rfind('\n');
         if (end == std::string::npos) {
+            if (chunk.size() == maxRead) {
+                offset += chunk.size(); // one enormous line (a picture): the rest of it fails to parse, and is left out
+            }
             return out;
         }
         offset += end + 1;

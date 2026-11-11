@@ -153,6 +153,7 @@ private:
     bool live_ = false;     // and it was written recently
     std::string watchPath_; // the transcript followed
     size_t watchOffset_ = 0;
+    bool catchingUp_ = false; // the last read was a full one: there is more
     long long watchCheckMs_ = 0;
     bool watch(); // start following the transcript; false when there is none
     void follow(); // what the followed transcript gained since the last look

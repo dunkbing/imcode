@@ -434,15 +434,19 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         bubbleMin = ImGui::GetItemRectMin();
         bubbleMax = ImGui::GetItemRectMax();
     }
-    // right-click a message: copy it as written (a reply as its markdown)
-    if (it.kind == Item::Kind::User || it.kind == Item::Kind::Assistant) {
+    // right-click a message: copy it as written (a reply as its markdown); a tool call: its
+    // title, and its output under it
+    if (it.kind == Item::Kind::User || it.kind == Item::Kind::Assistant || it.kind == Item::Kind::Tool) {
         if (ImGui::IsMouseReleased(ImGuiMouseButton_Right) && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) &&
             ImGui::IsMouseHoveringRect(bubbleMin, bubbleMax)) {
             ImGui::OpenPopup("message");
         }
         if (ImGui::BeginPopup("message")) {
             if (ImGui::MenuItem(ICON_FA_COPY "  Copy")) {
-                ImGui::SetClipboardText(it.text.c_str());
+                const std::string copied = it.kind != Item::Kind::Tool ? it.text
+                                           : it.toolOutput.empty()     ? it.toolTitle
+                                                                       : it.toolTitle + "\n\n" + it.toolOutput;
+                ImGui::SetClipboardText(copied.c_str());
                 ui::Toast("Copied", ui::Tone::Success, 2);
             }
             ImGui::EndPopup();
