@@ -126,10 +126,19 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         ImGui::PopStyleColor();
         break;
     case Item::Kind::Tool: {
-        const bool open =
-            ImGui::TreeNodeEx("tool", it.toolOutput.empty() ? ImGuiTreeNodeFlags_Leaf : 0, "%s",
-                              it.toolTitle.empty() ? "Tool" : it.toolTitle.c_str());
-        ImGui::SameLine();
+        // taller than its text, so the hover band clears the badge
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 7));
+        const bool open = ImGui::TreeNodeEx(
+            "tool", ImGuiTreeNodeFlags_FramePadding | (it.toolOutput.empty() ? ImGuiTreeNodeFlags_Leaf : 0), "%s",
+            it.toolTitle.empty() ? "Tool" : it.toolTitle.c_str());
+        ImGui::PopStyleVar();
+        // what follows on the row sits at its top: moved down to the row's middle
+        const float rowTop = ImGui::GetItemRectMin().y, rowHeight = ImGui::GetItemRectSize().y;
+        const auto centred = [&](float height) {
+            ImGui::SameLine();
+            ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, rowTop + (rowHeight - height) * 0.5f));
+        };
+        centred(ImGui::GetTextLineHeight() + imshell::Theme::Spacing::XS * 2); // the badge's height
         ui::Badge(it.toolStatus.empty()            ? "pending"
                   : it.toolStatus == "in_progress" ? "running"
                                                    : it.toolStatus.c_str(),
@@ -137,7 +146,7 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
                   : it.toolStatus == "completed" ? ui::Tone::Success
                                                  : ui::Tone::Info);
         if (!it.toolPath.empty()) {
-            ImGui::SameLine();
+            centred(rowHeight); // from the row's top: a small button already drops to the text's line
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
             ImGui::PushStyleColor(ImGuiCol_Text, colors.overlay1);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
