@@ -2,10 +2,12 @@
 
 #include "acp_host/agents.hpp"
 #include "acp_host/process_runner.hpp"
+#include "git_local.hpp"
 #include "ssh.hpp"
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstdlib>
 
 namespace Git {
 
@@ -35,14 +37,7 @@ namespace Git {
 
     Status status(const std::string& host, const std::string& cwd) {
         if (host.empty()) {
-            const auto git = AcpAgents::locateExecutable("git");
-            if (!git) {
-                return {};
-            }
-            const ProcessResult res = ProcessRunner::run(
-                {.args = {*git, "-C", cwd, "status", "--porcelain=v1", "-b"},
-                 .timeout = std::chrono::seconds(10)});
-            return res.success ? parse(res.output) : Status{};
+            return Local::status(cwd).value_or(Status{});
         }
         Ssh::Error sshError;
         const auto session = Ssh::session(host, "", sshError);
@@ -205,22 +200,29 @@ namespace Git {
 
     std::vector<Change> changes(const std::string& host, const std::string& cwd, const std::string& from,
                                 const std::string& to) {
+        if (host.empty()) {
+            return Local::changes(cwd, from, to).value_or(std::vector<Change>{});
+        }
         // both in one run, split by a marker line
         const std::string range = quote(from) + " " + quote(to);
         const std::string out = run(host, from.empty() ? "cd " + quote(cwd) + " && git status --porcelain=v1 -uall && echo __imcode__ && "
                                                                        "git diff HEAD --numstat 2>/dev/null"
                                                      : "cd " + quote(cwd) + " && git diff --name-status " + range +
                                                            " && echo __imcode__ && git diff --numstat " + range);
-        const size_t mark = out.find("__imcode__\n");
+        constexpr std::string_view marker = "__imcode__\n";
+        const size_t mark = out.find(marker);
         if (mark == std::string::npos) {
             return {};
         }
         const std::string_view status = std::string_view(out).substr(0, mark);
         return parseChanges(from.empty() ? std::string(status) : nameStatusToPorcelain(status),
-                            std::string_view(out).substr(mark + 10));
+                            std::string_view(out).substr(mark + marker.size()));
     }
 
     std::string snapshot(const std::string& host, const std::string& cwd) {
+        if (host.empty()) {
+            return Local::snapshot(cwd).value_or("");
+        }
         // a copy of the index takes every file, then becomes a tree; the real index is untouched
         std::string out = run(host, "cd " + quote(cwd) + " && idx=$(git rev-parse --git-path index) && t=$(mktemp) && "
                                     "{ cp \"$idx\" \"$t\" 2>/dev/null; GIT_INDEX_FILE=\"$t\" git add -A >/dev/null 2>&1 && "
@@ -235,6 +237,9 @@ namespace Git {
 
     std::vector<Diff::Line> fileDiff(const std::string& host, const std::string& cwd, const Change& change,
                                      const std::string& from, const std::string& to) {
+        if (host.empty()) {
+            return parseDiff(Local::fileDiff(cwd, change, from, to).value_or(""));
+        }
         // shortcut: one file's whole diff in memory; a huge one is cut at 4000 lines
         const std::string script =
             !from.empty()       ? "cd " + quote(cwd) + " && git diff " + quote(from) + " " + quote(to) + " -- " + quote(change.path) + " | head -4000"
@@ -245,18 +250,31 @@ namespace Git {
 
     bool commit(const std::string& host, const std::string& cwd, const std::string& message, bool push,
                 std::string& output) {
-        std::string script = "cd " + quote(cwd) + " && git add -A && git commit -q -m " + quote(message) + " 2>&1";
+        // here: committed through libgit2; the push stays on the git command, which has the
+        // user's credentials (helpers, ssh agent)
+        std::string script = "cd " + quote(cwd);
+        if (host.empty()) {
+            if (!Local::commit(cwd, message, output)) {
+                return false;
+            }
+            if (!push) {
+                return true;
+            }
+        } else {
+            script += " && git add -A && git commit -q -m " + quote(message) + " 2>&1";
+        }
         if (push) {
             // the first push of a branch sets where it goes
             script += " && { git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1 && git push -q 2>&1 || "
                       "git push -q -u origin HEAD 2>&1; }";
         }
-        output = run(host, script + " && echo __imcode_ok__");
+        constexpr std::string_view ok = "__imcode_ok__";
+        output = run(host, script + " && echo " + std::string(ok));
         while (!output.empty() && output.back() == '\n') {
             output.pop_back();
         }
-        if (output.ends_with("__imcode_ok__")) {
-            output.resize(output.size() - 12);
+        if (output.ends_with(ok)) {
+            output.resize(output.size() - ok.size());
             return true;
         }
         return false;
@@ -276,6 +294,11 @@ namespace Git {
     std::string addWorktree(const std::string& host, const std::string& repo, const std::string& name,
                             std::string& error) {
         const std::string repoName = repo.substr(repo.find_last_of('/') + 1);
+        if (host.empty()) {
+            const char* home = std::getenv("HOME");
+            const std::string folder = std::string(home ? home : "") + "/.imcode/worktrees/" + repoName + "/" + name;
+            return Local::addWorktree(repo, folder, "imcode/" + name, error);
+        }
         // one script for both: it prints the new folder on its last line
         const std::string script = "dir=\"$HOME/.imcode/worktrees/\"" + quote(repoName) + " && mkdir -p \"$dir\" && git -C " +
                                    quote(repo) + " worktree add -q -b " + quote("imcode/" + name) + " \"$dir\"/" +
@@ -294,6 +317,9 @@ namespace Git {
 
     bool removeWorktree(const std::string& host, const std::string& repo, const std::string& path,
                         std::string& error) {
+        if (host.empty()) {
+            return Local::removeWorktree(repo, path, error);
+        }
         std::string out =
             run(host, "git -C " + quote(repo) + " worktree remove " + quote(path) + " 2>&1 && echo imcode-removed");
         while (!out.empty() && out.back() == '\n') {

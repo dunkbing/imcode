@@ -77,7 +77,10 @@ int main() {
     const auto turn = Git::changes("", repo.string(), before, after);
     const auto turnNew = std::ranges::find(turn, std::string("turn.txt"), &Git::Change::path);
     const auto turnDiff = turnNew == turn.end() ? std::vector<Diff::Line>{} : Git::fileDiff("", repo.string(), *turnNew, before, after);
-    const bool indexUntouched = Git::changes("", repo.string()).size() == 3; // a.txt, b c.txt, turn.txt
+    const auto now = Git::changes("", repo.string());
+    const auto still = std::ranges::find(now, std::string("turn.txt"), &Git::Change::path);
+    // a.txt, b c.txt, turn.txt; and turn.txt still untracked: the snapshot did not stage it
+    const bool indexUntouched = now.size() == 3 && still != now.end() && still->kind == '?';
     if (before.size() < 40 || after == before || turn.size() != 2 || turnNew == turn.end() || turnNew->kind != 'A' ||
         turnDiff.size() != 1 || !indexUntouched) {
         std::printf("FAILED: turn %zu files, before %s after %s\n", turn.size(), before.c_str(), after.c_str());

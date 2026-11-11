@@ -7,6 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(libssh2 CONFIG REQUIRED)
 set(IMCODE_SSH $<IF:$<TARGET_EXISTS:libssh2::libssh2_shared>,libssh2::libssh2_shared,libssh2::libssh2_static>)
+# git for projects on this machine (remote ones run git on their host)
+find_package(libgit2 CONFIG REQUIRED)
+list(APPEND IMCODE_SSH libgit2::libgit2package)
 if(APPLE) # the keychain, for ssh passwords and passphrases
     list(APPEND IMCODE_SSH "-framework Security" "-framework CoreFoundation")
 endif()
@@ -48,7 +51,7 @@ imshell_embed_images(${CMAKE_CURRENT_SOURCE_DIR}/assets/images) # none yet: both
 
 add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sidebar.cpp src/thread_view.cpp
                src/notify.cpp src/headless.cpp
-               src/history.cpp src/diff.cpp src/git.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp src/keychain.cpp
+               src/history.cpp src/diff.cpp src/git.cpp src/git_local.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp src/keychain.cpp
                src/terminal.cpp src/terminal_view.cpp src/files_view.cpp src/changes_view.cpp src/syntax.cpp
                ${EMBEDDED_FONTS_FILE} ${EMBEDDED_IMAGES_FILE} ${IMGUI_CORE})
 # pictures and files from the clipboard: appkit on macos, nothing elsewhere yet
@@ -76,7 +79,7 @@ if(IMCODE_BUILD_TESTS)
         target_compile_features(imcode-keychain-test PRIVATE cxx_std_20)
         add_test(NAME imcode-keychain COMMAND imcode-keychain-test)
     endif()
-    add_executable(imcode-git-test tests/git_test.cpp src/git.cpp src/ssh.cpp src/ssh_config.cpp src/keychain.cpp)
+    add_executable(imcode-git-test tests/git_test.cpp src/git.cpp src/git_local.cpp src/ssh.cpp src/ssh_config.cpp src/keychain.cpp)
     target_link_libraries(imcode-git-test PRIVATE acp::host ${IMCODE_SSH})
     add_test(NAME imcode-git COMMAND imcode-git-test)
     if(APPLE)
@@ -91,10 +94,10 @@ if(IMCODE_BUILD_TESTS)
     add_executable(imcode-remote-test tests/remote_test.cpp src/remote.cpp)
     target_link_libraries(imcode-remote-test PRIVATE acp::host)
     add_test(NAME imcode-remote COMMAND imcode-remote-test)
-    add_executable(imcode-thread-test tests/thread_test.cpp src/diff.cpp src/git.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp src/keychain.cpp)
+    add_executable(imcode-thread-test tests/thread_test.cpp src/diff.cpp src/git.cpp src/git_local.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp src/keychain.cpp)
     target_link_libraries(imcode-thread-test PRIVATE acp::host ${IMCODE_SSH})
     # manual: a real ssh server is needed (see the file)
-    add_executable(imcode-ssh-check tests/ssh_check.cpp src/diff.cpp src/git.cpp src/thread.cpp src/remote.cpp src/ssh.cpp src/ssh_config.cpp src/keychain.cpp
+    add_executable(imcode-ssh-check tests/ssh_check.cpp src/diff.cpp src/git.cpp src/git_local.cpp src/thread.cpp src/remote.cpp src/ssh.cpp src/ssh_config.cpp src/keychain.cpp
                    src/terminal.cpp)
     target_link_libraries(imcode-ssh-check PRIVATE acp::host ${IMCODE_SSH} ghostty-vt-static)
     add_executable(imcode-terminal-test tests/terminal_test.cpp src/terminal.cpp)

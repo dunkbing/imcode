@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "git_local.hpp"
 #include "imshell/resizable.hpp"
 
 #include "imshell/image.hpp"
@@ -110,30 +111,12 @@ namespace {
     }
 
     // what git tracks or would track: the project's own ignore rules, for free. nullopt
-    // when the folder is not a repository or git is not there
+    // when the folder is not a repository (or, on a host, git is not there)
     std::optional<std::vector<std::string>> gitFiles(const std::string& host, const std::string& cwd) {
-        const std::vector<std::string> args = {"ls-files", "--cached", "--others", "--exclude-standard"};
-        std::vector<std::string> out;
-        if (host.empty()) {
-            const auto git = AcpAgents::locateExecutable("git");
-            if (!git) {
-                return std::nullopt;
-            }
-            std::vector<std::string> argv = {*git, "-C", cwd};
-            argv.insert(argv.end(), args.begin(), args.end());
-            const ProcessResult res = ProcessRunner::run({.args = argv, .timeout = std::chrono::seconds(15)});
-            if (!res.success) {
-                return std::nullopt;
-            }
-            for (size_t at = 0; at < res.output.size() && out.size() < maxIndexed;) {
-                const size_t end = std::min(res.output.find('\n', at), res.output.size());
-                if (end > at) {
-                    out.push_back(res.output.substr(at, end - at));
-                }
-                at = end + 1;
-            }
-            return out;
+        if (host.empty()) { // libgit2
+            return Git::Local::files(cwd, maxIndexed);
         }
+        std::vector<std::string> out;
         Ssh::Error sshError;
         const auto session = Ssh::session(host, "", sshError);
         std::string quoted = "'";
