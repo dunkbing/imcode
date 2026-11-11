@@ -2,6 +2,7 @@
 
 #include "acp_host/agents.hpp"
 #include "acp_host/client.hpp"
+#include "acp_host/host.hpp"
 #include "diff.hpp"
 #include <memory>
 #include <optional>
@@ -97,6 +98,10 @@ private:
     std::string heldUser_; // sent while history replays: shown after it, where it belongs
     bool replaying_ = false;
     bool queued_ = false; // a prompt waits for the session
+    // a remote host is reached off the ui thread: the result is the error, empty when
+    // connected. what was sent meanwhile waits in heldPrompt_
+    AcpHost::AsyncOp<std::string> connectOp_;
+    std::string heldPrompt_;
     bool changed_ = false;
     int revision_ = 0;
 };

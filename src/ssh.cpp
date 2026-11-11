@@ -728,6 +728,12 @@ namespace Ssh {
         return made;
     }
 
+    bool connected(const std::string& host) {
+        std::lock_guard lock(cacheMutex);
+        const auto it = cache.find(host);
+        return it != cache.end() && it->second->alive();
+    }
+
     std::vector<std::string> configHosts() {
         std::vector<std::string> out;
         const char* config = std::getenv("IMCODE_SSH_CONFIG");

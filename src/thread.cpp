@@ -40,11 +40,12 @@ Item* Thread::findTool(const std::string& id) {
 }
 
 bool Thread::starting() const {
-    return acp_ && acp_->isRunning() && !acp_->isSessionReady();
+    return connectOp_.isRunning() || (acp_ && acp_->isRunning() && !acp_->isSessionReady());
 }
 
 bool Thread::busy() const {
-    return acp_ && acp_->isRunning() && (acp_->isTurnActive() || (queued_ && starting()));
+    return (connectOp_.isRunning() && !heldPrompt_.empty()) ||
+           (acp_ && acp_->isRunning() && (acp_->isTurnActive() || (queued_ && starting())));
 }
 
 bool Thread::needsAnswer() const {
@@ -88,6 +89,16 @@ bool Thread::ensureStarted() {
         add({.kind = Item::Kind::Error, .text = error});
         return false;
     }
+    // the ssh handshake takes seconds: not on the ui thread. poll() comes back here
+    if (!host.empty() && !Ssh::connected(host)) {
+        if (!connectOp_.isRunning()) {
+            connectOp_.start([host = host] {
+                Ssh::Error sshError;
+                return Ssh::session(host, "", sshError) ? std::string() : sshError.message;
+            });
+        }
+        return false;
+    }
     // the agent replays the conversation it kept: ours would only double it
     replaying_ = !sessionId.empty();
     if (replaying_) {
@@ -95,8 +106,7 @@ bool Thread::ensureStarted() {
         ++revision_;
     }
     acp_ = std::make_unique<AcpClient>();
-    // shortcut: a reconnect to the host blocks the ui here; the open folder dialog has
-    // usually connected already, then this is one round trip
+    // the host is connected by now: opening the channel is one round trip
     const auto [ok, err] =
         host.empty() ? acp_->start(*argv, cwd, "", "", "", sessionId)
                      : acp_->startOver(
@@ -156,6 +166,9 @@ void Thread::send(const std::string& text) {
     updatedAt = std::time(nullptr);
     changed_ = true;
     if (!ensureStarted()) {
+        if (connectOp_.isRunning()) {
+            heldPrompt_ = text; // sent from poll() once the host answers
+        }
         return;
     }
     if (replaying_) {
@@ -254,6 +267,14 @@ void Thread::continueAfterTerminalSignIn(Item& item) {
 }
 
 void Thread::poll() {
+    connectOp_.check([this](std::string error) {
+        const std::string text = std::exchange(heldPrompt_, {});
+        if (!error.empty()) {
+            add({.kind = Item::Kind::Error, .text = error});
+        } else if (ensureStarted() && !text.empty()) {
+            send(text);
+        }
+    });
     if (!acp_) {
         return;
     }

@@ -67,7 +67,7 @@ The agent runs on the remote machine in the remote folder; nothing is installed 
 - [x] A thread in a remote folder: the agent runs there with the login shell's `PATH`
 - [x] Existing sessions of a host and folder (`session/list`) appear as threads: continue what was started in a terminal
 - [~] Sign in to an agent in the thread's own terminal, local or remote (done; not tried against a real sign-in)
-- [ ] Reconnect with resume after a drop or sleep, without freezing the window
+- [~] Reconnect with resume after a drop or sleep (done), the ssh handshake off the ui thread (done); making a worktree still blocks
 - [ ] Install an agent on the remote (bun or a registry binary) from the app
 - [ ] Passwords and passphrases in the system keychain; Windows sockets
 - [ ] Runs that survive a disconnect: a small host process on the remote (phase 3) that the app installs and attaches to

@@ -49,6 +49,8 @@ namespace Ssh {
     // is kept in memory for reconnects
     std::shared_ptr<Session> session(const std::string& host, const std::string& secret,
                                      Error& error);
+    // there is a live connection to host: session() will not block on the network
+    bool connected(const std::string& host);
 
     // Host names of ~/.ssh/config
     std::vector<std::string> configHosts();
