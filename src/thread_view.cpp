@@ -163,7 +163,8 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
                 ImGui::SameLine(0, Theme::Spacing::S);
             }
             if (mydear::SmallButton(std::format("{}##a{}", it.authMethods[i].name, i).c_str(),
-                                    mydear::ButtonVariant::Primary)) {
+                                    i == 0 ? mydear::ButtonVariant::Primary
+                                           : mydear::ButtonVariant::Secondary)) {
                 picked = it.authMethods[i];
             }
         }

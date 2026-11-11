@@ -114,8 +114,13 @@ void App::onboarding() {
         ImGui::TextUnformatted(def.name.c_str());
         const bool on = agentOn(def.id);
         if (installing == def.id) {
-            alignRight(160);
-            ui::Progress(-1, "Installing", 160);
+            // on the row, where the button was: the bar in the middle of the row's height
+            alignRight(90 + 90);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(colors.subtext0, "Installing");
+            alignRight(90);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetFrameHeight() * 0.5f - 3);
+            ui::Progress(-1, nullptr, 90);
         } else if (!scan.ready[i]) {
             alignRight(90);
             if (mydear::Button("Install", mydear::ButtonVariant::Secondary, ImVec2(90, 0))) {

@@ -339,7 +339,7 @@ void App::frame() {
             ImGui::SetTooltip("Files (Ctrl+B)");
         }
     } else {
-        ImGui::TextColored(colors.subtext0, "imcode"); // an empty bar asserts (mydear#45)
+        ImGui::TextColored(colors.subtext0, "imcode");
     }
     if (headless) {
         ImGui::End();
@@ -513,7 +513,7 @@ int main() {
         AcpHost::setWake(nullptr);
         return code;
     }
-    // not mydear::Run: the app needs the shell for its texture upload (mydear#47)
+    // not mydear::Run: markdown and icon textures are freed between run() and destroy()
     static mydear::App shell;
     app.shell = &shell;
     app.upload = [](const uint8_t* rgba, int w, int h) { return shell.createTexture(rgba, w, h); };
