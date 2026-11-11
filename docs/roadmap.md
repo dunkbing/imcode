@@ -173,7 +173,7 @@ One host per machine owns the agents and the threads; every screen is a client o
 - [ ] Snooze a thread until a time, with presets; it wakes early when it needs you
 - [ ] Settle finished threads; auto-settle after inactivity or a merged pull request
 - [ ] Working section: threads that are busy or waiting fold away until they need you
-- [ ] Sidebar grouped by project; a project filter
+- [~] Sidebar grouped by project; a project filter (done)
 - [ ] Undo for pin, settle, snooze, archive; act on several selected threads
 - [ ] Search across hosts by title, branch, pull request, project and message text
 - [ ] Thread row status: working, needs an answer, limited, pull request state; a hover card

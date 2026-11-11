@@ -15,6 +15,7 @@
 #include "imshell/title_bar.hpp"
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -45,6 +46,35 @@ bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags f
                                                   ImGui::GetColorU32(fill), 8);
     }
     return clicked;
+}
+
+void projectBadge(const std::string& name, float size) {
+    const auto& colors = Theme::Current()->colors;
+    const ImVec4 tints[] = {colors.blue, colors.peach, colors.green, colors.purple, colors.teal, colors.rose};
+    size_t hash = 0;
+    for (const char c : name) {
+        hash = hash * 31 + static_cast<unsigned char>(c);
+    }
+    const ImVec4 tint = tints[hash % std::size(tints)];
+    // the first two letters or digits, upper case
+    std::string letters;
+    for (const char c : name) {
+        if (std::isalnum(static_cast<unsigned char>(c)) && letters.size() < 2) {
+            letters += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        }
+    }
+    const float line = ImGui::GetTextLineHeight();
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    ImGui::Dummy(ImVec2(size + 4, line));
+    const ImVec2 min(at.x, std::floor(at.y + (line - size) * 0.5f));
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    draw->AddRectFilled(min, ImVec2(min.x + size + 4, min.y + size),
+                        ImGui::GetColorU32(ImVec4(tint.x, tint.y, tint.z, 0.22f)), 4);
+    ImGui::PushFont(nullptr, size * 0.62f);
+    const ImVec2 text = ImGui::CalcTextSize(letters.c_str());
+    draw->AddText(ImVec2(min.x + (size + 4 - text.x) * 0.5f, min.y + (size - text.y) * 0.5f),
+                  ImGui::GetColorU32(tint), letters.c_str());
+    ImGui::PopFont();
 }
 
 std::string ago(long long unixSeconds) {
@@ -197,7 +227,7 @@ bool App::wantsFrames() {
         return true;
     }
     return scanOp.isRunning() || palette.op.isRunning() || registry.isBusy() ||
-           files.listOp.isRunning() || files.indexOp.isRunning() || files.readOp.isRunning() ||
+           gitOp.isRunning() || files.listOp.isRunning() || files.indexOp.isRunning() || files.readOp.isRunning() ||
            std::ranges::any_of(data.threads,
                                [](const auto& t) { return t->busy() || t->starting(); });
 }

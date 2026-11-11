@@ -3,6 +3,7 @@
 #include "IconsFontAwesome6.h"
 #include "acp_host/host.hpp"
 #include "acp_host/registry.hpp"
+#include "git.hpp"
 #include "history.hpp"
 #include "imshell/app.hpp"
 #include "imshell/editor.hpp"
@@ -31,6 +32,8 @@ struct App : imshell::Delegate {
     std::filesystem::path dataFile;
     int current = -1; // index into data.threads
     int project = -1; // the folder new threads go to
+    int filterProject = -1; // the sidebar lists this project's threads; -1 = all projects
+    char projectSearch[64] = {};
     char input[8192] = {};
     char search[128] = {};
     int shownRevision = -1; // of the current thread: scroll down when it moves on
@@ -154,6 +157,14 @@ struct App : imshell::Delegate {
 
     void sidebar();
 
+    // the open thread's repository: asked again every few seconds, off the ui thread
+    Git::Status git;
+    std::string gitFor; // host and folder `git` describes
+    long long gitAt = 0;
+    AcpHost::AsyncOp<std::pair<std::string, Git::Status>> gitOp;
+    // under the composer: the project (click to pick another) and its branch
+    void statusLine(Thread& t, float left);
+
     // the agent's own mark, tinted like text; a generic one when there is none
     // rowHeight: the height of the row it sits in (a frame-height row of buttons), 0 = a text line
     void agentIcon(const std::string& agentId, float size = 16, float rowHeight = 0);
@@ -174,6 +185,9 @@ struct App : imshell::Delegate {
 // a full-width row to click: rounded, lit when chosen or under the mouse. its content is
 // drawn after it, over it
 bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags = 0);
+
+// a project's mark: two letters of its name on a square in a colour of its own
+void projectBadge(const std::string& name, float size = 16);
 
 // "now", "5m", "2h", "3d"
 std::string ago(long long unixSeconds);

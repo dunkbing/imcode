@@ -425,6 +425,44 @@ void App::composer(Thread& t, float width) {
     }
 }
 
+void App::statusLine(Thread& t, float left) {
+    const auto& colors = Theme::Current()->colors;
+    // the repository's state, refreshed while this thread is shown
+    const std::string key = t.host + "\n" + t.cwd;
+    const long long now = static_cast<long long>(ImGui::GetTime() * 1000);
+    gitOp.check([&](std::pair<std::string, Git::Status> got) {
+        gitFor = got.first;
+        git = got.second;
+    });
+    if (!gitOp.isRunning() && (gitFor != key || now - gitAt > 5000)) {
+        gitAt = now;
+        gitOp.start([key, host = t.host, cwd = t.cwd] { return std::pair{key, Git::status(host, cwd)}; });
+    }
+    // where it works: click to pick another project
+    ImGui::SetCursorPosX(left);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
+    ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+    if (ImGui::Button((std::string(t.host.empty() ? ICON_FA_FOLDER : ICON_FA_SERVER) + "  " +
+                       (t.host.empty() ? "" : t.host + ":") + t.cwd + "  " ICON_FA_CHEVRON_DOWN "##where")
+                          .c_str())) {
+        ImGui::OpenPopup("projects");
+    }
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(3);
+    projectPopup();
+    if (gitFor == key && git.repo) {
+        ImGui::SameLine(0, 16);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(colors.subtext0, ICON_FA_CODE_BRANCH "  %s", git.branch.c_str());
+        if (git.changed > 0) {
+            ImGui::SameLine(0, 10);
+            ImGui::TextColored(colors.yellow, "%d changed", git.changed);
+        }
+    }
+}
+
 void App::threadView(Thread& t) {
     const auto& colors = Theme::Current()->colors;
     const AcpAgentDef* def = AcpAgents::find(t.agentId);
@@ -448,20 +486,7 @@ void App::threadView(Thread& t) {
         ImGui::Dummy(ImVec2(0, Theme::Spacing::L));
         ImGui::SetCursorPosX(left);
         composer(t, width);
-        // where it will work: click to pick another project
-        ImGui::SetCursorPosX(left);
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
-        ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
-        if (ImGui::Button((std::string(t.host.empty() ? ICON_FA_FOLDER : ICON_FA_SERVER) + "  " +
-                           (t.host.empty() ? "" : t.host + ":") + t.cwd + "  " ICON_FA_CHEVRON_DOWN "##where")
-                              .c_str())) {
-            ImGui::OpenPopup("projects");
-        }
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(3);
-        projectPopup();
+        statusLine(t, left);
         if (t.starting()) {
             ImGui::SetCursorPosX(left + 8);
             ImGui::TextColored(colors.overlay1, "Starting %s...",
@@ -471,7 +496,8 @@ void App::threadView(Thread& t) {
     }
 
     const float queued = static_cast<float>(t.queue.size()) * ImGui::GetFrameHeightWithSpacing();
-    ImGui::BeginChild("transcript", ImVec2(0, -(composerHeight + Theme::Spacing::L + queued)));
+    ImGui::BeginChild("transcript", ImVec2(0, -(composerHeight + Theme::Spacing::L + queued +
+                                                ImGui::GetFrameHeightWithSpacing())));
     ImGui::Dummy(ImVec2(0, Theme::Spacing::L));
     ImGui::Indent(left);
     ImGui::PushTextWrapPos(left + width);
@@ -513,4 +539,5 @@ void App::threadView(Thread& t) {
     }
     ImGui::SetCursorPosX(left);
     composer(t, width);
+    statusLine(t, left);
 }

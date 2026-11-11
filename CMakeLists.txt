@@ -50,7 +50,7 @@ imshell_embed_images(${CMAKE_CURRENT_SOURCE_DIR}/assets/images) # none yet: both
 
 add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sidebar.cpp src/thread_view.cpp
                src/markdown.cpp src/notify.cpp src/headless.cpp
-               src/history.cpp src/diff.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp
+               src/history.cpp src/diff.cpp src/git.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp
                src/terminal.cpp src/terminal_view.cpp src/files_view.cpp src/syntax.cpp
                ${EMBEDDED_FONTS_FILE} ${EMBEDDED_IMAGES_FILE} ${IMGUI_CORE})
 target_include_directories(imcode PRIVATE external/IconFontCppHeaders)
@@ -61,6 +61,9 @@ if(IMCODE_BUILD_TESTS)
     enable_testing()
     add_executable(imcode-diff-test tests/diff_test.cpp src/diff.cpp)
     add_test(NAME imcode-diff COMMAND imcode-diff-test)
+    add_executable(imcode-git-test tests/git_test.cpp src/git.cpp src/ssh.cpp src/ssh_config.cpp)
+    target_link_libraries(imcode-git-test PRIVATE acp::host ${IMCODE_SSH})
+    add_test(NAME imcode-git COMMAND imcode-git-test)
     add_executable(imcode-history-test tests/history_test.cpp src/history.cpp)
     target_link_libraries(imcode-history-test PRIVATE nlohmann_json::nlohmann_json)
     add_test(NAME imcode-history COMMAND imcode-history-test)
