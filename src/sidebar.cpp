@@ -133,8 +133,11 @@ void App::sidebar() {
             order.push_back(i);
         }
     }
+    // what waits for the user first, then the newest
     std::ranges::stable_sort(order, [&](int a, int b) {
-        return data.threads[a]->updatedAt > data.threads[b]->updatedAt;
+        const Thread& x = *data.threads[a];
+        const Thread& y = *data.threads[b];
+        return x.needsAnswer() != y.needsAnswer() ? x.needsAnswer() : x.updatedAt > y.updatedAt;
     });
 
     int open = -1, remove = -1, toggleArchive = -1, renamed = -1;
