@@ -306,10 +306,18 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
 }
 
 // the input in a rounded box, with the agent/model picker and send inside it
+// the input's height: three lines, growing with the wrapped text up to eight
+static float composerInputHeight(const char* text, float width) {
+    const float line = ImGui::GetTextLineHeight();
+    const float wrap = width - 2 * ImGui::GetStyle().WindowPadding.x - 2 * ImGui::GetStyle().FramePadding.x;
+    const float need = ImGui::CalcTextSize(text, nullptr, false, wrap).y + line; // a spare line: no jump on wrap
+    return std::clamp(need, line * 3, line * 8);
+}
+
 void App::composer(Thread& t, float width) {
     const auto& colors = Theme::Current()->colors;
     const AcpAgentDef* def = AcpAgents::find(t.agentId);
-    const float inputHeight = ImGui::GetTextLineHeight() * 3;
+    const float inputHeight = composerInputHeight(input, width);
     const float button = ImGui::GetFrameHeight();
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 14);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, colors.mantle);
@@ -341,7 +349,7 @@ void App::composer(Thread& t, float width) {
     bool send = ImGui::InputTextMultiline(
         "##input", input, sizeof(input), ImVec2(-FLT_MIN, inputHeight),
         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CtrlEnterForNewLine |
-            ImGuiInputTextFlags_CallbackAlways,
+            ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_WordWrap,
         [](ImGuiInputTextCallbackData* data) {
             // the only way to change a field's text while it is being edited
             auto* picker = static_cast<Picker*>(data->UserData);
@@ -695,7 +703,7 @@ void App::threadView(Thread& t) {
     const ImVec2 avail = ImGui::GetContentRegionAvail();
     const float width = std::min(760.0f, avail.x - 2 * Theme::Spacing::M); // the reading column
     const float left = (avail.x - width) * 0.5f;
-    const float composerHeight = ImGui::GetTextLineHeight() * 3 + ImGui::GetFrameHeight() + 34;
+    const float composerHeight = composerInputHeight(input, width) + ImGui::GetFrameHeight() + 34;
 
     if (t.items.empty() && !t.busy()) {
         // nothing said yet: the question and the composer in the middle

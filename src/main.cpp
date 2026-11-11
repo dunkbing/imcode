@@ -35,6 +35,8 @@ int runHeadless(App& app, const char* out, int width, int height, int frames); /
 float sideSplitter(const char* id, float height, bool line, bool* released) {
     const auto& colors = Theme::Current()->colors;
     ImGui::SameLine(0, 0);
+    // measured here, beside the panel: a caller asking before this gets the next row's few pixels
+    height = ImGui::GetContentRegionAvail().y;
     ImGui::InvisibleButton(id, ImVec2(5, height));
     const bool lit = ImGui::IsItemHovered() || ImGui::IsItemActive();
     if (lit) {
@@ -43,7 +45,8 @@ float sideSplitter(const char* id, float height, bool line, bool* released) {
     if (released && ImGui::IsItemDeactivated()) {
         *released = true;
     }
-    if (lit || line) {
+    (void)line; // always drawn: a handle nobody can see is not found
+    {
         const ImVec2 min = ImGui::GetItemRectMin();
         ImGui::GetWindowDrawList()->AddLine(ImVec2(min.x + 2, min.y), ImVec2(min.x + 2, min.y + height),
                                             ImGui::GetColorU32(lit ? colors.blue : colors.surface1),
@@ -604,6 +607,11 @@ void App::frame() {
                 ImGui::EndChild();
                 if (terminalOpen) {
                     imshell::Splitter("##terminal", &terminalSplit, area.y, 160, 80);
+                    if (!ImGui::IsItemHovered() && !ImGui::IsItemActive()) { // its line at rest
+                        const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
+                        ImGui::GetWindowDrawList()->AddLine(ImVec2(min.x, max.y - 1), ImVec2(max.x, max.y - 1),
+                                                            ImGui::GetColorU32(Theme::Current()->colors.surface1));
+                    }
                     resized |= ImGui::IsItemDeactivated();
                     terminalPanel(t);
                 if (std::exchange(terminalExited, false)) {
