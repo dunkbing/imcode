@@ -208,6 +208,14 @@ int runHeadless(App& app, const char* out, int width, int height, int frames) {
     io.DisplayFramebufferScale = ImVec2(scale, scale);
     io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
     io.DeltaTime = 1.0f / 60;
+    // a clipboard of its own: the user's is neither read nor written. IMCODE_CLIPBOARD_FILE fills it
+    static std::string clip;
+    if (const char* file = std::getenv("IMCODE_CLIPBOARD_FILE")) {
+        std::ifstream in(file, std::ios::binary);
+        clip.assign(std::istreambuf_iterator<char>(in), {});
+    }
+    ImGui::GetPlatformIO().Platform_GetClipboardTextFn = [](ImGuiContext*) { return clip.c_str(); };
+    ImGui::GetPlatformIO().Platform_SetClipboardTextFn = [](ImGuiContext*, const char* text) { clip = text; };
     app.headless = true;
     app.upload = [](const uint8_t* rgba, int w, int h) {
         auto* soft = new SoftTexture{w, h, 4, nullptr, {rgba, rgba + static_cast<size_t>(w) * h * 4}};

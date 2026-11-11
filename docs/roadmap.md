@@ -13,9 +13,9 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly.
 - [x] Fonts and icons: JetBrains Mono, an icon font, the system CJK font
 - [x] Slash commands and `@file` mentions in the composer
 - [x] Tool call details: diffs for edits, output for commands, files that open in the viewer
-- [ ] Agents install themselves: managed Bun and registry binaries, with progress
+- [~] Agents install themselves: managed Bun, here and on a remote (done); registry binaries, with progress
 - [~] Queue a message while a turn runs (done); edit and resend the last one
-- [~] Images and files as attachments: picked or dropped on the window (done); pasted from the clipboard
+- [x] Images and files as attachments: picked, dropped on the window or pasted; uploaded to the host for a remote thread
 - [~] Context and cost from `usage_update`, and the agent's own title for a thread (done); compaction notices
 - [x] Rename, archive, search threads
 - [~] Detect installed agents: turn on, install, sign in, update; browse the ACP registry
@@ -35,9 +35,9 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly.
 - [ ] `@model` mentions to name a model when delegating; `#` to mention a pull request
 - [ ] Context chips inline in the message: terminal excerpt, diff comment, file, picked element
 - [ ] Rich-text markdown composer with code blocks; a plain mode
-- [ ] Large pastes become text-file attachments
+- [x] Large pastes become text-file attachments
 - [ ] Quote part of a reply into the composer, with a comment
-- [ ] Recall sent prompts with up and down; stash a draft and restore it later
+- [~] Recall sent prompts with up and down (done); stash a draft and restore it later
 - [ ] Suggested next prompt after a turn
 - [ ] Edit an earlier prompt: rewind the conversation, keep or revert the files
 - [ ] Fork a thread; switch agent mid-thread with the context handed over
@@ -47,7 +47,7 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly.
 - [ ] Tool calls grouped into an expandable summary; hide successful or all; a mode with only the last reply
 - [ ] Live output of a running command
 - [ ] Find in thread; a minimap of the timeline
-- [ ] Copy a message as markdown; copy a link to a thread
+- [~] Copy a message as markdown (done); copy a link to a thread
 - [ ] Math, mermaid diagrams, tables, images and video in replies; image zoom
 - [ ] Visual replies: an agent's HTML page rendered sandboxed in the thread; MCP apps
 - [ ] Preview attached files: code, markdown, CSV, PDF, audio, zip

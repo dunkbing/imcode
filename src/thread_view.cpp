@@ -1,6 +1,9 @@
 #include "app.hpp"
 
 #include "clipboard.hpp"
+#include <fstream>
+#include <cstring>
+#include <chrono>
 #include "imshell/markdown.hpp"
 #include "imshell/button.hpp"
 #include "imshell/file_dialog.hpp"
@@ -91,6 +94,7 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
     // everything but the user's bubble sits in the reading column: cards and the markdown
     // renderer fill the window they are in
     const bool boxed = it.kind != Item::Kind::User;
+    ImVec2 bubbleMin, bubbleMax; // the user's bubble, for its right-click
     if (boxed) {
         ImGui::BeginChild("item", ImVec2(width, 0), ImGuiChildFlags_AutoResizeY);
     }
@@ -103,6 +107,8 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         const ImVec2 min(at.x + width - size.x - 2 * pad, at.y);
         const ImVec2 max(at.x + width, at.y + size.y + 2 * pad);
         ImGui::GetWindowDrawList()->AddRectFilled(min, max, ImGui::GetColorU32(colors.surface0), 14);
+        bubbleMin = min;
+        bubbleMax = max;
         ImGui::SetCursorScreenPos(ImVec2(min.x + pad, min.y + pad));
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + size.x + 1);
         ImGui::TextUnformatted(it.text.c_str());
@@ -300,6 +306,22 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
     }
     if (boxed) {
         ImGui::EndChild();
+        bubbleMin = ImGui::GetItemRectMin();
+        bubbleMax = ImGui::GetItemRectMax();
+    }
+    // right-click a message: copy it as written (a reply as its markdown)
+    if (it.kind == Item::Kind::User || it.kind == Item::Kind::Assistant) {
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Right) && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) &&
+            ImGui::IsMouseHoveringRect(bubbleMin, bubbleMax)) {
+            ImGui::OpenPopup("message");
+        }
+        if (ImGui::BeginPopup("message")) {
+            if (ImGui::MenuItem(ICON_FA_COPY "  Copy")) {
+                ImGui::SetClipboardText(it.text.c_str());
+                ui::Toast("Copied", ui::Tone::Success, 2);
+            }
+            ImGui::EndPopup();
+        }
     }
     ImGui::PopID();
     ImGui::Spacing();
@@ -339,8 +361,19 @@ void App::composer(Thread& t, float width) {
     // also paste a copied file's name as text: its text is put back
     if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
         ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_V)) {
-        const auto pasted = clipboardFiles(std::filesystem::temp_directory_path() / "imcode-pasted",
-                                           std::getenv("IMCODE_PASTEBOARD")); // a named one: ui checks
+        const auto tempDir = std::filesystem::temp_directory_path() / "imcode-pasted";
+        auto pasted = clipboardFiles(tempDir, std::getenv("IMCODE_PASTEBOARD")); // a named one: ui checks
+        // a wall of text (a log, a file) goes along as a file, not into the message
+        const char* text = ImGui::GetClipboardText();
+        if (pasted.empty() && text && std::strlen(text) > 4000) {
+            std::error_code ec;
+            std::filesystem::create_directories(tempDir, ec);
+            const auto stamp = std::chrono::system_clock::now().time_since_epoch().count();
+            const auto file = tempDir / ("pasted-" + std::to_string(stamp) + ".txt");
+            if (std::ofstream(file, std::ios::binary) << text) {
+                pasted.push_back(file.string());
+            }
+        }
         if (!pasted.empty()) {
             attachments.insert(attachments.end(), pasted.begin(), pasted.end());
             picker.replace = std::string(input);
@@ -362,6 +395,28 @@ void App::composer(Thread& t, float width) {
         },
         &picker);
     ImGui::PopStyleColor(3);
+    // up/down in an empty input (or one still showing a recalled prompt): the prompts sent
+    // in this thread, newest first
+    {
+        std::vector<const std::string*> sent;
+        for (auto item = t.items.rbegin(); item != t.items.rend(); ++item) {
+            if (item->kind == Item::Kind::User && !item->text.empty()) {
+                sent.push_back(&item->text);
+            }
+        }
+        const bool showing = recall >= 0 && recall < static_cast<int>(sent.size()) && *sent[recall] == input;
+        if (!showing) {
+            recall = -1;
+        }
+        if (ImGui::IsItemActive() && (showing || input[0] == 0)) {
+            const int to = recall + (ImGui::IsKeyPressed(ImGuiKey_UpArrow) ? 1 : 0) -
+                           (ImGui::IsKeyPressed(ImGuiKey_DownArrow) ? 1 : 0);
+            if (to != recall && to >= -1 && to < static_cast<int>(sent.size())) {
+                recall = to;
+                picker.replace = to < 0 ? std::string() : sent[to]->substr(0, sizeof(input) - 1);
+            }
+        }
+    }
 
     // "/" at the start: the agent's commands. "@" starting the last word: the project's files
     {
