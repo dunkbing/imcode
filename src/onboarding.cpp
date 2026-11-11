@@ -180,6 +180,8 @@ void App::settingsDraw() {
     ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
     agentRows(narrow);
     ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
+    // which build this is: what to quote when something is off
+    ImGui::TextColored(colors.overlay0, "imcode " IMCODE_VERSION "  " IMCODE_COMMIT);
     close |= ImGui::IsKeyPressed(ImGuiKey_Escape);
     close |= ImGui::IsMouseClicked(0) &&
              !ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows |

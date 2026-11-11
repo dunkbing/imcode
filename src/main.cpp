@@ -238,7 +238,8 @@ void App::startScan() {
                                                                    {"grok", "grok"},
                                                                    {"cursor", "cursor-agent"}};
         for (const auto& def : AcpAgents::catalog()) {
-            out.ready.push_back(AcpAgents::resolveInvocation(def).has_value());
+            // an npm agent needs only bun, which the app fetches by itself when a thread starts
+            out.ready.push_back(!def.npmPackage.empty() || AcpAgents::resolveInvocation(def).has_value());
             const auto cli = std::ranges::find(clis, def.id, [](const auto& c) {
                 return std::string(c.first);
             });
