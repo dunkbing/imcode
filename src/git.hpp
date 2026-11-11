@@ -41,6 +41,14 @@ namespace Git {
     // one file's diff against the last commit (all added when it is not tracked); blocks
     std::vector<Diff::Line> fileDiff(const std::string& host, const std::string& cwd, const Change& change);
 
+    // every change committed with `message`; then, with push, the branch pushed (its upstream
+    // set the first time). false with git's own words in `output`; blocks
+    bool commit(const std::string& host, const std::string& cwd, const std::string& message, bool push,
+                std::string& output);
+    // a pull request for the pushed branch, by the forge's command line (gh), its title and
+    // body from the commits. the request's address, or empty with what gh said; blocks
+    std::string pullRequest(const std::string& host, const std::string& cwd, std::string& output);
+
     // a branch-safe name from a prompt: its first words, and a few characters to keep it unique
     std::string slug(const std::string& text);
 } // namespace Git

@@ -202,6 +202,36 @@ namespace Git {
         return parseDiff(run(host, script));
     }
 
+    bool commit(const std::string& host, const std::string& cwd, const std::string& message, bool push,
+                std::string& output) {
+        std::string script = "cd " + quote(cwd) + " && git add -A && git commit -q -m " + quote(message) + " 2>&1";
+        if (push) {
+            // the first push of a branch sets where it goes
+            script += " && { git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1 && git push -q 2>&1 || "
+                      "git push -q -u origin HEAD 2>&1; }";
+        }
+        output = run(host, script + " && echo __imcode_ok__");
+        while (!output.empty() && output.back() == '\n') {
+            output.pop_back();
+        }
+        if (output.ends_with("__imcode_ok__")) {
+            output.resize(output.size() - 12);
+            return true;
+        }
+        return false;
+    }
+
+    std::string pullRequest(const std::string& host, const std::string& cwd, std::string& output) {
+        output = run(host, "cd " + quote(cwd) + " && gh pr create --fill 2>&1");
+        // gh prints the request's address last
+        std::string last = output;
+        while (!last.empty() && last.back() == '\n') {
+            last.pop_back();
+        }
+        last = last.substr(last.find_last_of('\n') + 1);
+        return last.starts_with("https://") ? last : "";
+    }
+
     std::string addWorktree(const std::string& host, const std::string& repo, const std::string& name,
                             std::string& error) {
         const std::string repoName = repo.substr(repo.find_last_of('/') + 1);

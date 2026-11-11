@@ -69,8 +69,34 @@ int main() {
         }
         ok = false;
     }
-    fs::remove(repo / "a.txt");
-    fs::remove(repo / "b c.txt");
+    // committed and pushed to a remote of its own: the first push sets the upstream
+    const fs::path bare = home / "remote.git";
+    const auto q = [](const fs::path& p) {
+        std::string out = "'";
+        for (const char c : p.string()) {
+            out += c == '\'' ? std::string("'\\''") : std::string(1, c);
+        }
+        return out + "'";
+    };
+    ok = ok && std::system(("git init -q --bare " + q(bare) + " && git -C " + q(repo) + " remote add origin " + q(bare)).c_str()) == 0;
+    setenv("GIT_AUTHOR_NAME", "t", 1);
+    setenv("GIT_AUTHOR_EMAIL", "t@t", 1);
+    setenv("GIT_COMMITTER_NAME", "t", 1);
+    setenv("GIT_COMMITTER_EMAIL", "t@t", 1);
+    std::string said;
+    const bool committed = Git::commit("", repo.string(), "it's done", true, said);
+    const bool clean = Git::changes("", repo.string()).empty();
+    std::string again2;
+    std::ofstream(repo / "a.txt") << "five\n";
+    const bool second = Git::commit("", repo.string(), "more", true, again2); // to the upstream now set
+    std::string nothing;
+    const bool empty = !Git::commit("", repo.string(), "nothing", false, nothing) && !nothing.empty();
+    const bool pushed = std::system(("git -C " + q(bare) + " log --oneline main | grep -q more").c_str()) == 0;
+    if (!committed || !clean || !second || !empty || !pushed) {
+        std::printf("FAILED: commit %d clean %d second %d refused-empty %d pushed %d: %s | %s\n", committed, clean, second,
+                    empty, pushed, said.c_str(), again2.c_str());
+        ok = false;
+    }
     // parsers: renames, quoted paths, binary files, hunk breaks
     const auto parsed = Git::parseChanges("R  old.txt -> new.txt\n?? \"has space.txt\"\n D gone\n",
                                           "3\t1\tnew.txt\n-\t-\tpic.png\n");

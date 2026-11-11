@@ -192,6 +192,15 @@ struct App : imshell::Delegate {
         std::vector<Diff::Line> lines;
         AcpHost::AsyncOp<std::vector<Git::Change>> listOp;
         AcpHost::AsyncOp<std::pair<std::string, std::vector<Diff::Line>>> diffOp;
+        // the commit bar: a message, then commit (and push), then a pull request
+        char message[2048] = "";
+        bool pushed = false; // the last commit was pushed: a pull request can follow
+        std::string said;    // what git or gh answered when it refused
+        struct Done {
+            bool ok = false, push = false, pull = false;
+            std::string output, url;
+        };
+        AcpHost::AsyncOp<Done> commitOp;
     } changes;
     void changesOpen(Thread& t);
     void changesDraw();

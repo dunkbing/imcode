@@ -105,7 +105,7 @@ One host per machine owns the agents and the threads; every screen is a client o
 - [~] A git worktree per thread on its own branch, local or over ssh, removed with the thread when clean (done); a setup command
 - [~] Diff view: the working tree against the last commit, file by file (done); what a turn changed; against the branch base
 - [ ] Checkpoints as hidden git refs; revert the files of a turn
-- [ ] Commit, push, open a pull request
+- [x] Commit, push, open a pull request (from the Changes dialog; the pull request through gh)
 - [~] Terminal in the thread's folder, local or remote (libghostty); no selection or copy yet
 - [~] File viewer: read-only, line numbers, simple syntax colours; no selection or search in the file yet
 - [~] Add project: a local folder, a new git repo, a clone from a URL or a forge; the clone runs in the background
