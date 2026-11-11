@@ -386,7 +386,8 @@ bool App::filesPanel(Thread& t, float splitWidth) {
                              least, std::max(least, 1 - 360 / splitWidth));
     }
     ImGui::BeginChild("files");
-    const bool alone = splitWidth <= 0;
+    // no room for the file beside its tree: one at a time, as when the panel has the window
+    const bool alone = splitWidth <= 0 || ImGui::GetContentRegionAvail().x < 400;
     const bool showTree = !alone || f.treeOver || f.doc.path.empty();
     std::string opened;
 
