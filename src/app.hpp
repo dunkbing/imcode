@@ -51,6 +51,7 @@ struct App : imshell::Delegate {
     int switchProjectTo = -1; // picked in the projects popup: applied after the frame's ui
     bool sidebarOpen = false; // narrow windows (phones): the thread list covers the thread
     bool devOpenModels = false; // ui checks: open the model popup once
+    bool devModeSet = false;    // ui checks: ;mode:<value>; applied
     std::string switchAgentTo; // picked in the model popup: applied after the frame's ui
     // a shell per thread in its folder, started when its panel is first shown
     std::map<const Thread*, std::unique_ptr<Terminal>> terminals;

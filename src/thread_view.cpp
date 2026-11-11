@@ -556,7 +556,10 @@ void App::composer(Thread& t, float width) {
     std::string modeLabel = mode ? currentName(mode) : "";
     const bool risky = mode && (riskyMode(modeLabel) || riskyMode(mode->currentValue.get<std::string>()));
     if (!modeLabel.empty()) {
-        modeLabel = std::string(risky ? ICON_FA_TRIANGLE_EXCLAMATION "  " : ICON_FA_SHIELD_HALVED "  ") + modeLabel;
+        const std::string icon = risky ? ICON_FA_TRIANGLE_EXCLAMATION : ICON_FA_SHIELD_HALVED;
+        // where there is no room for its name (a narrow window, the context meter): the icon only
+        const float free = ImGui::GetWindowContentRegionMax().x - ImGui::GetCursorPosX() - labelWidth - button - 40;
+        modeLabel = ImGui::CalcTextSize((icon + "  " + modeLabel).c_str()).x + 8 > free ? icon : icon + "  " + modeLabel;
     }
     const float modeWidth = modeLabel.empty() ? 0 : ImGui::CalcTextSize(modeLabel.c_str()).x + 8 +
                                                         ImGui::GetStyle().ItemSpacing.x;
@@ -569,7 +572,7 @@ void App::composer(Thread& t, float width) {
                                                ImVec2(modeWidth - ImGui::GetStyle().ItemSpacing.x, button));
         ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Permission mode (shift+tab to change)");
+            ImGui::SetTooltip("%s: permission mode (shift+tab to change)", currentName(mode).c_str());
         }
         if (clicked) {
             devOpenModels = true; // the picker, where modes are listed
@@ -579,12 +582,21 @@ void App::composer(Thread& t, float width) {
     // shift+tab in the input: the next mode
     if (mode && !mode->options.empty() && ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
         ImGui::IsKeyChordPressed(ImGuiMod_Shift | ImGuiKey_Tab)) {
+        // the modes that allow everything are left out: only the picker turns them on
+        std::vector<const acp::ConfigOptionValue*> safe;
+        for (const auto& choice : mode->options) {
+            if (!riskyMode(choice.name) && !riskyMode(choice.value)) {
+                safe.push_back(&choice);
+            }
+        }
         const std::string now = mode->currentValue.get<std::string>();
         size_t at = 0;
-        while (at < mode->options.size() && mode->options[at].value != now) {
+        while (at < safe.size() && safe[at]->value != now) {
             ++at;
         }
-        t.setConfig(mode->id, mode->options[(at + 1) % mode->options.size()].value);
+        if (!safe.empty()) { // from a risky mode (not in the list): the first safe one
+            t.setConfig(mode->id, safe[at < safe.size() ? (at + 1) % safe.size() : 0]->value);
+        }
     }
     agentIcon(t.agentId, 16, button);
     ImGui::SameLine(0, 6);
@@ -596,8 +608,13 @@ void App::composer(Thread& t, float width) {
         ImGui::OpenPopup("models");
     }
     // above the button, right edges aligned; plain panes, not the composer's rounded box
-    ImGui::SetNextWindowSize(ImVec2(std::min(600.0f, ImGui::GetMainViewport()->WorkSize.x - 16), 0));
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetItemRectMax().x, ImGui::GetItemRectMin().y - 8),
+    // kept inside the window when it is narrower than the popup
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const float popupWidth = std::min(600.0f, viewport->WorkSize.x - 16);
+    ImGui::SetNextWindowSize(ImVec2(popupWidth, 0));
+    ImGui::SetNextWindowPos(ImVec2(std::clamp(ImGui::GetItemRectMax().x, viewport->WorkPos.x + 8 + popupWidth,
+                                              viewport->WorkPos.x + viewport->WorkSize.x - 8),
+                                   ImGui::GetItemRectMin().y - 8),
                             ImGuiCond_Always, ImVec2(1, 1));
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);

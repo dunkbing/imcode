@@ -270,7 +270,9 @@ std::vector<std::pair<std::string, std::string>> dueChoices(const std::vector<ac
         if (want == wanted.end()) {
             continue;
         }
-        const bool offered = std::ranges::any_of(option.options, [&](const auto& o) { return o.value == want->second; });
+        // a risky mode remembered by an older build is not applied
+        const bool offered = std::ranges::any_of(option.options, [&](const auto& o) { return o.value == want->second; }) &&
+                             !(option.category == "mode" && riskyMode(want->second));
         if (offered && option.currentValue != want->second) {
             due.emplace_back(*want);
         }

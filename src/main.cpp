@@ -695,6 +695,16 @@ void App::frame() {
         if (frames == 40 && all.find(";settings;") != std::string::npos) {
             settingsWant = true;
         }
+        // ;mode:<value>; sets the open thread's permission mode once the agent offers modes
+        if (const auto at = all.find(";mode:"); at != std::string::npos && current >= 0 && !devModeSet) {
+            Thread& t = *data.threads[current];
+            for (const auto& option : t.config) {
+                if (option.category == "mode") {
+                    t.setConfig(option.id, all.substr(at + 6, all.find(';', at + 1) - at - 6));
+                    devModeSet = true;
+                }
+            }
+        }
         if (frames == 40 && all.find(";hosts;") != std::string::npos) {
             paletteOpen();
             palette.step = Palette::Step::Host;

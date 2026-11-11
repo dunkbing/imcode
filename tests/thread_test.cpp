@@ -63,13 +63,15 @@ int main(int argc, char** argv) {
     // remembered choices: applied when offered and different, dropped when not offered, kept
     // while their option has not arrived
     std::map<std::string, std::string> wanted{{"model", "big"}, {"mode", "gone"}, {"effort", "high"}, {"same", "a"}};
+    wanted["mode"] = "bypassPermissions"; // remembered by an older build
     std::vector<acp::ConfigOption> offered(3);
     offered[0].id = "model";
     offered[0].currentValue = "small";
     offered[0].options = {{.value = "small"}, {.value = "big"}};
     offered[1].id = "mode";
     offered[1].currentValue = "ask";
-    offered[1].options = {{.value = "ask"}};
+    offered[1].category = "mode";
+    offered[1].options = {{.value = "ask"}, {.value = "bypassPermissions"}};
     offered[2].id = "same";
     offered[2].currentValue = "a";
     offered[2].options = {{.value = "a"}};
