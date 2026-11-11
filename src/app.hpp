@@ -59,6 +59,14 @@ struct App : imshell::Delegate {
     // per thread: the runs of tool calls opened (by their first item), and when the running turn began
     std::map<const Thread*, std::set<size_t>> openGroups;
     std::map<const Thread*, std::chrono::steady_clock::time_point> turnSince;
+    // cmd+f over the open thread: the matching items, the one shown, and where each item was drawn
+    struct Find {
+        bool open = false, focus = false, jump = false;
+        char query[256] = "";
+        int at = 0;
+        std::vector<size_t> hits;
+        std::vector<float> itemY;
+    } find;
     bool terminalOpen = false;
     bool focusTerminal = false;
     std::string terminalRun; // typed into the open thread's terminal once it is up

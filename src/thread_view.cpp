@@ -875,8 +875,87 @@ void App::threadView(Thread& t) {
 
     const float queued =
         static_cast<float>(t.queue.size() + attachments.size()) * ImGui::GetFrameHeightWithSpacing();
+    // cmd+f: a find bar over the transcript; enter and shift+enter step through the hits
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_F)) {
+        find.open = find.focus = true;
+    }
+    if (find.open) {
+        const auto lower = [](std::string s) {
+            std::ranges::transform(s, s.begin(), [](unsigned char c) { return std::tolower(c); });
+            return s;
+        };
+        const std::string q = lower(find.query);
+        find.hits.clear();
+        for (size_t i = 0; !q.empty() && i < t.items.size(); ++i) {
+            const Item& it = t.items[i];
+            if (lower(it.text).find(q) != std::string::npos || lower(it.toolTitle).find(q) != std::string::npos ||
+                lower(it.toolOutput).find(q) != std::string::npos) {
+                find.hits.push_back(i);
+            }
+        }
+        ImGui::Indent(left);
+        if (std::exchange(find.focus, false)) {
+            ImGui::SetKeyboardFocusHere();
+        }
+        ImGui::SetNextItemWidth(std::min(320.0f, width - 140));
+        const bool typed = ImGui::InputTextWithHint("##find", ICON_FA_MAGNIFYING_GLASS "  Find in thread", find.query,
+                                                    sizeof(find.query));
+        const bool active = ImGui::IsItemActive() || ImGui::IsItemFocused();
+        const int count = static_cast<int>(find.hits.size());
+        if (typed) {
+            find.at = 0;
+            find.jump = count > 0;
+        }
+        if (active && count > 0 && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            find.at = (find.at + (ImGui::GetIO().KeyShift ? count - 1 : 1)) % count;
+            find.jump = true;
+            find.focus = true; // enter leaves the field: back into it
+        }
+        ImGui::SameLine();
+        ImGui::AlignTextToFramePadding();
+        if (q.empty()) {
+            ImGui::TextColored(colors.overlay0, " ");
+        } else if (count == 0) {
+            ImGui::TextColored(colors.peach, "No match");
+        } else {
+            ImGui::TextColored(colors.overlay1, "%d of %d", std::min(find.at, count - 1) + 1, count);
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton(ICON_FA_XMARK "##find-close") || (active && ImGui::IsKeyPressed(ImGuiKey_Escape))) {
+            find.open = false;
+            find.query[0] = 0;
+            find.hits.clear();
+        }
+        ImGui::Unindent(left);
+        // a hit inside folded tool calls opens them
+        if (find.jump && find.at < count) {
+            const size_t hit = find.hits[find.at];
+            for (size_t i = 0; i < t.items.size();) {
+                size_t end = i;
+                while (end < t.items.size() && foldable(t.items[end])) {
+                    ++end;
+                }
+                if (end - i >= 3 && hit >= i && hit < end) {
+                    openGroups[&t].insert(i);
+                }
+                i = std::max(end, i + 1);
+            }
+        }
+    } else {
+        find.hits.clear();
+    }
     ImGui::BeginChild("transcript", ImVec2(0, -(composerHeight + Theme::Spacing::L + queued +
                                                 ImGui::GetFrameHeightWithSpacing())));
+    find.itemY.assign(t.items.size(), -1);
+    // the hit being shown: a bar at its left
+    const auto mark = [&](size_t i) {
+        if (find.open && find.at < static_cast<int>(find.hits.size()) && find.hits[find.at] == i) {
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(at.x - 12, at.y),
+                                                      ImVec2(at.x - 9, at.y + ImGui::GetTextLineHeight() * 1.5f),
+                                                      ImGui::GetColorU32(colors.yellow), 2);
+        }
+    };
     ImGui::Dummy(ImVec2(0, Theme::Spacing::L));
     ImGui::Indent(left);
     ImGui::PushTextWrapPos(left + width);
@@ -897,12 +976,18 @@ void App::threadView(Thread& t) {
                     open.insert(i);
                 }
             }
-            for (size_t k = i; shown && k < end; ++k) {
-                transcriptItem(t, t.items[k], static_cast<int>(k), width);
+            for (size_t k = i; k < end; ++k) {
+                find.itemY[k] = ImGui::GetCursorPosY(); // folded: the line stands for them
+                if (shown) {
+                    mark(k);
+                    transcriptItem(t, t.items[k], static_cast<int>(k), width);
+                }
             }
             i = end - 1;
             continue;
         }
+        find.itemY[i] = ImGui::GetCursorPosY();
+        mark(i);
         transcriptItem(t, t.items[i], static_cast<int>(i), width);
     }
     // how long the turn has run
@@ -924,7 +1009,10 @@ void App::threadView(Thread& t) {
         ImGui::SetScrollHereY(1.0f);
         // a few frames: what was just added is laid out by then; history still arriving restarts it
         shownRevision = t.replaying() ? -3 : shownRevision + 1;
-    } else if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 2) {
+    } else if (find.jump && find.at < static_cast<int>(find.hits.size()) && find.itemY[find.hits[find.at]] >= 0) {
+        ImGui::SetScrollY(std::max(0.0f, find.itemY[find.hits[find.at]] - 60));
+        find.jump = false;
+    } else if (!find.open && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 2) {
         ImGui::SetScrollHereY(1.0f); // at the end: a reply that grows stays in view
     }
     const bool away = ImGui::GetScrollY() < ImGui::GetScrollMaxY() - 80;

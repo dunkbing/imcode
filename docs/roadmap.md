@@ -46,7 +46,7 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly.
 - [ ] Send key: enter or mod+enter; send and start the next thread in the background
 - [~] Finished tool calls in a row folded into one expandable line (done); hide successful or all; a mode with only the last reply
 - [ ] Live output of a running command
-- [ ] Find in thread; a minimap of the timeline
+- [~] Find in thread, cmd+f (done); a minimap of the timeline
 - [~] Copy a message as markdown (done); copy a link to a thread
 - [ ] Math, mermaid diagrams, tables, images and video in replies; image zoom
 - [ ] Visual replies: an agent's HTML page rendered sandboxed in the thread; MCP apps
