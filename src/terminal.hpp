@@ -37,6 +37,9 @@ public:
     [[nodiscard]] bool ended() const { // the shell is gone, or never started
         return ended_;
     }
+    [[nodiscard]] bool failed() const { // it never started: the reason is on the screen
+        return failed_;
+    }
     std::string rowText(int y); // row y of what is shown, without trailing blanks
 
     // for drawing: update `render` from `vt`, then walk it with `rows` and `cells`
@@ -55,6 +58,6 @@ private:
     std::string early_; // written before the pty was open
     std::mutex pendingMutex_;
     std::string pending_; // read, not yet in the screen
-    std::atomic<bool> ended_{false}, closing_{false};
+    std::atomic<bool> ended_{false}, failed_{false}, closing_{false};
     std::thread reader_;
 };

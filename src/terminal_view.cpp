@@ -97,7 +97,7 @@ void App::terminalPanel(Thread& t) {
     const int rows = std::max(1, static_cast<int>(avail.y / cell.y));
 
     auto& term = terminals[&t];
-    const bool restart = term && term->ended() && focused && ImGui::IsKeyPressed(ImGuiKey_Enter, false);
+    const bool restart = term && term->failed() && focused && ImGui::IsKeyPressed(ImGuiKey_Enter, false);
     if (restart) {
         term.reset();
     }
@@ -116,6 +116,9 @@ void App::terminalPanel(Thread& t) {
     }
     term->resize(cols, rows);
     term->poll();
+    // the user left the shell (exit, ctrl+d): the panel goes with it. one that never started
+    // stays, with its reason
+    terminalExited = term->ended() && !term->failed();
     if (focused && !restart && !term->ended()) { // that enter is not the new shell's
         sendKeys(*term);
     }
@@ -199,7 +202,7 @@ void App::terminalPanel(Thread& t) {
         draw->AddRect(at, ImVec2(at.x + cell.x, at.y + cell.y), textColor);
     }
     if (term->ended()) {
-        const char* hint = "The shell ended. Click here and press Enter for a new one.";
+        const char* hint = "Click here and press Enter to try again.";
         draw->AddText(ImVec2(origin.x, origin.y + avail.y - cell.y), ImGui::GetColorU32(colors.overlay1),
                       hint);
     }

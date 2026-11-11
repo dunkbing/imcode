@@ -541,6 +541,11 @@ void App::frame() {
                 if (terminalOpen) {
                     imshell::Splitter("##terminal", &terminalSplit, area.y, 160, 80);
                     terminalPanel(t);
+                if (std::exchange(terminalExited, false)) {
+                    terminals.erase(&t); // opening the panel again starts a new shell
+                    terminalOpen = false;
+                    focusInput = true;
+                }
                 }
                 ImGui::EndChild();
             }

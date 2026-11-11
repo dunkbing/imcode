@@ -180,6 +180,7 @@ Terminal::Terminal(Open open, int cols, int rows, std::function<void()> wake)
             }
         }
         if (!error.empty()) {
+            failed_ = true;
             std::lock_guard lock(pendingMutex_);
             pending_ += error + "\r\n";
         }
