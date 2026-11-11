@@ -578,6 +578,7 @@ void App::composer(Thread& t, float width) {
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar();
     if (send && (input[0] || !attachments.empty())) { // while a turn runs this queues
+        shownRevision = -3; // what was sent comes into view
         t.send(input, std::exchange(attachments, {}));
         input[0] = 0;
         focusInput = true;
@@ -738,11 +739,37 @@ void App::threadView(Thread& t) {
     }
     ImGui::PopTextWrapPos();
     ImGui::Unindent(left);
-    if (shownRevision != t.revision()) {
-        shownRevision = t.revision();
+    if (shownRevision < 0 || t.replaying()) {
         ImGui::SetScrollHereY(1.0f);
+        // a few frames: what was just added is laid out by then; history still arriving restarts it
+        shownRevision = t.replaying() ? -3 : shownRevision + 1;
     }
+    const bool away = ImGui::GetScrollY() < ImGui::GetScrollMaxY() - 80;
+    const ImVec2 viewAt = ImGui::GetWindowPos(), viewSize = ImGui::GetWindowSize();
     ImGui::EndChild();
+    if (away && shownRevision >= 0) {
+        // further up while there is more below: a way back to the newest. a small child of
+        // its own over the transcript, so the text under it does not take the click
+        const ImVec2 back = ImGui::GetCursorScreenPos();
+        const float size = 30;
+        ImGui::SetCursorScreenPos(ImVec2(viewAt.x + left + (width - size) * 0.5f, viewAt.y + viewSize.y - size - 10));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
+        ImGui::BeginChild("to-newest", ImVec2(size, size), 0, ImGuiWindowFlags_NoScrollbar);
+        ImGui::PushStyleColor(ImGuiCol_Button, colors.surface1);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, size * 0.5f);
+        if (ImGui::Button(ICON_FA_ARROW_DOWN, ImVec2(size, size))) {
+            shownRevision = -3;
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("To the newest");
+        }
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+        ImGui::SetCursorScreenPos(back);
+        ImGui::Dummy(ImVec2(0, 0));
+    }
     // what waits for the running turn, each removable
     int drop = -1, now = -1;
     for (size_t i = 0; i < t.queue.size(); ++i) {

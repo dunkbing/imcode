@@ -41,7 +41,9 @@ struct App : imshell::Delegate {
     char input[8192] = {};
     std::vector<std::string> attachments; // files for the next message: picked, or dropped on the window
     char search[128] = {};
-    int shownRevision = -1; // of the current thread: scroll down when it moves on
+    // below 0 = bring the transcript to its end (for that many frames): a thread was opened or the user sent something.
+    // what the agent writes does not move it (the user may be reading further up)
+    int shownRevision = -3;
     bool focusInput = false;
     bool settingsWant = false;
     int switchProjectTo = -1; // picked in the projects popup: applied after the frame's ui

@@ -87,6 +87,9 @@ public:
     [[nodiscard]] bool starting() const;    // the agent is coming up: no session yet
     [[nodiscard]] bool busy() const;        // a turn is running, or waits for the session
     [[nodiscard]] bool needsAnswer() const; // an unanswered permission or sign-in
+    [[nodiscard]] bool replaying() const { // a saved conversation is coming back in
+        return replaying_;
+    }
     [[nodiscard]] int revision() const {    // bumps when items change: scroll to the end
         return revision_;
     }

@@ -338,7 +338,7 @@ void App::select(int index) {
     }
     current = index;
     sidebarOpen = false;
-    shownRevision = -1;
+    shownRevision = -3;
     focusInput = true;
     if (index >= 0) {
         Thread& t = *data.threads[index];
