@@ -129,16 +129,25 @@ void App::setup() {
     applyTheme(data.theme);
     project = data.projects.empty() ? -1 : 0;
     startScan();
-    // back where the user was: the thread that was open comes up again, with its history
-    for (int i = 0; data.onboarded && !data.lastSession.empty() && i < static_cast<int>(data.threads.size()); ++i) {
-        if (data.threads[i]->sessionId == data.lastSession && !data.threads[i]->archived) {
-            select(i);
-            break;
-        }
-    }
+    // a new thread at launch, in the project (and with the agent) of the thread that was open
+    // last; the old threads stay in the list, opened when picked
     // shortcut: a second window when the app already runs; hand the folder to the running one when that matters
     if (!openFolder.empty() && data.onboarded) {
         newThread(addProject("", openFolder));
+    } else if (data.onboarded && !data.projects.empty() && !std::getenv("IMCODE_DEV_SEND")) {
+        int where = 0;
+        std::string agent;
+        for (const auto& t : data.threads) {
+            if (!data.lastSession.empty() && t->sessionId == data.lastSession) {
+                where = addProject(t->host, t->projectDir());
+                agent = t->agentId;
+            }
+        }
+        if (agent.empty() || !AcpAgents::find(agent) ||
+            std::ranges::none_of(agentsOn(), [&](const AcpAgentDef* d) { return d->id == agent; })) {
+            agent = ""; // newThread picks the first agent that is on
+        }
+        newThread(where, agent);
     }
     // ui checks: IMCODE_DEV_SEND=<text> starts a thread in the first project before any frame
     if (const char* text = std::getenv("IMCODE_DEV_SEND"); text && !data.projects.empty()) {
