@@ -353,8 +353,10 @@ void Thread::poll() {
             cost = ev.cost >= 0 ? ev.cost : cost;
             break;
         case AcpEvent::Type::Title: // the agent's summary reads better than the first prompt
-            title = ev.text.substr(0, 80);
-            changed_ = true;
+            if (!renamed) {
+                title = ev.text.substr(0, 80);
+                changed_ = true;
+            }
             break;
         case AcpEvent::Type::Sessions:
             found = std::move(ev.sessions);

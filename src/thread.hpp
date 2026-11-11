@@ -39,7 +39,9 @@ public:
     // host: empty = this machine, else an ssh host (see Ssh::session) and cwd is a folder there
     Thread(std::string cwd, std::string agentId, std::string host = "");
 
-    std::string title;     // first prompt, shortened
+    std::string title;     // first prompt, shortened; then the agent's own, unless renamed
+    bool renamed = false;  // the user named it: the agent's title no longer replaces it
+    bool archived = false; // out of the list, kept
     std::string cwd;       // absolute, on the host
     std::string root;      // the project's folder when cwd is a worktree of it; else empty
     bool wantWorktree = false; // the first message makes a worktree and works there

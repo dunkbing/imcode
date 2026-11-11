@@ -4,6 +4,7 @@
 #include "imshell/components.hpp"
 #include "imshell/themes.hpp"
 #include <algorithm>
+#include <format>
 
 namespace Theme = imshell::Theme;
 namespace ui = imshell::ui;
@@ -116,6 +117,7 @@ void App::sidebar() {
 
     // threads, newest first; a draft (nothing sent yet) is not listed
     std::vector<int> order;
+    int archivedCount = 0;
     for (int i = 0; i < static_cast<int>(data.threads.size()); ++i) {
         const Thread& t = *data.threads[i];
         const std::string query = search;
@@ -126,7 +128,8 @@ void App::sidebar() {
         const bool listed = filterProject < 0 || filterProject >= static_cast<int>(data.projects.size()) ||
                             (t.host == data.projects[filterProject].host &&
                              t.projectDir() == data.projects[filterProject].cwd);
-        if (!t.title.empty() && listed && (query.empty() || !found.empty())) {
+        archivedCount += !t.title.empty() && listed && t.archived;
+        if (!t.title.empty() && listed && t.archived == showArchived && (query.empty() || !found.empty())) {
             order.push_back(i);
         }
     }
@@ -134,7 +137,10 @@ void App::sidebar() {
         return data.threads[a]->updatedAt > data.threads[b]->updatedAt;
     });
 
-    int open = -1, remove = -1;
+    int open = -1, remove = -1, toggleArchive = -1, renamed = -1;
+    static int focusedFor = -1; // the row whose field was given the keyboard
+    bool renameFocus = renaming >= 0 && focusedFor != renaming;
+    focusedFor = renaming;
     ImGui::BeginChild("threads", ImVec2(0, -(button + ImGui::GetStyle().ItemSpacing.y)));
     const float line = ImGui::GetTextLineHeight();
     for (const int i : order) {
@@ -146,6 +152,14 @@ void App::sidebar() {
             open = i;
         }
         if (ImGui::BeginPopupContextItem("menu")) {
+            if (ImGui::MenuItem("Rename")) {
+                renaming = i;
+                renameText = t.title;
+            }
+            if (ImGui::MenuItem(t.archived ? "Unarchive" : "Archive")) {
+                toggleArchive = i;
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Remove from list")) {
                 remove = i;
             }
@@ -172,9 +186,27 @@ void App::sidebar() {
         ImGui::SameLine(at.x + width - ImGui::CalcTextSize(when.c_str()).x - 8);
         ImGui::TextColored(colors.overlay1, "%s", when.c_str());
         ImGui::SetCursorPos(ImVec2(at.x + 8, at.y + 4 + line + 3));
-        ImGui::PushTextWrapPos(at.x + width - 8);
-        ImGui::TextUnformatted(t.title.substr(0, 34).c_str());
-        ImGui::PopTextWrapPos();
+        if (renaming == i) {
+            // the name, edited in place: enter keeps it, escape or a click elsewhere drops it
+            ImGui::SetCursorPos(ImVec2(at.x + 4, at.y + line + 3));
+            ImGui::SetNextItemWidth(width - 8);
+            if (ImGui::IsWindowAppearing() || renameFocus) {
+                ImGui::SetKeyboardFocusHere();
+                renameFocus = false;
+            }
+            const bool keep = ui::TextField("##rename", renameText,
+                                            {.width = width - 8, .flags = ImGuiInputTextFlags_EnterReturnsTrue |
+                                                                          ImGuiInputTextFlags_AutoSelectAll});
+            if (keep && !renameText.empty()) {
+                renamed = i;
+            } else if (ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsItemDeactivated()) {
+                renaming = -1;
+            }
+        } else {
+            ImGui::PushTextWrapPos(at.x + width - 8);
+            ImGui::TextUnformatted(t.title.substr(0, 34).c_str());
+            ImGui::PopTextWrapPos();
+        }
         ImGui::SetCursorPos(ImVec2(at.x + 8, at.y + 4 + 2 * (line + 3)));
         const AcpAgentDef* def = AcpAgents::find(t.agentId);
         ImGui::PushStyleColor(ImGuiCol_Text, colors.overlay1);
@@ -192,13 +224,41 @@ void App::sidebar() {
         ImGui::Dummy(ImVec2(0, 0)); // imgui wants an item after a cursor move
         ImGui::PopID();
     }
+    if (renamed >= 0) {
+        data.threads[renamed]->title = renameText.substr(0, 80);
+        data.threads[renamed]->renamed = true;
+        renaming = -1;
+        save();
+    }
+    if (toggleArchive >= 0) {
+        data.threads[toggleArchive]->archived = !data.threads[toggleArchive]->archived;
+        if (toggleArchive == current) {
+            current = -1; // out of the list it was opened from
+        }
+        save();
+    }
     if (order.empty()) {
         ImGui::TextColored(colors.overlay1, "%s",
-                           search[0] ? "Nothing found" : filterProject >= 0 ? "No threads in this project yet"
+                           search[0] ? "Nothing found" : showArchived ? "Nothing archived" : filterProject >= 0 ? "No threads in this project yet"
                                                                             : "No threads yet");
     }
     ImGui::EndChild();
 
+    // the archive: a count at the right of the bottom row; click to list it instead
+    if (archivedCount > 0 || showArchived) {
+        const std::string label = showArchived ? "Back to threads" : std::format("Archived  {}", archivedCount);
+        ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - ImGui::CalcTextSize(label.c_str()).x - 16);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+        if (ImGui::Button(label.c_str())) {
+            showArchived = !showArchived;
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(2);
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x);
+    }
     if (imshell::IconButton(ICON_FA_GEAR, imshell::ButtonVariant::Secondary, ImVec2(button, button))) {
         settingsWant = true;
     }

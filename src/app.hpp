@@ -35,6 +35,9 @@ struct App : imshell::Delegate {
     int project = -1; // the folder new threads go to
     int filterProject = -1; // the sidebar lists this project's threads; -1 = all projects
     char projectSearch[64] = {};
+    bool showArchived = false; // the sidebar lists the archived threads instead
+    int renaming = -1;         // the thread whose name is being edited in the list
+    std::string renameText;
     char input[8192] = {};
     char search[128] = {};
     int shownRevision = -1; // of the current thread: scroll down when it moves on
