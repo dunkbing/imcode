@@ -2,6 +2,7 @@
 
 #include "acp_host/agents.hpp"
 #include "acp_host/client.hpp"
+#include "diff.hpp"
 #include <memory>
 #include <optional>
 #include <utility>
@@ -16,6 +17,12 @@ struct Item {
     std::string text;
     // Tool
     std::string toolId, toolTitle, toolStatus, toolOutput;
+    struct Change { // a file the tool edited
+        std::string path;
+        std::vector<Diff::Line> lines;
+        int added = 0, removed = 0;
+    };
+    std::vector<Change> changes;
     // Plan
     std::vector<AcpPlanEntry> plan;
     // Permission, Auth: what was asked, and the answer once given

@@ -248,6 +248,17 @@ void Thread::poll() {
                 item->toolStatus = ev.tool.status;
             }
             item->toolOutput += ev.tool.output;
+            if (!ev.tool.diffs.empty()) { // each update carries the edits as they stand
+                item->changes.clear();
+                for (const auto& diff : ev.tool.diffs) {
+                    Item::Change change{diff.path, Diff::lines(diff.oldText, diff.newText), 0, 0};
+                    for (const auto& line : change.lines) {
+                        change.added += line.kind == '+';
+                        change.removed += line.kind == '-';
+                    }
+                    item->changes.push_back(std::move(change));
+                }
+            }
             ++revision_;
             break;
         }

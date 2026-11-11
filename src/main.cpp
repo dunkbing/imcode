@@ -537,8 +537,15 @@ void App::frame() {
             t.items.push_back(plan);
             t.items.push_back({.kind = Item::Kind::Tool, .toolId = "1", .toolTitle = "grep -rn loadConfig src",
                                .toolStatus = "completed", .toolOutput = "src/a.cpp:12\nsrc/b.cpp:40"});
-            t.items.push_back({.kind = Item::Kind::Tool, .toolId = "2", .toolTitle = "Edit src/config.cpp",
-                               .toolStatus = "in_progress"});
+            Item edit{.kind = Item::Kind::Tool, .toolId = "2", .toolTitle = "Edit src/config.cpp",
+                      .toolStatus = "completed"};
+            const std::string before = "#include \"config.hpp\"\n\n// reads the file\nConfig loadConfig(const std::string& path) {\n"
+                                       "    Config out;\n    out.path = path;\n    return out;\n}\n";
+            const std::string after = "#include \"config.hpp\"\n\n// reads the file, or the defaults when it is missing\n"
+                                      "Config readConfig(const std::string& path) {\n    Config out;\n    out.path = path;\n"
+                                      "    out.retries = 3;\n    return out;\n}\n";
+            edit.changes.push_back({"src/config.cpp", Diff::lines(before, after), 3, 2});
+            t.items.push_back(edit);
             Item ask{.kind = Item::Kind::Permission};
             ask.permission.title = "Run `ctest --test-dir build`";
             ask.permission.options = {{"a", "Allow once", "allow_once", {}},

@@ -128,12 +128,60 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
                   : it.toolStatus == "completed" ? ui::Tone::Success
                                                  : ui::Tone::Info);
         if (open) {
-            if (!it.toolOutput.empty()) {
+            // an edit shows as its diff; the text only says "diff: <path>" then
+            if (!it.toolOutput.empty() && it.changes.empty()) {
                 ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
                 ImGui::TextWrapped("%s", it.toolOutput.c_str());
                 ImGui::PopStyleColor();
             }
             ImGui::TreePop();
+        }
+        for (size_t c = 0; c < it.changes.size(); ++c) {
+            const Item::Change& change = it.changes[c];
+            ImGui::PushID(static_cast<int>(c));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, colors.crust);
+            ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6);
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 0));
+            const float lineHeight = ImGui::GetTextLineHeight() + 4;
+            const float height = std::min(320.0f, lineHeight * static_cast<float>(change.lines.size() + 1) + 20);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 8));
+            ImGui::BeginChild("change", ImVec2(0, height + 16),
+                              ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding,
+                              ImGuiWindowFlags_HorizontalScrollbar);
+            ImGui::PopStyleVar();
+            // the file, then how much was added and removed
+            ImGui::TextColored(colors.subtext0, ICON_FA_FILE "  %s", change.path.c_str());
+            ImGui::SameLine();
+            ImGui::TextColored(colors.green, "+%d", change.added);
+            ImGui::SameLine();
+            ImGui::TextColored(colors.red, "-%d", change.removed);
+            ImGui::Dummy(ImVec2(0, 4));
+            ImDrawList* draw = ImGui::GetWindowDrawList();
+            const float width = std::max(ImGui::GetContentRegionAvail().x, 2000.0f);
+            for (const auto& line : change.lines) {
+                const ImVec2 at = ImGui::GetCursorScreenPos();
+                if (line.kind == '+' || line.kind == '-') {
+                    ImVec4 tint = line.kind == '+' ? colors.green : colors.red;
+                    tint.w = 0.14f;
+                    draw->AddRectFilled(at, ImVec2(at.x + width, at.y + lineHeight), ImGui::GetColorU32(tint));
+                }
+                ImGui::SetCursorScreenPos(ImVec2(at.x + 4, at.y + 2));
+                if (line.kind == '~') {
+                    ImGui::TextColored(colors.overlay0, "...");
+                } else {
+                    ImGui::TextColored(line.kind == '+'   ? colors.green
+                                       : line.kind == '-' ? colors.red
+                                                          : colors.subtext0,
+                                       "%c %s", line.kind, line.text.c_str());
+                }
+                ImGui::SetCursorScreenPos(ImVec2(at.x, at.y + lineHeight));
+                ImGui::Dummy(ImVec2(0, 0)); // imgui wants an item after a cursor move
+            }
+            ImGui::EndChild();
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(2);
+            ImGui::PopID();
         }
         break;
     }

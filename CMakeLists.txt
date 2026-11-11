@@ -50,7 +50,7 @@ imshell_embed_images(${CMAKE_CURRENT_SOURCE_DIR}/assets/images) # none yet: both
 
 add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sidebar.cpp src/thread_view.cpp
                src/markdown.cpp src/notify.cpp src/headless.cpp
-               src/history.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp
+               src/history.cpp src/diff.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp
                src/terminal.cpp src/terminal_view.cpp src/files_view.cpp src/syntax.cpp
                ${EMBEDDED_FONTS_FILE} ${EMBEDDED_IMAGES_FILE} ${IMGUI_CORE})
 target_include_directories(imcode PRIVATE external/IconFontCppHeaders)
@@ -59,16 +59,18 @@ target_link_libraries(imcode PRIVATE imshell::imshell imshell::components imshel
 # ctest: configure with -DIMCODE_BUILD_TESTS=ON (turns on the echo agent it talks to)
 if(IMCODE_BUILD_TESTS)
     enable_testing()
+    add_executable(imcode-diff-test tests/diff_test.cpp src/diff.cpp)
+    add_test(NAME imcode-diff COMMAND imcode-diff-test)
     add_executable(imcode-history-test tests/history_test.cpp src/history.cpp)
     target_link_libraries(imcode-history-test PRIVATE nlohmann_json::nlohmann_json)
     add_test(NAME imcode-history COMMAND imcode-history-test)
     add_executable(imcode-remote-test tests/remote_test.cpp src/remote.cpp)
     target_link_libraries(imcode-remote-test PRIVATE acp::host)
     add_test(NAME imcode-remote COMMAND imcode-remote-test)
-    add_executable(imcode-thread-test tests/thread_test.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp)
+    add_executable(imcode-thread-test tests/thread_test.cpp src/diff.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp)
     target_link_libraries(imcode-thread-test PRIVATE acp::host ${IMCODE_SSH})
     # manual: a real ssh server is needed (see the file)
-    add_executable(imcode-ssh-check tests/ssh_check.cpp src/thread.cpp src/remote.cpp src/ssh.cpp src/ssh_config.cpp
+    add_executable(imcode-ssh-check tests/ssh_check.cpp src/diff.cpp src/thread.cpp src/remote.cpp src/ssh.cpp src/ssh_config.cpp
                    src/terminal.cpp)
     target_link_libraries(imcode-ssh-check PRIVATE acp::host ${IMCODE_SSH} ghostty-vt-static)
     add_executable(imcode-terminal-test tests/terminal_test.cpp src/terminal.cpp)
