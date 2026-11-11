@@ -409,6 +409,7 @@ void App::threadView(Thread& t) {
     }
     if (t.busy() || t.starting()) {
         ui::Progress(-1, t.starting() ? "Starting" : "Working", 160);
+        ImGui::Dummy(ImVec2(0, Theme::Spacing::M)); // clear of the child's bottom edge
     }
     ImGui::PopTextWrapPos();
     ImGui::Unindent(left);
@@ -422,9 +423,14 @@ void App::threadView(Thread& t) {
     for (size_t i = 0; i < t.queue.size(); ++i) {
         ImGui::SetCursorPosX(left + 8);
         ImGui::PushID(static_cast<int>(i));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // a quiet x, lit on hover
+        ImGui::PushStyleColor(ImGuiCol_Text, colors.overlay1);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
         if (ImGui::SmallButton(ICON_FA_XMARK)) {
             drop = static_cast<int>(i);
         }
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(2);
         ImGui::PopID();
         ImGui::SameLine();
         ImGui::TextColored(colors.overlay1, "Queued: %s",
