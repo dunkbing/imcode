@@ -150,6 +150,15 @@ void App::setup() {
 }
 
 void App::agentIcon(const std::string& agentId, float size, float rowHeight) {
+    // an item as tall as its row, the mark drawn in its middle: no cursor nudging, which
+    // drifts by a pixel or two against buttons
+    const float height = rowHeight > 0 ? rowHeight : ImGui::GetTextLineHeight();
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    ImGui::Dummy(ImVec2(size, height));
+    agentIconAt(agentId, ImVec2(at.x, std::floor(at.y + (height - size) * 0.5f)), size);
+}
+
+void App::agentIconAt(const std::string& agentId, ImVec2 min, float size) {
     auto it = icons.find(agentId);
     if (it == icons.end()) {
         const EmbeddedImage* image = findEmbeddedImage(("agent-" + agentId).c_str());
@@ -157,12 +166,6 @@ void App::agentIcon(const std::string& agentId, float size, float rowHeight) {
             image && upload ? imshell::LoadTexture(image->data, image->size, upload) : ImTextureID{};
         it = icons.emplace(agentId, texture).first;
     }
-    // an item as tall as its row, the mark drawn in its middle: no cursor nudging, which
-    // drifts by a pixel or two against buttons
-    const float height = rowHeight > 0 ? rowHeight : ImGui::GetTextLineHeight();
-    const ImVec2 at = ImGui::GetCursorScreenPos();
-    ImGui::Dummy(ImVec2(size, height));
-    const ImVec2 min(at.x, std::floor(at.y + (height - size) * 0.5f));
     // the agent's own colour where its mark has one; the others are drawn like text
     static const std::map<std::string, ImVec4> brand = {
         {"claude-code", ImVec4(0.85f, 0.47f, 0.34f, 1)}, // #d97757

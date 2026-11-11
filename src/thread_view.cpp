@@ -655,11 +655,23 @@ void App::composer(Thread& t, float width) {
             t.setConfig(mode->id, safe[at < safe.size() ? (at + 1) % safe.size() : 0]->value);
         }
     }
-    agentIcon(t.agentId, 16, button);
-    ImGui::SameLine(0, 6);
-    if (imshell::Button((label + "##models").c_str(), imshell::ButtonVariant::Secondary,
-                       ImVec2(labelWidth, 0))) {
-        ImGui::OpenPopup("models");
+    // the agent's mark and the model: plain until hovered (or open), then a rounded background
+    {
+        const ImVec2 chip(labelWidth + 16 + 6, button);
+        const bool clicked = ImGui::InvisibleButton("##models", chip);
+        const ImVec2 at = ImGui::GetItemRectMin();
+        const bool lit = ImGui::IsItemHovered() || ImGui::IsPopupOpen("models");
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+        if (lit) {
+            draw->AddRectFilled(at, ImVec2(at.x + chip.x, at.y + chip.y), ImGui::GetColorU32(colors.surface0),
+                                ImGui::GetStyle().FrameRounding);
+        }
+        agentIconAt(t.agentId, ImVec2(at.x + 10, std::floor(at.y + (button - 16) * 0.5f)), 16);
+        draw->AddText(ImVec2(at.x + 10 + 16 + 8, at.y + (button - ImGui::GetTextLineHeight()) * 0.5f),
+                      ImGui::GetColorU32(lit ? colors.text : colors.subtext1), label.c_str());
+        if (clicked) {
+            ImGui::OpenPopup("models");
+        }
     }
     if (std::exchange(devOpenModels, false)) {
         ImGui::OpenPopup("models");
