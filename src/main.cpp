@@ -10,7 +10,7 @@
 #include "imshell/embedded.hpp"
 #include "imshell/fonts.hpp"
 #include "imshell/image.hpp"
-#include "imshell/splitter.hpp"
+#include "imshell/resizable.hpp"
 #include "imshell/frames.hpp"
 #include "imshell/themes.hpp"
 #include "imshell/title_bar.hpp"
@@ -31,45 +31,6 @@ namespace ui = imshell::ui;
 constexpr float barHeight = 40; // taller than the os default: air above and below its row
 
 int runHeadless(App& app, const char* out, int width, int height, int frames); // headless.cpp
-
-// a panel divider's line, one screen pixel thick (two while hovered or dragged), on the
-// pixel grid so it stays sharp. vertical: a line at x from y0 to y1; else at y from x0 to x1
-void dividerLine(float at, float from, float to, bool vertical, bool lit) {
-    const auto& colors = Theme::Current()->colors;
-    const float scale = std::max(1.0f, ImGui::GetIO().DisplayFramebufferScale.x);
-    const float pixel = 1.0f / scale;
-    const float thick = (lit ? 2 : 1) * pixel;
-    const float snapped = std::floor(at * scale) / scale;
-    const ImU32 color = ImGui::GetColorU32(lit ? colors.blue : colors.surface1);
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-    if (vertical) {
-        draw->AddRectFilled(ImVec2(snapped, from), ImVec2(snapped + thick, to), color);
-    } else {
-        draw->AddRectFilled(ImVec2(from, snapped), ImVec2(to, snapped + thick), color);
-    }
-}
-
-float sideSplitter(const char* id, float height, bool line, bool* released) {
-    const auto& colors = Theme::Current()->colors;
-    ImGui::SameLine(0, 0);
-    // measured here, beside the panel: a caller asking before this gets the next row's few pixels
-    height = ImGui::GetContentRegionAvail().y;
-    ImGui::InvisibleButton(id, ImVec2(5, height));
-    const bool lit = ImGui::IsItemHovered() || ImGui::IsItemActive();
-    if (lit) {
-        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-    }
-    if (released && ImGui::IsItemDeactivated()) {
-        *released = true;
-    }
-    (void)line; // always drawn: a handle nobody can see is not found
-    (void)colors;
-    const ImVec2 min = ImGui::GetItemRectMin();
-    dividerLine(min.x + 2, min.y, min.y + height, true, lit);
-    const float moved = ImGui::IsItemActive() ? ImGui::GetIO().MouseDelta.x : 0;
-    ImGui::SameLine(0, 0);
-    return moved;
-}
 
 bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags) {
     const auto& colors = Theme::Current()->colors;
@@ -162,9 +123,9 @@ void App::setup() {
     dataFile = dir / "threads.json";
     data = Store::load(dataFile);
     sidebarWidth = data.sidebarWidth;
-    files.split = data.filesSplit;
+    files.width = data.filesWidth;
     files.treeWidth = data.treeWidth;
-    terminalSplit = data.terminalSplit;
+    terminalHeight = data.terminalHeight;
     applyTheme(data.theme);
     project = data.projects.empty() ? -1 : 0;
     startScan();
@@ -317,9 +278,9 @@ bool App::wantsFrames() {
 
 void App::save() {
     data.sidebarWidth = sidebarWidth;
-    data.filesSplit = files.split;
+    data.filesWidth = files.width;
     data.treeWidth = files.treeWidth;
-    data.terminalSplit = terminalSplit;
+    data.terminalHeight = terminalHeight;
     Store::save(dataFile, data);
 }
 
@@ -602,61 +563,81 @@ void App::frame() {
     } else {
         const bool list = !narrow || sidebarOpen || current < 0;
         bool resized = false; // a panel was dragged to a new size: saved when let go
-        if (list) {
-            // the list keeps its width; the chat beside it keeps 420, the files 360 when open
-            sidebarWidth = std::clamp(sidebarWidth, 200.0f,
-                                      std::max(200.0f, content.size.x - (files.open ? 780.0f : 420.0f)));
-            ImGui::BeginChild("sidebar", ImVec2(narrow ? 0 : sidebarWidth, 0), ImGuiChildFlags_Borders);
-            sidebar();
-            ImGui::EndChild();
-            if (narrow) {
-                ImGui::SameLine();
-            } else {
-                sidebarWidth += sideSplitter("##sidebar-split", ImGui::GetContentRegionAvail().y, false, &resized);
+        const imshell::ResizableOptions lines{.line = ImGui::GetColorU32(Theme::Current()->colors.surface1),
+                                              .lit = ImGui::GetColorU32(Theme::Current()->colors.blue)};
+        // the thread: the chat (the terminal under it) and the files beside it, or the files
+        // alone where there is no room for both
+        const auto threadArea = [&] {
+            if (current < 0) {
+                if (ui::EmptyState(data.projects.empty() ? "No project yet" : "No thread open",
+                                   data.projects.empty() ? "Add a folder on this machine, or on another one over ssh."
+                                                         : "Start a thread in one of your projects.",
+                                   data.projects.empty() ? "Add project" : "New thread")) {
+                    newThread(project);
+                }
+                return;
             }
-        }
-        ImGui::BeginChild("thread", ImVec2(0, 0), 0,
-                          narrow && list ? ImGuiWindowFlags_NoInputs : 0);
-        if (current >= 0) {
             Thread& t = *data.threads[current];
-            const ImVec2 area = ImGui::GetContentRegionAvail();
-            // the files beside the chat; alone where there is no room for both
-            const bool beside = files.open && !narrow;
-            if (!files.open || beside) {
-                ImGui::BeginChild("work", ImVec2(beside ? area.x * files.split : 0, 0));
-                ImGui::BeginChild("chat", ImVec2(0, terminalOpen ? area.y * terminalSplit : 0));
-                threadView(t);
-                ImGui::EndChild();
-                if (terminalOpen) {
-                    // its own thick hover line hidden: ours is drawn, as the other dividers'
-                    ImGui::PushStyleColor(ImGuiCol_SeparatorHovered, ImVec4(0, 0, 0, 0));
-                    imshell::Splitter("##terminal", &terminalSplit, area.y, 160, 80);
-                    ImGui::PopStyleColor();
-                    {
-                        const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
-                        dividerLine(max.y - 1, min.x, max.x, false, ImGui::IsItemHovered() || ImGui::IsItemActive());
+            const auto work = [&] {
+                if (!terminalOpen) {
+                    threadView(t);
+                    return;
+                }
+                auto stacked = lines;
+                stacked.axis = imshell::Axis::Vertical;
+                if (imshell::BeginResizable("work", stacked)) {
+                    if (imshell::ResizablePanel({.min = 160})) {
+                        threadView(t);
                     }
-                    resized |= ImGui::IsItemDeactivated();
-                    terminalPanel(t);
+                    if (imshell::ResizablePanel({.size = &terminalHeight, .min = 80})) {
+                        terminalPanel(t);
+                    }
+                    resized |= imshell::EndResizable();
+                }
                 if (std::exchange(terminalExited, false)) {
                     terminals.erase(&t); // opening the panel again starts a new shell
                     terminalOpen = false;
                     focusInput = true;
                 }
+            };
+            if (files.open && narrow) {
+                resized |= filesPanel(t, false);
+            } else if (files.open) {
+                // the chat keeps 420 (its status line fits), the files 360
+                if (imshell::BeginResizable("beside", lines)) {
+                    if (imshell::ResizablePanel({.min = 420})) {
+                        work();
+                    }
+                    if (imshell::ResizablePanel({.size = &files.width, .min = 360})) {
+                        resized |= filesPanel(t, true);
+                    }
+                    resized |= imshell::EndResizable();
                 }
+            } else {
+                work();
+            }
+        };
+        if (narrow) {
+            // one at a time: the list over the thread
+            if (list) {
+                ImGui::BeginChild("sidebar", ImVec2(0, 0), ImGuiChildFlags_Borders);
+                sidebar();
+                ImGui::EndChild();
+            } else {
+                ImGui::BeginChild("thread");
+                threadArea();
                 ImGui::EndChild();
             }
-            if (files.open) {
-                resized |= filesPanel(t, beside ? area.x : 0);
+        } else if (imshell::BeginResizable("layout", lines)) {
+            if (imshell::ResizablePanel({.size = &sidebarWidth, .min = 200, .fixed = true,
+                                         .childFlags = ImGuiChildFlags_Borders})) {
+                sidebar();
             }
-        } else if (ui::EmptyState(data.projects.empty() ? "No project yet" : "No thread open",
-                                  data.projects.empty()
-                                      ? "Add a folder on this machine, or on another one over ssh."
-                                      : "Start a thread in one of your projects.",
-                                  data.projects.empty() ? "Add project" : "New thread")) {
-            newThread(project);
+            if (imshell::ResizablePanel({.min = files.open ? 781.0f : 420.0f})) {
+                threadArea();
+            }
+            resized |= imshell::EndResizable();
         }
-        ImGui::EndChild();
         if (resized) {
             save();
         }

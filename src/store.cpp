@@ -26,9 +26,9 @@ namespace Store {
         out.defaults = root.value("defaults", out.defaults);
         if (const auto layout = root.value("layout", std::vector<float>{}); layout.size() == 4) {
             out.sidebarWidth = layout[0];
-            out.filesSplit = layout[1];
+            out.filesWidth = layout[1] > 1 ? layout[1] : 0; // older builds kept shares (0..1) here
             out.treeWidth = layout[2];
-            out.terminalSplit = layout[3];
+            out.terminalHeight = layout[3] > 1 ? layout[3] : out.terminalHeight;
         }
         for (const auto& row : root.value("projects", json::array())) {
             addProject({row.value("host", ""), row.value("cwd", "")});
@@ -72,7 +72,7 @@ namespace Store {
                                    {"last", data.lastSession},
                                    {"theme", data.theme},
                                    {"defaults", data.defaults},
-                                   {"layout", {data.sidebarWidth, data.filesSplit, data.treeWidth, data.terminalSplit}},
+                                   {"layout", {data.sidebarWidth, data.filesWidth, data.treeWidth, data.terminalHeight}},
                                    {"projects", projects},
                                    {"threads", threads}}.dump(2) << "\n";
         std::error_code ec;
