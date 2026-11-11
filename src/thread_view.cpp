@@ -475,12 +475,19 @@ void App::statusLine(Thread& t, float left) {
         }
         // before the first message: work in this checkout, or in a worktree of its own
         if (t.items.empty() && t.root.empty()) {
-            ImGui::SameLine(0, 16);
+            // on the same line when there is room for it, else under the folder
+            const char* label = t.wantWorktree ? ICON_FA_CODE_FORK "  New worktree" : ICON_FA_CODE_FORK "  Current checkout";
+            const float room = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x - ImGui::GetItemRectMax().x;
+            if (room > ImGui::CalcTextSize(label).x + 40) {
+                ImGui::SameLine(0, 16);
+            } else {
+                ImGui::SetCursorPosX(left);
+            }
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
             ImGui::PushStyleColor(ImGuiCol_Text, t.wantWorktree ? colors.blue : colors.subtext0);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
-            if (ImGui::Button(t.wantWorktree ? ICON_FA_CODE_FORK "  New worktree" : ICON_FA_CODE_FORK "  Current checkout")) {
+            if (ImGui::Button(label)) {
                 t.wantWorktree = !t.wantWorktree;
             }
             ImGui::PopStyleVar();
