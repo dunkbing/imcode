@@ -1,6 +1,8 @@
 // manual check against a real ssh server:
 //   imcode-ssh-check <host> <folder> <path of acp-echo-agent on the host>
+//   imcode-ssh-check <host> <secret, or - for none>: one sign-in
 // connects, lists the folder over sftp, opens a shell there, then runs one turn of a remote thread
+#include "../src/keychain.hpp"
 #include "../src/ssh.hpp"
 #include "../src/terminal.hpp"
 #include "../src/thread.hpp"
@@ -10,6 +12,16 @@
 #include <thread>
 
 int main(int argc, char** argv) {
+    if (argc == 4 && std::string(argv[2]) == "--store") { // what the keychain holds for host, as the app keeps it
+        const char* service = std::getenv("IMCODE_KEYCHAIN_SERVICE");
+        return Keychain::write(service ? service : "imcode ssh", argv[1], argv[3]) ? 0 : 1;
+    }
+    if (argc == 3) { // imcode-ssh-check <host> <secret or ->: one sign-in, nothing else
+        Ssh::Error error;
+        const bool ok = Ssh::session(argv[1], std::string(argv[2]) == "-" ? "" : argv[2], error) != nullptr;
+        std::printf("%s%s\n", ok ? "connected" : "refused: ", error.message.c_str());
+        return ok ? 0 : 1;
+    }
     if (argc != 4) {
         return 2;
     }

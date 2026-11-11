@@ -1,5 +1,6 @@
 #include "ssh.hpp"
 
+#include "keychain.hpp"
 #include "acp_host/process_runner.hpp"
 #include "ssh_config.hpp"
 #include <algorithm>
@@ -749,6 +750,7 @@ namespace Ssh {
     std::shared_ptr<Session> session(const std::string& host, const std::string& secret,
                                      Error& error) {
         std::string useSecret = secret;
+        bool fromKeychain = false;
         {
             std::lock_guard lock(cacheMutex);
             if (const auto it = cache.find(host); it != cache.end() && it->second->alive()) {
@@ -758,11 +760,23 @@ namespace Ssh {
                 useSecret = secrets[host];
             }
         }
+        // IMCODE_KEYCHAIN_SERVICE: ui checks keep their secrets apart from the user's
+        const char* service = std::getenv("IMCODE_KEYCHAIN_SERVICE");
+        const std::string keychain = service ? service : "imcode ssh";
+        if (useSecret.empty()) { // signed in once before: the keychain has it
+            useSecret = Keychain::read(keychain, host);
+            fromKeychain = !useSecret.empty();
+        }
         auto made = connect(host, useSecret, error);
         if (made) {
             std::lock_guard lock(cacheMutex);
             cache[host] = made;
             secrets[host] = useSecret;
+            if (!secret.empty()) { // typed and it worked: kept for the next launch
+                Keychain::write(keychain, host, secret);
+            }
+        } else if (fromKeychain && error.needsSecret) {
+            Keychain::remove(keychain, host); // changed since: ask again
         }
         return made;
     }

@@ -69,7 +69,7 @@ The agent runs on the remote machine in the remote folder; nothing is installed 
 - [~] Sign in to an agent in the thread's own terminal, local or remote (done; not tried against a real sign-in)
 - [~] Reconnect with resume after a drop or sleep (done), the ssh handshake off the ui thread (done); making a worktree still blocks
 - [~] Install an agent on the remote: npm agents on a managed bun (done); registry binaries
-- [ ] Passwords and passphrases in the system keychain; Windows sockets
+- [~] Passwords and passphrases in the system keychain (done, macOS); Windows sockets
 - [ ] Runs that survive a disconnect: a small host process on the remote (phase 3) that the app installs and attaches to
 - [ ] Host picker on a new thread; cycle hosts with a key
 - [ ] Add a project that exists on one host to another host
