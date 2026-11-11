@@ -45,6 +45,7 @@ struct AcpCommand {
 struct AcpEvent {
     enum class Type {
         SessionReady,
+        ResumeFailed, // text = why session/load failed; nothing else is started: the app decides
         Info,             // text = progress note (signing in, ...)
         UserMessageDelta, // replayed by session/load
         MessageDelta,

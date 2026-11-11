@@ -35,6 +35,7 @@ struct Item {
     bool answered = false;
     std::string choice;
     bool terminalSignIn = false; // a terminal sign-in is open: offer Continue
+    bool resumeChoice = false;   // Error: the session could not be resumed; offer to try again or start over
     // TurnChanges: the folder before and after a turn (git trees), and what differs
     std::string treeFrom, treeTo;
     int filesChanged = 0, linesAdded = 0, linesRemoved = 0;
@@ -93,6 +94,9 @@ public:
     void open();
     // its agent is needed now (the model picker, the slash commands): started if it is not
     void wake();
+    // after a failed resume: the same session again, or a new one in its place
+    void retryResume();
+    void startOver();
     // files: local paths. images go along as pictures, other files as links (not over ssh)
     void send(const std::string& text, const std::vector<std::string>& files = {});
     void cancel();

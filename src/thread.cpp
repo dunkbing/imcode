@@ -169,6 +169,20 @@ void Thread::open() {
     }
 }
 
+void Thread::retryResume() {
+    acp_.reset();
+    replaying_ = false;
+    ensureStarted();
+}
+
+void Thread::startOver() {
+    acp_.reset();
+    replaying_ = false;
+    sessionId.clear(); // the old one stays the agent's; this thread goes on in a new one
+    changed_ = true;
+    ensureStarted();
+}
+
 void Thread::wake() {
     if (!acp_ && !connectOp_.isRunning()) {
         ensureStarted();
@@ -537,6 +551,16 @@ void Thread::poll() {
         case AcpEvent::Type::Info:
             add({.kind = Item::Kind::Info, .text = ev.text});
             break;
+        case AcpEvent::Type::ResumeFailed: {
+            const bool inUse = ev.text.find("in use") != std::string::npos || ev.text.find("active writer") != std::string::npos;
+            add({.kind = Item::Kind::Error,
+                 .text = inUse ? "This conversation is open in another client (a terminal or another app). Close it "
+                                 "there, then try again.\n\n" + ev.text
+                               : "Could not resume this conversation: " + ev.text,
+                 .resumeChoice = true});
+            gone = true; // the agent is stopped: nothing runs until the user picks
+            break;
+        }
         case AcpEvent::Type::Error: {
             std::string text = ev.text;
             if (const AcpAgentDef* def = AcpAgents::find(agentId);

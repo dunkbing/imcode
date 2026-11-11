@@ -274,12 +274,9 @@ void AcpClient::onSessionOpened(const std::string& method, const acp::Response& 
             return;
         }
         if (method == "session/load") {
-            // the agent pruned it (or never had it); fall back to a fresh session
-            pushEvent({.type = AcpEvent::Type::Error,
-                       .text = "Could not resume the session: " + r.error->describe() +
-                               ". Starting a new one."});
-            conn_->newSession(cwd_, mcpServers_,
-                              [this](acp::Response res) { onSessionOpened("session/new", res); });
+            // pruned, or open in another client (a terminal): the app asks whether to try
+            // again or start over, so a conversation is never dropped behind the user's back
+            pushEvent({.type = AcpEvent::Type::ResumeFailed, .text = r.error->describe()});
             return;
         }
         pushEvent({.type = AcpEvent::Type::Error, .text = r.error->describe()});

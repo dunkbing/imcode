@@ -351,6 +351,17 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         break;
     case Item::Kind::Error:
         ui::Callout("Error", it.text.c_str(), ui::Tone::Danger);
+        if (it.resumeChoice && !it.answered) {
+            if (imshell::Button("Try again", imshell::ButtonVariant::Primary)) {
+                it.answered = true;
+                t.retryResume();
+            }
+            ImGui::SameLine();
+            if (imshell::Button("Start a new session")) {
+                it.answered = true;
+                t.startOver();
+            }
+        }
         break;
     case Item::Kind::TurnChanges: {
         // what the turn did to the folder: click for the files and their diffs
