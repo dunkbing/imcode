@@ -401,7 +401,7 @@ bool App::filesPanel(Thread& t, float splitWidth) {
         if (f.doc.path.empty()) {
             ImGui::TextColored(colors.overlay1, "Pick a file in the tree to read it here.");
         } else {
-            // project > path/to/file, and what the buttons at the right need
+            // project > path/to/file, and what the button at the right needs
             const float button = ImGui::GetFrameHeight();
             const size_t slash = f.doc.path.rfind('/');
             ImGui::AlignTextToFramePadding();
@@ -412,15 +412,8 @@ bool App::filesPanel(Thread& t, float splitWidth) {
             ImGui::TextColored(colors.subtext0, "%s", f.doc.path.substr(0, slash + 1).c_str());
             ImGui::SameLine(0, 0);
             ImGui::TextUnformatted(f.doc.path.c_str() + slash + 1);
-            ImGui::SameLine(ImGui::GetContentRegionMax().x - button - (alone ? button + 6 : 0));
-            if (imshell::IconButton(ICON_FA_COPY, imshell::ButtonVariant::Secondary, ImVec2(button, button))) {
-                ImGui::SetClipboardText(f.doc.text.c_str());
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Copy the file's text");
-            }
             if (alone) {
-                ImGui::SameLine(0, 6);
+                ImGui::SameLine(ImGui::GetContentRegionMax().x - button);
                 if (imshell::IconButton(ICON_FA_FOLDER_TREE, imshell::ButtonVariant::Secondary,
                                        ImVec2(button, button))) {
                     f.treeOver = true;

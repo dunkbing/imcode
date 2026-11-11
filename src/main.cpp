@@ -32,6 +32,23 @@ constexpr float barHeight = 40; // taller than the os default: air above and bel
 
 int runHeadless(App& app, const char* out, int width, int height, int frames); // headless.cpp
 
+// a panel divider's line, one screen pixel thick (two while hovered or dragged), on the
+// pixel grid so it stays sharp. vertical: a line at x from y0 to y1; else at y from x0 to x1
+void dividerLine(float at, float from, float to, bool vertical, bool lit) {
+    const auto& colors = Theme::Current()->colors;
+    const float scale = std::max(1.0f, ImGui::GetIO().DisplayFramebufferScale.x);
+    const float pixel = 1.0f / scale;
+    const float thick = (lit ? 2 : 1) * pixel;
+    const float snapped = std::floor(at * scale) / scale;
+    const ImU32 color = ImGui::GetColorU32(lit ? colors.blue : colors.surface1);
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    if (vertical) {
+        draw->AddRectFilled(ImVec2(snapped, from), ImVec2(snapped + thick, to), color);
+    } else {
+        draw->AddRectFilled(ImVec2(from, snapped), ImVec2(to, snapped + thick), color);
+    }
+}
+
 float sideSplitter(const char* id, float height, bool line, bool* released) {
     const auto& colors = Theme::Current()->colors;
     ImGui::SameLine(0, 0);
@@ -46,12 +63,9 @@ float sideSplitter(const char* id, float height, bool line, bool* released) {
         *released = true;
     }
     (void)line; // always drawn: a handle nobody can see is not found
-    {
-        const ImVec2 min = ImGui::GetItemRectMin();
-        ImGui::GetWindowDrawList()->AddLine(ImVec2(min.x + 2, min.y), ImVec2(min.x + 2, min.y + height),
-                                            ImGui::GetColorU32(lit ? colors.blue : colors.surface1),
-                                            lit ? 2.0f : 1.0f);
-    }
+    (void)colors;
+    const ImVec2 min = ImGui::GetItemRectMin();
+    dividerLine(min.x + 2, min.y, min.y + height, true, lit);
     const float moved = ImGui::IsItemActive() ? ImGui::GetIO().MouseDelta.x : 0;
     ImGui::SameLine(0, 0);
     return moved;
@@ -614,11 +628,13 @@ void App::frame() {
                 threadView(t);
                 ImGui::EndChild();
                 if (terminalOpen) {
+                    // its own thick hover line hidden: ours is drawn, as the other dividers'
+                    ImGui::PushStyleColor(ImGuiCol_SeparatorHovered, ImVec4(0, 0, 0, 0));
                     imshell::Splitter("##terminal", &terminalSplit, area.y, 160, 80);
-                    if (!ImGui::IsItemHovered() && !ImGui::IsItemActive()) { // its line at rest
+                    ImGui::PopStyleColor();
+                    {
                         const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
-                        ImGui::GetWindowDrawList()->AddLine(ImVec2(min.x, max.y - 1), ImVec2(max.x, max.y - 1),
-                                                            ImGui::GetColorU32(Theme::Current()->colors.surface1));
+                        dividerLine(max.y - 1, min.x, max.x, false, ImGui::IsItemHovered() || ImGui::IsItemActive());
                     }
                     resized |= ImGui::IsItemDeactivated();
                     terminalPanel(t);
