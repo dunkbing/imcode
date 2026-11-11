@@ -252,6 +252,13 @@ void Thread::poll() {
                 item->changes.clear();
                 for (const auto& diff : ev.tool.diffs) {
                     Item::Change change{diff.path, Diff::lines(diff.oldText, diff.newText), 0, 0};
+                    // as the project sees it; the agent may name it through a symlink (/tmp)
+                    for (const std::string& root : {cwd, "/private" + cwd}) {
+                        if (change.path.starts_with(root + "/")) {
+                            change.path.erase(0, root.size() + 1);
+                            break;
+                        }
+                    }
                     for (const auto& line : change.lines) {
                         change.added += line.kind == '+';
                         change.removed += line.kind == '-';
