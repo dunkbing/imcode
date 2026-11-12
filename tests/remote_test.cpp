@@ -26,6 +26,11 @@ int main(int argc, char** argv) {
         std::printf("FAILED: %s\n%s\n", command.c_str(), res.output.c_str());
         return 1;
     }
+    if (Remote::uploadPath("a b.png", 7) != "/tmp/imcode-uploads/7-a b.png" ||
+        Remote::uploadPath("x", 1) == Remote::uploadPath("x", 2)) {
+        std::printf("FAILED: uploadPath\n");
+        return 1;
+    }
     std::printf("ok\n");
     return 0;
 }

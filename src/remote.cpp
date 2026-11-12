@@ -74,4 +74,8 @@ namespace Remote {
         return "exec sh -c " + quote(path + run);
     }
 
+    std::string uploadPath(const std::string& name, long long stamp) {
+        return "/tmp/imcode-uploads/" + std::to_string(stamp) + "-" + name;
+    }
+
 } // namespace Remote

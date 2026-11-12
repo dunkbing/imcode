@@ -146,6 +146,16 @@ private:
     // connected. what was sent meanwhile waits in heldPrompt_
     AcpHost::AsyncOp<std::string> connectOp_;
     std::string heldPrompt_;
+    // files for a remote thread go to the host off the ui thread; the message waits for them
+    struct Uploaded {
+        std::map<std::string, std::string> remote; // local path -> path on the host
+        std::map<std::string, std::string> failed; // local path -> why not
+    };
+    AcpHost::AsyncOp<Uploaded> uploadOp_;
+    std::string uploadText_;
+    std::vector<std::string> uploadFiles_;
+    bool uploadDropped_ = false; // stopped meanwhile: the message is not sent
+    Uploaded uploaded_;          // answers for the re-entered send()
     bool sendNow_ = false; // the turn was stopped for a queued message: the queue moves on
     bool bunTried_ = false; // the managed bun was asked for once
     std::string turnBefore_; // the folder as the running turn found it (a git tree); empty: not a repository

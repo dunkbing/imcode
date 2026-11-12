@@ -38,6 +38,21 @@ std::string Thread::underProject(std::string path) const {
 }
 
 namespace {
+    // the mime type of a picture the agent can be sent as data; null for other files
+    const char* imageType(const std::string& file) {
+        std::string ext = std::filesystem::path(file).extension().string();
+        std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return std::tolower(c); });
+        static const std::pair<const char*, const char*> images[] = {
+            {".png", "image/png"}, {".jpg", "image/jpeg"}, {".jpeg", "image/jpeg"},
+            {".gif", "image/gif"}, {".webp", "image/webp"}};
+        for (const auto& [suffix, mime] : images) {
+            if (ext == suffix) {
+                return mime;
+            }
+        }
+        return nullptr;
+    }
+
     std::string base64(const std::string& bytes) {
         static const char digits[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         std::string out;
@@ -69,7 +84,7 @@ bool Thread::starting() const {
 }
 
 bool Thread::busy() const {
-    return (connectOp_.isRunning() && !heldPrompt_.empty()) ||
+    return uploadOp_.isRunning() || (connectOp_.isRunning() && !heldPrompt_.empty()) ||
            (acp_ && acp_->isRunning() && (acp_->isTurnActive() || (queued_ && starting())));
 }
 
@@ -291,19 +306,56 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
         }
         return;
     }
+    // other files go to the host first, off the ui thread; poll() runs this again once they are there
+    if (!host.empty()) {
+        std::vector<std::string> due;
+        for (const auto& file : files) {
+            if (!imageType(file) && !uploaded_.remote.contains(file) && !uploaded_.failed.contains(file)) {
+                due.push_back(file);
+            }
+        }
+        if (!due.empty()) {
+            uploadText_ = text;
+            uploadFiles_ = files;
+            uploadDropped_ = false;
+            add({.kind = Item::Kind::Info, .text = "Uploading " + std::to_string(due.size()) + " file(s) to " + host + "..."});
+            uploadOp_.start([host = host, due, stamp = std::chrono::steady_clock::now().time_since_epoch().count()] {
+                Uploaded out;
+                Ssh::Error sshError;
+                const auto session = Ssh::session(host, "", sshError);
+                long long n = 0;
+                for (const auto& file : due) {
+                    const std::filesystem::path path(file);
+                    std::error_code ec;
+                    std::string failed;
+                    if (std::filesystem::file_size(path, ec) > 20'000'000 || ec) {
+                        failed = "over 20 MB";
+                    } else if (!session) {
+                        failed = sshError.message;
+                    } else {
+                        std::ifstream in(path, std::ios::binary);
+                        const std::string bytes((std::istreambuf_iterator<char>(in)), {});
+                        const std::string remote = Remote::uploadPath(path.filename().string(), stamp + n++);
+                        if (session->write(remote, bytes, failed)) {
+                            out.remote[file] = remote;
+                            continue;
+                        }
+                    }
+                    out.failed[file] = failed;
+                }
+                return out;
+            });
+            return;
+        }
+    }
     // the message's parts: its text, pictures as data, other files as links
     json blocks = json::array({acp::textBlock(text)});
     std::vector<std::string> names;
     for (const auto& file : files) {
         const std::filesystem::path path(file);
-        std::string ext = path.extension().string();
-        std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return std::tolower(c); });
-        static const std::pair<const char*, const char*> images[] = {
-            {".png", "image/png"}, {".jpg", "image/jpeg"}, {".jpeg", "image/jpeg"},
-            {".gif", "image/gif"}, {".webp", "image/webp"}};
-        const auto image = std::ranges::find(images, ext, [](const auto& i) { return std::string(i.first); });
+        const char* image = imageType(file);
         std::error_code ec;
-        if (image != std::end(images)) {
+        if (image) {
             // shortcut: sent whether or not the agent said it reads pictures; one that
             // does not answers with its own error
             if (std::filesystem::file_size(path, ec) > 5'000'000 || ec) {
@@ -312,31 +364,18 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
             }
             std::ifstream in(path, std::ios::binary);
             const std::string bytes((std::istreambuf_iterator<char>(in)), {});
-            blocks.push_back({{"type", "image"}, {"mimeType", image->second}, {"data", base64(bytes)}});
+            blocks.push_back({{"type", "image"}, {"mimeType", image}, {"data", base64(bytes)}});
         } else if (host.empty()) {
             blocks.push_back(acp::resourceLinkBlock("file://" + file, path.filename().string()));
+        } else if (const auto sent = uploaded_.remote.find(file); sent != uploaded_.remote.end()) {
+            // the agent is on the host: the file went there before this call
+            blocks.push_back(acp::resourceLinkBlock("file://" + sent->second, path.filename().string()));
         } else {
-            // the agent is on the host: the file goes there first, into a temp folder
-            // shortcut: blocks the ui while it uploads; files over 20 MB are refused
-            std::string failed;
-            if (std::filesystem::file_size(path, ec) > 20'000'000 || ec) {
-                failed = "over 20 MB";
-            } else {
-                std::ifstream in(path, std::ios::binary);
-                const std::string bytes((std::istreambuf_iterator<char>(in)), {});
-                const std::string remote = "/tmp/imcode-uploads/" + path.filename().string();
-                Ssh::Error sshError;
-                const auto session = Ssh::session(host, "", sshError);
-                if (!session) {
-                    failed = sshError.message;
-                } else if (session->write(remote, bytes, failed)) {
-                    blocks.push_back(acp::resourceLinkBlock("file://" + remote, path.filename().string()));
-                }
-            }
-            if (!failed.empty()) {
-                add({.kind = Item::Kind::Info, .text = path.filename().string() + " was not attached: " + failed + "."});
-                continue;
-            }
+            const auto why = uploaded_.failed.find(file);
+            add({.kind = Item::Kind::Info,
+                 .text = path.filename().string() + " was not attached: " +
+                         (why == uploaded_.failed.end() ? "not uploaded" : why->second) + "."});
+            continue;
         }
         names.push_back(path.filename().string());
     }
@@ -388,6 +427,7 @@ void Thread::setConfig(const std::string& id, const std::string& value) {
 }
 
 void Thread::cancel() {
+    uploadDropped_ = uploadOp_.isRunning(); // the message waits for its files: not sent
     if (acp_) {
         acp_->cancelTurn();
     }
@@ -532,6 +572,16 @@ void Thread::noticeElsewhere() {
 }
 
 void Thread::poll() {
+    uploadOp_.check([this](Uploaded got) {
+        const std::string text = std::exchange(uploadText_, {});
+        const auto files = std::exchange(uploadFiles_, {});
+        if (std::exchange(uploadDropped_, false)) {
+            return;
+        }
+        uploaded_ = std::move(got);
+        send(text, files);
+        uploaded_ = {};
+    });
     connectOp_.check([this](std::string error) {
         const std::string text = std::exchange(heldPrompt_, {});
         const auto files = std::exchange(heldFiles_, {});

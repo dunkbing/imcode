@@ -14,4 +14,7 @@ namespace Remote {
     // (checked against the release's checksums). quiet on stdout
     std::string bunSetup();
 
+    // where an attached file goes on the host: a stamp keeps same-named files apart
+    std::string uploadPath(const std::string& name, long long stamp);
+
 } // namespace Remote
