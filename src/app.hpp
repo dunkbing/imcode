@@ -238,9 +238,7 @@ struct App : imshell::Delegate {
         AcpHost::AsyncOp<Page> op;
         // the selected commit opened out under its row
         bool expanded = false, reveal = false;
-        std::string detailHash;
-        Git::CommitDetail detail;
-        bool detailReady = false;
+        std::map<std::string, Git::CommitDetail> cache; // commits read in full, by hash
         AcpHost::AsyncOp<std::pair<std::string, Git::CommitDetail>> detailOp;
     } graph;
     void graphOpen(Thread& t);

@@ -37,6 +37,8 @@ void App::graphOpen(Thread& t) {
     graph.rows.clear();
     graph.lanes = 1;
     graph.selected = 0;
+    graph.cache.clear();
+    graph.expanded = false;
 }
 
 void App::graphDraw() {
@@ -126,32 +128,37 @@ void App::graphDraw() {
         if (focused && ImGui::IsKeyPressed(ImGuiKey_Space, false)) {
             g.expanded = !g.expanded;
         }
-        // the selected commit, opened out under its row: read in full off the ui thread
+        // the selected commit, opened out under its row. details are read ahead for the rows in view
+        // (here; a remote is slow), so opening one is a lookup, not a wait
         const Git::LogEntry& picked = g.commits[static_cast<size_t>(g.selected)];
-        g.detailOp.check([&](std::pair<std::string, Git::CommitDetail> got) {
-            if (got.first == g.detailHash) {
-                g.detail = std::move(got.second);
-                g.detailReady = true;
+        const auto stored = [&](std::pair<std::string, Git::CommitDetail> got) {
+            if (g.cache.size() > 3000) {
+                g.cache.clear();
             }
-        });
-        if (g.expanded && g.detailHash != picked.hash && !g.detailOp.isRunning()) {
-            g.detailHash = picked.hash;
-            g.detailReady = false;
-            g.detailOp.start([host = g.host, cwd = g.cwd, hash = picked.hash] { return std::pair{hash, Git::show(host, cwd, hash)}; });
-            g.detailOp.check([&](std::pair<std::string, Git::CommitDetail> got) {
-                if (got.first == g.detailHash) {
-                    g.detail = std::move(got.second);
-                    g.detailReady = true;
-                }
-            }, std::chrono::milliseconds(g.host.empty() ? 80 : 0)); // a quick one is there in this frame
+            g.cache[got.first] = std::move(got.second);
+        };
+        g.detailOp.check(stored);
+        const auto fetch = [&](const std::string& hash, bool urgent) {
+            if (g.detailOp.isRunning() || g.cache.contains(hash)) {
+                return;
+            }
+            g.detailOp.start([host = g.host, cwd = g.cwd, hash] { return std::pair{hash, Git::show(host, cwd, hash)}; });
+            if (urgent) {
+                g.detailOp.check(stored, std::chrono::milliseconds(g.host.empty() ? 80 : 0));
+            }
+        };
+        if (g.expanded) {
+            fetch(picked.hash, true);
         }
+        const auto found = g.cache.find(picked.hash);
+        const Git::CommitDetail* shown = found == g.cache.end() ? nullptr : &found->second;
         // what the opened row holds: the commit at the left, the files it changed at the right
         const auto detailDraw = [&](const Git::LogEntry&, float width) {
-            if (!g.detailReady) {
+            if (!shown) {
                 ui::Progress(-1, "Reading the commit");
                 return;
             }
-            const Git::CommitDetail& d = g.detail;
+            const Git::CommitDetail& d = *shown;
             const auto when = [](long long unixSeconds) {
                 const std::tm local = localTm(static_cast<time_t>(unixSeconds));
                 char text[64];
@@ -226,7 +233,7 @@ void App::graphDraw() {
         };
         const float graphWidth = 10 + static_cast<float>(g.lanes) * laneWidth;
         // tall enough for the message, between a floor and a ceiling
-        const float extra = !g.expanded ? 0.0f : !g.detailReady ? 140.0f : std::clamp(112.0f + 18.0f * static_cast<float>(1 + std::ranges::count(g.detail.message, '\n')), 140.0f, 320.0f);
+        const float extra = !g.expanded ? 0.0f : !shown ? 140.0f : std::clamp(112.0f + 18.0f * static_cast<float>(1 + std::ranges::count(shown->message, '\n')), 140.0f, 320.0f);
         // rows are placed by hand: the open one is taller than the rest
         const auto rowTop = [&](int i) { return static_cast<float>(i) * rowHeight + (g.expanded && i > g.selected ? extra : 0); };
         const float top = ImGui::GetCursorPosY();
@@ -242,7 +249,7 @@ void App::graphDraw() {
         }
         const float seen = ImGui::GetScrollY(), view = ImGui::GetWindowHeight();
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0)); // rows touch: the lines run on
-        int lastShown = 0;
+        int lastShown = 0, firstShown = -1;
         for (int i = 0; i < count; ++i) {
             const float y = rowTop(i);
             const float height = rowHeight + (g.expanded && i == g.selected ? extra : 0);
@@ -250,6 +257,7 @@ void App::graphDraw() {
                 continue;
             }
             lastShown = i;
+            firstShown = firstShown < 0 ? i : firstShown;
             const Git::LogEntry& e = g.commits[static_cast<size_t>(i)];
             const Git::GraphRow& row = g.rows[static_cast<size_t>(i)];
             ImGui::PushID(i);
@@ -325,7 +333,10 @@ void App::graphDraw() {
             }
             ImGui::PopID();
         }
-        (void)lastShown;
+        // read ahead: the rows in view, here, one at a time
+        for (int i = std::max(0, firstShown); g.host.empty() && firstShown >= 0 && i <= std::min(count - 1, lastShown + 6) && !g.detailOp.isRunning(); ++i) {
+            fetch(g.commits[static_cast<size_t>(i)].hash, false);
+        }
         ImGui::SetCursorPosY(top + total - 1);
         ImGui::Dummy(ImVec2(1, 1));
         // near the end of what is loaded: the next page

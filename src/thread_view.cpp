@@ -967,10 +967,14 @@ void App::statusLine(Thread& t, float left) {
         ImGui::SameLine(0, 16);
         ImGui::AlignTextToFramePadding();
         // click: the history, as a graph
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Round::Row); // the hover fill of the two links below
-        const std::string branchText = std::format(ICON_FA_CODE_BRANCH "  {}", git.branch);
+        // the same flat buttons as the folder's: one hover look and one radius for all three
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, colors.surface1);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Round::Row);
         ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
-        if (ImGui::Selectable((branchText + "##history").c_str(), false, 0, ImGui::CalcTextSize(branchText.c_str()))) {
+        if (ImGui::Button(std::format(ICON_FA_CODE_BRANCH "  {}##history", git.branch).c_str())) {
             graphOpen(t);
         }
         ImGui::PopStyleColor();
@@ -980,10 +984,9 @@ void App::statusLine(Thread& t, float left) {
         }
         if (git.changed > 0) {
             // click: what changed, file by file
-            ImGui::SameLine(0, 10);
+            ImGui::SameLine(0, 4);
             ImGui::PushStyleColor(ImGuiCol_Text, colors.yellow);
-            if (ImGui::Selectable(std::format("{} changed##changes", git.changed).c_str(), false, 0,
-                                  ImGui::CalcTextSize(std::format("{} changed", git.changed).c_str()))) {
+            if (ImGui::Button(std::format("{} changed##changes", git.changed).c_str())) {
                 changesOpen(t);
             }
             ImGui::PopStyleColor();
@@ -992,7 +995,8 @@ void App::statusLine(Thread& t, float left) {
                 ImGui::SetTooltip("See what changed");
             }
         }
-        ImGui::PopStyleVar();
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(3);
         // before the first message: work in this checkout, or in a worktree of its own
         if (t.items.empty() && t.root.empty()) {
             // on the same line when there is room for it, else under the folder

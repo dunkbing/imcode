@@ -261,6 +261,8 @@ void App::applyTheme(const std::string& id) {
     Theme::Current() = &Theme::themeById(id);
     Theme::ApplyTheme(Theme::Current()->colors);
     ImGui::GetStyle().ScrollbarSize = 8; // thin: the lists are narrow and many
+    ImGui::GetStyle().FrameRounding = Round::Row; // buttons, inputs, hover fills: one radius
+    ImGui::GetStyle().GrabRounding = Round::Row;
     data.theme = Theme::Current()->id;
 }
 

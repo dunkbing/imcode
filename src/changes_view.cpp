@@ -254,7 +254,6 @@ void App::changesDraw() {
                 const ImVec2 end = ImGui::GetItemRectMax(), start = ImGui::GetItemRectMin();
                 const bool over = ImGui::IsItemHovered() || (idle && ImGui::IsMouseHoveringRect(start, end) &&
                                                              ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows));
-                const ImVec2 after = ImGui::GetCursorScreenPos();
                 ImDrawList* draw = ImGui::GetWindowDrawList();
                 const char state = !working ? change.kind : row.staged ? change.index : change.work;
                 const ImVec4 tone = state == '?' || state == 'A' ? colors.green : state == 'D' ? colors.red : colors.yellow;
@@ -262,7 +261,7 @@ void App::changesDraw() {
                 const float y = start.y + (end.y - start.y - ImGui::GetTextLineHeight()) / 2;
                 draw->AddText(ImVec2(start.x + 8, y), ImGui::GetColorU32(tone), letter);
                 // the name, then its folder dimmed, cut to the row (and short of the buttons)
-                const float buttons = working && over && idle ? (row.staged ? 28.0f : 56.0f) : 0.0f;
+                const float buttons = working && over && idle ? (row.staged ? 26.0f : 54.0f) : 0.0f;
                 const size_t slash = change.path.rfind('/');
                 const std::string name = change.path.substr(slash == std::string::npos ? 0 : slash + 1);
                 const std::string folder = slash == std::string::npos ? "" : change.path.substr(0, slash);
@@ -272,24 +271,31 @@ void App::changesDraw() {
                               ImGui::GetColorU32(colors.overlay0), folder.c_str());
                 draw->PopClipRect();
                 if (buttons > 0) {
-                    ImGui::SetCursorScreenPos(ImVec2(end.x - buttons - 12, start.y + (end.y - start.y - ImGui::GetFrameHeight() * 0.8f) / 2 + 2));
+                    // on the row's own line, as full-height buttons: no cursor moves to get them there
+                    const float rowHeight = end.y - start.y - 4;
+                    ImGui::SameLine(end.x - buttons - 12 - (ImGui::GetWindowPos().x - ImGui::GetScrollX()), 0);
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface1);
+                    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+                    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Round::Row);
                     if (!row.staged) {
-                        if (ImGui::SmallButton(ICON_FA_ROTATE_LEFT "##discard")) {
+                        if (ImGui::Button(ICON_FA_ROTATE_LEFT "##discard", ImVec2(26, rowHeight))) {
                             c.asking = {change};
                             c.askWant = true;
                         }
                         if (ImGui::IsItemHovered()) {
                             ImGui::SetTooltip(change.work == '?' ? "Delete the file" : "Discard the changes");
                         }
-                        ImGui::SameLine(0, 4);
+                        ImGui::SameLine(0, 2);
                     }
-                    if (ImGui::SmallButton(row.staged ? ICON_FA_MINUS "##unstage" : ICON_FA_PLUS "##stage")) {
+                    if (ImGui::Button(row.staged ? ICON_FA_MINUS "##unstage" : ICON_FA_PLUS "##stage", ImVec2(26, rowHeight))) {
                         edit(row.staged ? 'u' : 's', {change});
                     }
                     if (ImGui::IsItemHovered()) {
                         ImGui::SetTooltip(row.staged ? "Unstage" : "Stage");
                     }
-                    ImGui::SetCursorScreenPos(after);
+                    ImGui::PopStyleVar(2);
+                    ImGui::PopStyleColor(2);
                 } else if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("%s", change.path.c_str());
                 }
