@@ -204,7 +204,7 @@ The phone is remote only: it runs no agent and keeps no project of its own. It r
 ## 7. Shipping
 
 - [~] Settings: theme (done), font size, keys, default agent and permissions ([#150](https://github.com/dunkbing/imcode/issues/150))
-- [ ] ACP log view (every line in and out) ([#151](https://github.com/dunkbing/imcode/issues/151))
+- [x] ACP log view (every line in and out) ([#151](https://github.com/dunkbing/imcode/issues/151))
 - [~] App bundle for macOS (done, `scripts/package-macos.sh`), icon, installers; CI on macOS, Windows, Linux ([#152](https://github.com/dunkbing/imcode/issues/152))
 - [ ] Auto-update (imshell's updater) ([#153](https://github.com/dunkbing/imcode/issues/153))
 - [~] Welcome page on first run: agents found, projects to import, phone setup ([#154](https://github.com/dunkbing/imcode/issues/154))

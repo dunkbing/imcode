@@ -127,6 +127,11 @@ public:
         return revision_;
     }
     // true once after title, cwd or sessionId changed: time to save
+    // what crossed the wire to the agent; empty before it starts. count rises with every line
+    std::vector<AcpClient::WireLine> wire(size_t& count) const {
+        count = 0;
+        return acp_ ? acp_->wire(count) : std::vector<AcpClient::WireLine>{};
+    }
     bool takeChanged() {
         return std::exchange(changed_, false);
     }

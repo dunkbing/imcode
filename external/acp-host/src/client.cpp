@@ -7,7 +7,38 @@
 #include <cstdlib>
 #include <filesystem>
 #include "acp_host/host.hpp"
+#include <chrono>
 #include <utility>
+
+namespace {
+    // passes lines through and reports each one: the log view of what crossed the wire
+    class TracedTransport : public acp::Transport {
+    public:
+        TracedTransport(std::unique_ptr<acp::Transport> inner, std::function<void(char, const std::string&)> trace)
+            : inner_(std::move(inner)), trace_(std::move(trace)) {}
+        bool readLine(std::string& line) override {
+            const bool ok = inner_->readLine(line);
+            if (ok) {
+                trace_('<', line);
+            }
+            return ok;
+        }
+        bool writeLine(const std::string& line) override {
+            trace_('>', line);
+            return inner_->writeLine(line);
+        }
+        void close() override {
+            inner_->close();
+        }
+        [[nodiscard]] bool isOpen() const override {
+            return inner_->isOpen();
+        }
+
+    private:
+        std::unique_ptr<acp::Transport> inner_;
+        std::function<void(char, const std::string&)> trace_;
+    };
+} // namespace
 
 using json = nlohmann::json;
 
@@ -72,13 +103,16 @@ AcpClient::start(const std::vector<std::string>& argv, const std::string& cwd,
         if (!transport) {
             return {false, err};
         }
-        conn_ = std::make_unique<acp::Connection>(*this, std::move(transport));
+        conn_ = std::make_unique<acp::Connection>(*this, traced(std::move(transport)));
     } else {
-        auto [conn, err] = acp::Connection::spawn(*this, argv, opts);
-        if (!conn) {
+        if (!opts.onStderr) {
+            opts.onStderr = [this](const std::string& line) { agentStderr(line); };
+        }
+        auto [process, err] = acp::ProcessTransport::spawn(argv, opts);
+        if (!process) {
             return {false, err};
         }
-        conn_ = std::move(conn);
+        conn_ = std::make_unique<acp::Connection>(*this, traced(std::move(process)));
     }
     // no fs and no terminal (acp v2 drops both). terminal sign-in
     // yes: claude offers no method without it (the panel opens the system terminal)
@@ -497,6 +531,7 @@ void AcpClient::requestPermission(const acp::PermissionRequest& req) {
 
 void AcpClient::agentStderr(const std::string& line) {
     AcpHost::logf(acp::LogLevel::Info, "ACP agent stderr: {}", line);
+    trace('!', line);
     std::lock_guard lock(stateMutex_);
     stderrTail_.push_back(line);
     if (stderrTail_.size() > 12)
@@ -515,4 +550,25 @@ void AcpClient::agentExited() {
         stderrTail_.clear();
     }
     pushEvent({.type = AcpEvent::Type::Exited, .text = std::move(tail)});
+}
+
+std::unique_ptr<acp::Transport> AcpClient::traced(std::unique_ptr<acp::Transport> inner) {
+    return std::make_unique<TracedTransport>(std::move(inner), [this](char dir, const std::string& line) { trace(dir, line); });
+}
+
+void AcpClient::trace(char dir, const std::string& line) {
+    constexpr size_t keep = 3000, longest = 8000; // lines kept; a line is cut (a pasted image is megabytes)
+    const long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    std::lock_guard lock(wireMutex_);
+    wire_.push_back({dir, ms, line.size() > longest ? line.substr(0, longest) + "... (" + std::to_string(line.size()) + " bytes)" : line});
+    if (wire_.size() > keep) {
+        wire_.erase(wire_.begin(), wire_.begin() + static_cast<std::ptrdiff_t>(wire_.size() - keep));
+    }
+    ++wireCount_;
+}
+
+std::vector<AcpClient::WireLine> AcpClient::wire(size_t& count) {
+    std::lock_guard lock(wireMutex_);
+    count = wireCount_;
+    return wire_;
 }

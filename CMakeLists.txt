@@ -54,7 +54,7 @@ imshell_embed_images(${CMAKE_CURRENT_SOURCE_DIR}/assets/images) # none yet: both
 add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sidebar.cpp src/thread_view.cpp
                src/notify.cpp src/headless.cpp
                src/history.cpp src/diff.cpp src/git.cpp src/git_graph.cpp src/git_local.cpp src/thread.cpp src/remote.cpp src/store.cpp src/ssh.cpp src/ssh_config.cpp src/keychain.cpp
-               src/terminal.cpp src/terminal_view.cpp src/files_view.cpp src/changes_view.cpp src/graph_view.cpp src/syntax.cpp
+               src/terminal.cpp src/terminal_view.cpp src/files_view.cpp src/changes_view.cpp src/graph_view.cpp src/log_view.cpp src/syntax.cpp
                ${EMBEDDED_FONTS_FILE} ${EMBEDDED_IMAGES_FILE} ${IMGUI_CORE})
 target_include_directories(imcode PRIVATE external/IconFontCppHeaders)
 # the commit it was built from, shown in settings

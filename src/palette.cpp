@@ -145,6 +145,7 @@ void App::paletteDraw() {
     std::vector<int> targets; // Actions: a project (>= 0) or thread (-2 - index) per row
     constexpr int terminalRow = INT_MIN; // or the terminal toggle
     constexpr int settingsRow = INT_MIN + 1;
+    constexpr int logRow = INT_MIN + 2;
     if (p.step == Palette::Step::Actions) {
         hint = "Search commands, projects, and threads...";
         heading = "Actions";
@@ -158,6 +159,7 @@ void App::paletteDraw() {
         offer({ICON_FA_GEAR, "Settings", "Agents: turn on, turn off, install"}, settingsRow);
         if (current >= 0) {
             offer({ICON_FA_TERMINAL, "Toggle terminal", "A shell in this thread's folder"}, terminalRow);
+            offer({ICON_FA_LIST, "Agent log", "Every line sent to and from the agent"}, logRow);
         }
         for (int i = 0; i < static_cast<int>(data.projects.size()); ++i) {
             const auto& project = data.projects[i];
@@ -359,6 +361,8 @@ void App::paletteDraw() {
             close = true;
             if (targets[picked] == terminalRow) {
                 toggleTerminal();
+            } else if (targets[picked] == logRow) {
+                logOpen(*data.threads[current]);
             } else if (targets[picked] == settingsRow) {
                 settingsWant = true;
             } else if (targets[picked] >= 0) {
