@@ -54,7 +54,7 @@ static int run() {
     setenv("HOME", home.c_str(), 1);
     const std::string init = "cd '" + home.string() + "/it'\\''s a repo' && git init -q -b main . && "
                              "git -c user.email=t@t -c user.name=t commit -q --allow-empty -m first";
-    ok = ok && shell(init) == 0;
+    ok = shell(init) == 0 && ok;
     const std::string name = Git::slug("Fix the Login test!\nmore");
     std::string error;
     const std::string made = Git::addWorktree("", repo.string(), name, error);
@@ -63,6 +63,9 @@ static int run() {
     const bool refused = Git::addWorktree("", repo.string(), name, again).empty() && !again.empty();
     ok = ok && name.starts_with("fix-the-login-test-") && fs::is_directory(made) && in.repo &&
          in.branch == "imcode/" + name && refused;
+    if (!ok) {
+        std::printf("FAILED: worktree '%s' (%s) branch %s refused %d\n", made.c_str(), error.c_str(), in.branch.c_str(), refused);
+    }
     // a worktree with uncommitted work is kept; a clean one goes, its branch stays
     std::ofstream(fs::path(made) / "new.txt") << "x";
     std::string kept;
@@ -73,7 +76,7 @@ static int run() {
     std::ofstream(repo / "a.txt") << "one\ntwo\nthree\n";
     const std::string commit = "cd '" + home.string() + "/it'\\''s a repo' && git add a.txt && "
                                "git -c user.email=t@t -c user.name=t commit -q -m a";
-    ok = ok && shell(commit) == 0;
+    ok = shell(commit) == 0 && ok;
     std::ofstream(repo / "a.txt") << "one\n2\nthree\nfour\n";
     std::ofstream(repo / "b c.txt") << "new\n";
     const auto found = Git::changes("", repo.string());
@@ -126,7 +129,7 @@ static int run() {
         }
         return out + "'";
     };
-    ok = ok && shell(("git init -q --bare " + q(bare) + " && git -C " + q(repo) + " remote add origin " + q(bare))) == 0;
+    ok = shell(("git init -q --bare " + q(bare) + " && git -C " + q(repo) + " remote add origin " + q(bare))) == 0 && ok;
     setenv("GIT_AUTHOR_NAME", "t", 1);
     setenv("GIT_AUTHOR_EMAIL", "t@t", 1);
     setenv("GIT_COMMITTER_NAME", "t", 1);
