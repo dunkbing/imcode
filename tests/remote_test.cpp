@@ -4,6 +4,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 int main(int argc, char** argv) {
     if (argc > 1) { // manual: the bun install script, to run under a clean HOME
@@ -19,7 +22,15 @@ int main(int argc, char** argv) {
     def.runCmd = {"sh", "-c", "pwd; echo \"$1\"", "agent"};
     def.runArgs = {"an 'arg'"};
     const std::string command = Remote::agentCommand(def, "~/it's here");
-    const ProcessResult res = ProcessRunner::run({.args = {"/bin/sh", "-c", command}});
+#ifdef _WIN32
+    // git for windows' sh (<Git>\cmd\git.exe is on PATH), as git.cpp finds it
+    char git[MAX_PATH] = "";
+    SearchPathA(nullptr, "git.exe", nullptr, MAX_PATH, git, nullptr);
+    const std::string sh = (std::filesystem::path(git).parent_path().parent_path() / "bin" / "sh.exe").string();
+#else
+    const std::string sh = "/bin/sh";
+#endif
+    const ProcessResult res = ProcessRunner::run({.args = {sh, "-c", command}});
     std::filesystem::remove_all(home);
     const std::string want = "/it's here\nan 'arg'\n";
     if (!res.success || !res.output.ends_with(want) || !Remote::agentCommand({}, "/x").empty()) {

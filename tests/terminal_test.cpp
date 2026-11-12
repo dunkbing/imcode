@@ -29,11 +29,21 @@ namespace {
 } // namespace
 
 int main() {
+#ifdef _WIN32
+    Terminal out(run({"cmd", "/c", "echo hello"}), 80, 24);
+#else
     Terminal out(run({"printf", "hello\\n"}), 80, 24);
+#endif
     const bool printed = shows(out, "hello", 1); // the first row
 
     // the line is typed, enter comes from the key encoder; a resize reaches the pty
+#ifdef _WIN32
+    Terminal in(run({"powershell", "-NoProfile", "-Command",
+                     "$x = Read-Host; 'got ' + $x; '' + $Host.UI.RawUI.WindowSize.Height + ' ' + $Host.UI.RawUI.WindowSize.Width"}),
+                80, 24);
+#else
     Terminal in(run({"sh", "-c", "read x; echo \"got $x\"; stty size"}), 80, 24);
+#endif
     in.resize(100, 30);
     in.write("hi");
     in.key(GHOSTTY_KEY_ENTER, 0);
