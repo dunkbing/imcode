@@ -5,6 +5,7 @@
 
 #include "imshell/clipboard.hpp"
 #include "imshell/image.hpp"
+#include "imshell/frames.hpp"
 #include <fstream>
 #include <iterator>
 #include <cstring>
@@ -545,6 +546,7 @@ void App::composer(Thread& t, float width) {
         }
         if (!pasted.empty()) {
             attachments.insert(attachments.end(), pasted.begin(), pasted.end());
+            imshell::requestFrames(); // the strip is drawn before this point: an idle loop would show it late
             picker.replace = std::string(input);
             focusInput = true;
         }
@@ -707,7 +709,10 @@ void App::composer(Thread& t, float width) {
     ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
     if (ImGui::Button(ICON_FA_PAPERCLIP, ImVec2(button, button))) {
-        imshell::OpenFileDialog({}, [this](const std::string& path) { attachments.push_back(path); });
+        imshell::OpenFileDialog({}, [this](const std::string& path) {
+            attachments.push_back(path);
+            imshell::requestFrames();
+        });
     }
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(2);
@@ -979,6 +984,7 @@ void App::attachedRows(float left) {
     ImGui::Dummy(ImVec2(0, 0));
     if (drop >= 0) {
         attachments.erase(attachments.begin() + drop);
+        imshell::requestFrames();
     }
 }
 

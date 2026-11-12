@@ -291,6 +291,7 @@ void App::startScan() {
 
 void App::openFile(const std::string& path) {
     attachments.push_back(path); // ui thread only, like the composer that reads it
+    imshell::requestFrames();
     focusInput = true;
 }
 
