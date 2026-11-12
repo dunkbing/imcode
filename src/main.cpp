@@ -203,7 +203,7 @@ void App::projectPopup() {
     const auto& colors = Theme::Current()->colors;
     ImGui::SetNextWindowSize(ImVec2(380, 0));
     ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
-    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 10);
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Round::Dialog);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
     const bool shown = ImGui::BeginPopup("projects");
     ImGui::PopStyleVar(2);
@@ -596,7 +596,7 @@ void App::frame() {
             ImGui::PushStyleColor(ImGuiCol_Button, on ? colors.surface1 : ImVec4(0, 0, 0, 0));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
             ImGui::PushStyleColor(ImGuiCol_Text, on ? colors.text : colors.subtext0);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Round::Row);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
             const bool pressed = ImGui::Button(icon, ImVec2(30, 22));
             ImGui::PopStyleVar(2);

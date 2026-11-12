@@ -27,6 +27,12 @@
 // the window: onboarding, then a sidebar of threads and the open thread. one file per
 // screen part (onboarding.cpp, palette.cpp, sidebar.cpp, thread_view.cpp, terminal_view.cpp,
 // files_view.cpp)
+// corner radii, one scale for the whole app: dialogs and popups, big panels (composer, message
+// bubble), and rows, chips and hover fills
+namespace Round {
+    constexpr float Dialog = 6, Panel = 8, Row = 4;
+} // namespace Round
+
 struct App : imshell::Delegate {
     imshell::App* shell = nullptr; // the window: uploads textures
     bool headless = false;        // no window (headless.cpp): frames are drawn into memory
@@ -198,6 +204,10 @@ struct App : imshell::Delegate {
         std::vector<Diff::Line> lines;
         AcpHost::AsyncOp<std::vector<Git::Change>> listOp;
         AcpHost::AsyncOp<std::pair<std::string, std::vector<Diff::Line>>> diffOp;
+        std::string selKey;                        // the picked row (path, side), kept across reloads
+        AcpHost::AsyncOp<std::string> opOp;        // stage, unstage or discard: the error, empty when done
+        std::vector<Git::Change> asking;           // files to discard, until the user says yes
+        bool askWant = false;
         // the commit bar: a message, then commit (and push), then a pull request
         char message[2048] = "";
         bool pushed = false; // the last commit was pushed: a pull request can follow
@@ -294,7 +304,7 @@ struct App : imshell::Delegate {
 // dragged, with a resting line when `line`. returns how far it was dragged this frame;
 // *released is set when the drag ends (time to save)
 // shortcut: imshell's Splitter only splits top from bottom; this belongs there
-bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags = 0, float rounding = 8);
+bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags = 0, float rounding = Round::Row);
 
 // a project's mark: two letters of its name on a square in a colour of its own
 void projectBadge(const std::string& name, float size = 16);

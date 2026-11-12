@@ -147,7 +147,7 @@ void App::settingsDraw() {
     ImGui::SetNextWindowSize(ImVec2(std::min(640.0f, vp->WorkSize.x - 32), 0));
     ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
     ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Round::Dialog);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20, 18));
     const bool shown = ImGui::BeginPopupModal(
         "##settings", nullptr,

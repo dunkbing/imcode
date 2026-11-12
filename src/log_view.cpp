@@ -28,7 +28,7 @@ void App::logDraw() {
     ImGui::SetNextWindowSize(ImVec2(std::min(1000.0f, vp->WorkSize.x - 32), std::min(700.0f, vp->WorkSize.y - 32)));
     ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
     ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Round::Dialog);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, 14));
     const bool shown = ImGui::BeginPopupModal("##log", nullptr,
                                               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |

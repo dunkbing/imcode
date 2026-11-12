@@ -31,6 +31,17 @@ namespace Git {
         std::string path;   // under the repository
         char kind = 'M';    // 'M' modified, 'A' added, 'D' deleted, 'R' renamed, '?' not tracked
         int added = -1, removed = -1; // lines; -1: not counted (binary, not tracked)
+        std::string from;   // a rename: the old path
+        // the index against the last commit, and the folder against the index: git status's two
+        // columns. M A D R, '?' (work only: not tracked), or a space for no difference. both
+        // blank for what a turn changed
+        char index = ' ', work = ' ';
+        [[nodiscard]] bool staged() const {
+            return index != ' ';
+        }
+        [[nodiscard]] bool unstaged() const {
+            return work != ' ';
+        }
     };
     // from `git status --porcelain=v1 -z`-less output and `git diff HEAD --numstat`
     std::vector<Change> parseChanges(std::string_view porcelain, std::string_view numstat);
@@ -49,11 +60,26 @@ namespace Git {
     // one file's diff against the last commit (all added when it is not tracked); blocks
     std::vector<Diff::Line> fileDiff(const std::string& host, const std::string& cwd, const Change& change,
                                      const std::string& from = "", const std::string& to = "");
+    // which side of the index a diff shows: all = the folder against the last commit
+    enum class Side { All, Staged, Unstaged };
+    std::vector<Diff::Line> fileDiff(const std::string& host, const std::string& cwd, const Change& change,
+                                     Side side);
+    // put the files into the index (a deleted one is removed from it), take them out again, or
+    // throw their changes in the folder away (a file not tracked is deleted). false with why;
+    // blocks. discard has no way back: the caller asks first
+    bool stage(const std::string& host, const std::string& cwd, const std::vector<Change>& files, std::string& error);
+    bool unstage(const std::string& host, const std::string& cwd, const std::vector<Change>& files, std::string& error);
+    bool discard(const std::string& host, const std::string& cwd, const std::vector<Change>& files, std::string& error);
+    // the same as shell commands, run in the repository (what an ssh host gets)
+    std::string stageScript(const std::vector<Change>& files);
+    std::string unstageScript(const std::vector<Change>& files);
+    std::string discardScript(const std::vector<Change>& files);
 
-    // every change committed with `message`; then, with push, the branch pushed (its upstream
+    // the staged changes committed with `message` (staged_only), else every change; the git
+    // command runs, so the repository's hooks and signing do. then, with push, the branch pushed (its upstream
     // set the first time). false with git's own words in `output`; blocks
     bool commit(const std::string& host, const std::string& cwd, const std::string& message, bool push,
-                std::string& output);
+                std::string& output, bool stagedOnly = false);
     // a pull request for the pushed branch, by the forge's command line (gh), its title and
     // body from the commits. the request's address, or empty with what gh said; blocks
     std::string pullRequest(const std::string& host, const std::string& cwd, std::string& output);

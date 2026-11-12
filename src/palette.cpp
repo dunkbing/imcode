@@ -110,7 +110,7 @@ void App::paletteDraw() {
     // darker than a row's highlight, so the selected row shows
     ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
     ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Round::Dialog);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14, 14));
     const bool shown = ImGui::BeginPopupModal(
         "##palette", nullptr,

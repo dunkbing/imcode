@@ -38,7 +38,7 @@ void App::sidebar() {
     ImGui::SetNextWindowPos(ImVec2(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + 6));
     ImGui::SetNextWindowSize(ImVec2(300, 0));
     ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
-    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 10);
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Round::Dialog);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
     const bool filtering = ImGui::BeginPopup("filter");
     ImGui::PopStyleVar(2);

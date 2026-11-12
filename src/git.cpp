@@ -94,6 +94,19 @@ namespace Git {
             return out + "'";
         }
 
+        // a path for git to take literally from the top of the repository (status paths are relative to it)
+        std::string pathspec(const std::string& path) {
+            return quote(":(top,literal)" + path);
+        }
+
+        // a path as git status prints it: in double quotes when it has spaces and such
+        std::string unquote(std::string_view path) {
+            if (path.size() >= 2 && path.front() == '"' && path.back() == '"') {
+                path = path.substr(1, path.size() - 2);
+            }
+            return std::string(path);
+        }
+
         // the local sh. windows: git for windows' own (<Git>\cmd\git.exe is on PATH, sh is
         // <Git>\bin\sh.exe); without it local git commands fail with its message
         const std::string& localShell() {
@@ -112,11 +125,11 @@ namespace Git {
         }
 
         // a shell script on this machine or on the host, its output (both streams)
-        std::string run(const std::string& host, const std::string& script) {
+        std::string run(const std::string& host, const std::string& script, std::chrono::seconds timeout = std::chrono::seconds(60)) {
             if (host.empty()) {
                 return ProcessRunner::run({.args = {localShell(), "-c", script},
                                            .environment = {{"PATH", AcpAgents::loginShellPath()}},
-                                           .timeout = std::chrono::seconds(60)})
+                                           .timeout = timeout})
                     .output;
             }
             Ssh::Error sshError;
@@ -147,9 +160,12 @@ namespace Git {
             const char x = line[0], y = line[1];
             c.kind = x == '?' ? '?' : (x == 'R' || y == 'R') ? 'R' : (x == 'A' || y == 'A') ? 'A'
                                     : (x == 'D' || y == 'D') ? 'D' : 'M';
+            c.index = x == '?' ? ' ' : x;
+            c.work = y;
             std::string_view path = line.substr(3);
             if (const size_t arrow = path.find(" -> "); arrow != std::string_view::npos) {
-                path = path.substr(arrow + 4); // a rename: its new name
+                c.from = unquote(path.substr(0, arrow)); // a rename: its new name
+                path = path.substr(arrow + 4);
             }
             if (path.size() >= 2 && path.front() == '"' && path.back() == '"') {
                 path = path.substr(1, path.size() - 2); // quoted by git (spaces and such)
@@ -321,34 +337,126 @@ namespace Git {
         return parseDiff(run(host, script));
     }
 
-    bool commit(const std::string& host, const std::string& cwd, const std::string& message, bool push,
-                std::string& output) {
-        // here: committed through libgit2; the push stays on the git command, which has the
-        // user's credentials (helpers, ssh agent)
-        std::string script = "cd " + quote(cwd);
+    std::vector<Diff::Line> fileDiff(const std::string& host, const std::string& cwd, const Change& change, Side side) {
         if (host.empty()) {
-            if (!Local::commit(cwd, message, output)) {
-                return false;
+            return parseDiff(Local::fileDiff(cwd, change, side).value_or(""));
+        }
+        const std::string at = "cd " + quote(cwd) + " && git diff ";
+        const std::string path = " -- " + pathspec(change.path) + " | head -4000";
+        if (side == Side::Staged) {
+            return parseDiff(run(host, at + "--cached" + path));
+        }
+        if (side == Side::Unstaged && change.work == '?') {
+            return parseDiff(run(host, "cd " + quote(cwd) + " && git diff --no-index -- /dev/null " + quote(change.path) + " | head -4000"));
+        }
+        return parseDiff(run(host, at + (side == Side::All ? "HEAD" : "") + path));
+    }
+
+    namespace {
+        std::string pathList(const std::vector<Change>& files) {
+            std::string out;
+            for (const Change& f : files) {
+                out += " " + pathspec(f.path);
+                if (!f.from.empty()) {
+                    out += " " + pathspec(f.from);
+                }
             }
-            if (!push) {
+            return out;
+        }
+
+        bool operate(const std::string& host, const std::string& cwd, const std::vector<Change>& files, std::string& error,
+                     const std::string& script, bool (*local)(const std::string&, const std::vector<Change>&, std::string&)) {
+            if (files.empty()) {
                 return true;
             }
-        } else {
-            script += " && git add -A && git commit -q -m " + quote(message) + " 2>&1";
+            if (host.empty()) {
+                return local(cwd, files, error);
+            }
+            constexpr std::string_view ok = "__imcode_ok__";
+            std::string out = run(host, "cd " + quote(cwd) + " && " + script + " 2>&1 && echo " + std::string(ok));
+            while (!out.empty() && out.back() == '\n') {
+                out.pop_back();
+            }
+            if (out.ends_with(ok)) {
+                return true;
+            }
+            error = out.empty() ? "git did not answer" : out;
+            return false;
         }
-        if (push) {
-            // the first push of a branch sets where it goes
-            script += " && { git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1 && git push -q 2>&1 || "
-                      "git push -q -u origin HEAD 2>&1; }";
+    } // namespace
+
+    std::string stageScript(const std::vector<Change>& files) {
+        return "git add -A --" + pathList(files); // a file that is gone is removed from the index
+    }
+    std::string unstageScript(const std::vector<Change>& files) {
+        // before the first commit there is no HEAD to reset to: the entries just go
+        return "{ git rev-parse -q --verify HEAD >/dev/null && git reset -q --" + pathList(files) + " || git rm -q -r --cached --ignore-unmatch --" +
+               pathList(files) + "; }";
+    }
+    std::string discardScript(const std::vector<Change>& files) {
+        std::vector<Change> tracked, fresh;
+        for (const Change& f : files) {
+            (f.work == '?' ? fresh : tracked).push_back(f);
         }
+        std::string out = "true";
+        if (!tracked.empty()) {
+            out += " && git checkout --" + pathList(tracked);
+        }
+        if (!fresh.empty()) {
+            out += " && git clean -f -q --" + pathList(fresh);
+        }
+        return out;
+    }
+
+    bool stage(const std::string& host, const std::string& cwd, const std::vector<Change>& files, std::string& error) {
+        return operate(host, cwd, files, error, stageScript(files), Local::stage);
+    }
+    bool unstage(const std::string& host, const std::string& cwd, const std::vector<Change>& files, std::string& error) {
+        return operate(host, cwd, files, error, unstageScript(files), Local::unstage);
+    }
+    bool discard(const std::string& host, const std::string& cwd, const std::vector<Change>& files, std::string& error) {
+        return operate(host, cwd, files, error, discardScript(files), Local::discard);
+    }
+
+    bool commit(const std::string& host, const std::string& cwd, const std::string& message, bool push,
+                std::string& output, bool stagedOnly) {
+        // the git command commits, so the repository's hooks and signing run (libgit2 runs neither)
+        // and the push has the user's credentials (helpers, ssh agent). a machine with no git
+        // command falls back to libgit2
+        const std::string commitScript = "cd " + quote(cwd) + (stagedOnly ? "" : " && git add -A") + " && git commit -q -m " +
+                                         quote(message) + " 2>&1";
+        const std::string pushScript = " && { git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1 && git push -q 2>&1 || "
+                                       "git push -q -u origin HEAD 2>&1; }"; // the first push of a branch sets where it goes
         constexpr std::string_view ok = "__imcode_ok__";
-        output = run(host, script + " && echo " + std::string(ok));
+        // a hook or a signing prompt can take a while
+        output = run(host, commitScript + (push ? pushScript : "") + " && echo " + std::string(ok), std::chrono::minutes(5));
         while (!output.empty() && output.back() == '\n') {
             output.pop_back();
         }
         if (output.ends_with(ok)) {
             output.resize(output.size() - ok.size());
             return true;
+        }
+        const bool noGit = output.find("git: command not found") != std::string::npos || output.find("git: not found") != std::string::npos ||
+                           output.find("xcode-select") != std::string::npos;
+        if (host.empty() && noGit) {
+            if (!Local::commit(cwd, message, output, !stagedOnly)) {
+                return false;
+            }
+            if (!push) {
+                return true;
+            }
+            output = run(host, "cd " + quote(cwd) + pushScript + " && echo " + std::string(ok));
+            while (!output.empty() && output.back() == '\n') {
+                output.pop_back();
+            }
+            if (output.ends_with(ok)) {
+                output.resize(output.size() - ok.size());
+                return true;
+            }
+        }
+        if (output.empty()) {
+            output = "Git did not finish (a hook or a signing prompt may be waiting).";
         }
         return false;
     }

@@ -157,7 +157,7 @@ bool App::diffBlock(const std::string& path, int added, int removed, const std::
     bool clicked = false;
     ImGui::PushStyleColor(ImGuiCol_ChildBg, colors.crust);
     ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, Round::Row);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 0));
     const float lineHeight = ImGui::GetTextLineHeight() + 4;
     const float height = maxHeight > 0 ? std::min(maxHeight, lineHeight * static_cast<float>(lines.size() + 1) + 20) + 16 : 0;
@@ -229,7 +229,7 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         const ImVec2 at = ImGui::GetCursorScreenPos();
         const ImVec2 min(at.x + width - size.x - 2 * pad, at.y);
         const ImVec2 max(at.x + width, at.y + size.y + 2 * pad);
-        ImGui::GetWindowDrawList()->AddRectFilled(min, max, ImGui::GetColorU32(colors.surface0), 14);
+        ImGui::GetWindowDrawList()->AddRectFilled(min, max, ImGui::GetColorU32(colors.surface0), Round::Panel);
         bubbleMin = min;
         bubbleMax = max;
         ImGui::SetCursorScreenPos(ImVec2(min.x + pad, min.y + pad));
@@ -281,7 +281,7 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         }
         ImDrawList* draw = ImGui::GetWindowDrawList();
         if (ImGui::IsItemHovered() && canOpen) {
-            draw->AddRectFilled(top, ImGui::GetItemRectMax(), ImGui::GetColorU32(colors.surface0), 6);
+            draw->AddRectFilled(top, ImGui::GetItemRectMax(), ImGui::GetColorU32(colors.surface0), Round::Row);
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
         }
         if (canOpen) {
@@ -427,7 +427,7 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         const bool hot = ImGui::IsItemHovered();
         ImDrawList* draw = ImGui::GetWindowDrawList();
         draw->AddRect(at, ImVec2(at.x + size.x, at.y + size.y), ImGui::GetColorU32(hot ? colors.surface2 : colors.surface1),
-                      ImGui::GetStyle().FrameRounding + 3);
+                      Round::Row);
         const float y = at.y + (size.y - ImGui::GetTextLineHeight()) * 0.5f;
         draw->AddText(ImVec2(at.x + 10, y), ImGui::GetColorU32(hot ? colors.text : colors.subtext0), label.c_str());
         const float x = at.x + 10 + ImGui::CalcTextSize(label.c_str()).x + 12;
@@ -485,7 +485,7 @@ void App::composer(Thread& t, float width) {
     const AcpAgentDef* def = AcpAgents::find(t.agentId);
     const float inputHeight = composerInputHeight(input, width);
     const float button = ImGui::GetFrameHeight();
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 14);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, Round::Panel);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, colors.mantle);
     ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
     // a thin outline: the theme gives child windows none. read when the window begins
@@ -653,7 +653,7 @@ void App::composer(Thread& t, float width) {
             ImGui::SetNextWindowSize(ImVec2(width, height));
             ImGui::PushStyleColor(ImGuiCol_WindowBg, colors.mantle);
             ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Round::Dialog);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
             ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(1, 1)); // one row is a short window
             ImGui::Begin("##picker", nullptr,
@@ -751,7 +751,7 @@ void App::composer(Thread& t, float width) {
         const bool chipHot = ImGui::IsItemHovered();
         if (chipHot) {
             ImGui::GetWindowDrawList()->AddRectFilled(chipAt, ImVec2(chipAt.x + chipSize.x, chipAt.y + chipSize.y),
-                                                      ImGui::GetColorU32(colors.surface0), 6);
+                                                      ImGui::GetColorU32(colors.surface0), Round::Row);
         }
         ImGui::GetWindowDrawList()->AddText(
             ImVec2(chipAt.x + 4, chipAt.y + (chipSize.y - ImGui::GetTextLineHeight()) * 0.5f),
@@ -792,7 +792,7 @@ void App::composer(Thread& t, float width) {
         ImDrawList* draw = ImGui::GetWindowDrawList();
         if (lit) {
             draw->AddRectFilled(at, ImVec2(at.x + chip.x, at.y + chip.y), ImGui::GetColorU32(colors.surface0),
-                                ImGui::GetStyle().FrameRounding + 3);
+                                Round::Row);
         }
         agentIconAt(t.agentId, ImVec2(at.x + chipPad, std::floor(at.y + (button - chipIcon) * 0.5f)), chipIcon);
         draw->AddText(ImVec2(at.x + chipPad + chipIcon + chipGap, at.y + (button - ImGui::GetTextLineHeight()) * 0.5f),
@@ -819,7 +819,7 @@ void App::composer(Thread& t, float width) {
     ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
     ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, 6); // three lists side by side: thin bars
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12, 12));
-    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 12);
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Round::Dialog);
     const bool modelsOpen = ImGui::BeginPopup("models");
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor();
@@ -942,6 +942,7 @@ void App::statusLine(Thread& t, float left) {
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
     ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Round::Row);
     // the folder, short: ~ for the home folder, the last two parts when it is still long
     std::string where = t.cwd;
     if (const char* home = homeEnv(); t.host.empty() && home && where.starts_with(home)) {
@@ -959,13 +960,14 @@ void App::statusLine(Thread& t, float left) {
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", t.cwd.c_str());
     }
-    ImGui::PopStyleVar();
+    ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(3);
     projectPopup();
     if (gitFor == key && git.repo) {
         ImGui::SameLine(0, 16);
         ImGui::AlignTextToFramePadding();
         // click: the history, as a graph
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Round::Row); // the hover fill of the two links below
         const std::string branchText = std::format(ICON_FA_CODE_BRANCH "  {}", git.branch);
         ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
         if (ImGui::Selectable((branchText + "##history").c_str(), false, 0, ImGui::CalcTextSize(branchText.c_str()))) {
@@ -990,6 +992,7 @@ void App::statusLine(Thread& t, float left) {
                 ImGui::SetTooltip("See what changed");
             }
         }
+        ImGui::PopStyleVar();
         // before the first message: work in this checkout, or in a worktree of its own
         if (t.items.empty() && t.root.empty()) {
             // on the same line when there is room for it, else under the folder

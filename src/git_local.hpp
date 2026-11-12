@@ -14,9 +14,15 @@ namespace Git::Local {
     std::optional<std::vector<Change>> changes(const std::string& cwd, const std::string& from, const std::string& to);
     std::optional<std::string> fileDiff(const std::string& cwd, const Change& change, const std::string& from,
                                         const std::string& to); // unified text
+    // one side of the index: staged = last commit to index, unstaged = index to folder
+    std::optional<std::string> fileDiff(const std::string& cwd, const Change& change, Side side);
+    bool stage(const std::string& cwd, const std::vector<Change>& files, std::string& error);
+    bool unstage(const std::string& cwd, const std::vector<Change>& files, std::string& error);
+    bool discard(const std::string& cwd, const std::vector<Change>& files, std::string& error);
     std::optional<std::string> snapshot(const std::string& cwd);
-    // add everything and commit; false with why. hooks and commit signing are not run
-    bool commit(const std::string& cwd, const std::string& message, std::string& output);
+    // commit the index, after adding everything unless `all` is false; false with why. hooks and
+    // commit signing are not run (the fallback where there is no git command)
+    bool commit(const std::string& cwd, const std::string& message, std::string& output, bool all = true);
     // the history as Git::log gives it
     std::optional<std::vector<LogEntry>> log(const std::string& cwd, size_t limit, size_t skip);
     // tracked files and new ones not ignored, under cwd and relative to it, at most cap

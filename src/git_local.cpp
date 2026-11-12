@@ -123,6 +123,9 @@ namespace Git::Local {
                          : d->status == GIT_DELTA_RENAMED ? 'R'
                                                           : 'M';
                 c.path = d->new_file.path ? d->new_file.path : d->old_file.path;
+                if (c.kind == 'R' && d->old_file.path) {
+                    c.from = d->old_file.path;
+                }
                 git_patch* patch = nullptr;
                 if (c.kind != '?' && git_patch_from_diff(&patch, diff, i) == 0 && patch &&
                     !(git_patch_get_delta(patch)->flags & GIT_DIFF_FLAG_BINARY)) {
@@ -187,13 +190,49 @@ namespace Git::Local {
         return s;
     }
 
+    namespace {
+        // git status's two columns for each file, by its path
+        void fillStates(git_repository* repo, std::vector<Change>& changes) {
+            git_status_options opts = GIT_STATUS_OPTIONS_INIT;
+            opts.flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED | GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS | GIT_STATUS_OPT_EXCLUDE_SUBMODULES;
+            git_status_list* raw = nullptr;
+            if (git_status_list_new(&raw, repo, &opts) != 0) {
+                return;
+            }
+            const Statuses list(raw);
+            std::map<std::string, std::pair<char, char>> states;
+            for (size_t i = 0; i < git_status_list_entrycount(list.get()); ++i) {
+                const git_status_entry* e = git_status_byindex(list.get(), i);
+                const auto s = e->status;
+                const char x = s & GIT_STATUS_INDEX_NEW ? 'A' : s & GIT_STATUS_INDEX_DELETED ? 'D' : s & GIT_STATUS_INDEX_RENAMED ? 'R'
+                               : s & (GIT_STATUS_INDEX_MODIFIED | GIT_STATUS_INDEX_TYPECHANGE) ? 'M' : ' ';
+                const char y = s & GIT_STATUS_WT_NEW ? '?' : s & GIT_STATUS_WT_DELETED ? 'D' : s & GIT_STATUS_WT_RENAMED ? 'R'
+                               : s & (GIT_STATUS_WT_MODIFIED | GIT_STATUS_WT_TYPECHANGE) ? 'M' : ' ';
+                const git_diff_delta* d = e->index_to_workdir ? e->index_to_workdir : e->head_to_index;
+                if (d && d->new_file.path) {
+                    states[d->new_file.path] = {x, y};
+                }
+            }
+            for (Change& c : changes) {
+                if (const auto at = states.find(c.path); at != states.end()) {
+                    c.index = at->second.first;
+                    c.work = at->second.second;
+                }
+            }
+        }
+    } // namespace
+
     std::optional<std::vector<Change>> changes(const std::string& cwd, const std::string& from, const std::string& to) {
         const Repo repo = open(cwd);
         if (!repo) {
             return std::nullopt;
         }
         const DiffList diff = from.empty() ? workdirDiff(repo.get()) : treesDiff(repo.get(), from, to);
-        return changesOf(diff.get());
+        std::vector<Change> out = changesOf(diff.get());
+        if (from.empty()) {
+            fillStates(repo.get(), out);
+        }
+        return out;
     }
 
     std::optional<std::string> fileDiff(const std::string& cwd, const Change& change, const std::string& from,
@@ -205,6 +244,138 @@ namespace Git::Local {
         const DiffList diff = from.empty() ? workdirDiff(repo.get(), change.path.c_str())
                                            : treesDiff(repo.get(), from, to, change.path.c_str());
         return unified(diff.get());
+    }
+
+    namespace {
+        // the files' paths, for a pathspec: a renamed one is both its names
+        std::vector<std::string> pathsOf(const std::vector<Change>& files) {
+            std::vector<std::string> out;
+            for (const Change& f : files) {
+                out.push_back(f.path);
+                if (!f.from.empty()) {
+                    out.push_back(f.from);
+                }
+            }
+            return out;
+        }
+    } // namespace
+
+    std::optional<std::string> fileDiff(const std::string& cwd, const Change& change, Side side) {
+        const Repo repo = open(cwd);
+        if (!repo) {
+            return std::nullopt;
+        }
+        if (side == Side::All) {
+            return unified(workdirDiff(repo.get(), change.path.c_str()).get());
+        }
+        git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+        char* spec[] = {const_cast<char*>(change.path.c_str())};
+        opts.pathspec = {spec, 1};
+        opts.flags = GIT_DIFF_DISABLE_PATHSPEC_MATCH;
+        git_index* raw = nullptr;
+        if (git_repository_index(&raw, repo.get()) != 0) {
+            return std::nullopt;
+        }
+        const Index index(raw);
+        git_diff* diff = nullptr;
+        int got = 0;
+        if (side == Side::Staged) {
+            const Tree head = headTree(repo.get());
+            got = git_diff_tree_to_index(&diff, repo.get(), head.get(), index.get(), &opts);
+        } else {
+            opts.flags |= GIT_DIFF_INCLUDE_UNTRACKED | GIT_DIFF_RECURSE_UNTRACKED_DIRS | GIT_DIFF_SHOW_UNTRACKED_CONTENT;
+            got = git_diff_index_to_workdir(&diff, repo.get(), index.get(), &opts);
+        }
+        if (got != 0) {
+            return std::nullopt;
+        }
+        const DiffList own(diff);
+        return unified(diff);
+    }
+
+    bool stage(const std::string& cwd, const std::vector<Change>& files, std::string& error) {
+        const Repo repo = open(cwd);
+        git_index* raw = nullptr;
+        if (!repo || git_repository_index(&raw, repo.get()) != 0) {
+            error = repo ? lastError() : "Not a git repository.";
+            return false;
+        }
+        const Index index(raw);
+        const std::filesystem::path root = git_repository_workdir(repo.get()) ? git_repository_workdir(repo.get()) : "";
+        for (const std::string& path : pathsOf(files)) {
+            std::error_code ec;
+            // a file that is gone leaves the index; one that is there goes in
+            const bool there = std::filesystem::symlink_status(root / path, ec).type() != std::filesystem::file_type::not_found;
+            if (there && git_index_add_bypath(index.get(), path.c_str()) != 0) {
+                error = lastError();
+                return false;
+            }
+            if (!there) {
+                git_index_remove_bypath(index.get(), path.c_str()); // not in the index is fine
+            }
+        }
+        if (git_index_write(index.get()) != 0) {
+            error = lastError();
+            return false;
+        }
+        return true;
+    }
+
+    bool unstage(const std::string& cwd, const std::vector<Change>& files, std::string& error) {
+        const Repo repo = open(cwd);
+        if (!repo) {
+            error = "Not a git repository.";
+            return false;
+        }
+        std::vector<std::string> paths = pathsOf(files);
+        std::vector<char*> raw;
+        for (std::string& p : paths) {
+            raw.push_back(p.data());
+        }
+        const git_strarray spec{raw.data(), raw.size()};
+        // no commit yet: the index entries just go (a null target)
+        git_object* head = nullptr;
+        const bool born = git_revparse_single(&head, repo.get(), "HEAD^{commit}") == 0;
+        const Object own(head);
+        if (git_reset_default(repo.get(), born ? head : nullptr, &spec) != 0) {
+            error = lastError();
+            return false;
+        }
+        return true;
+    }
+
+    bool discard(const std::string& cwd, const std::vector<Change>& files, std::string& error) {
+        const Repo repo = open(cwd);
+        if (!repo) {
+            error = "Not a git repository.";
+            return false;
+        }
+        const std::filesystem::path root = git_repository_workdir(repo.get()) ? git_repository_workdir(repo.get()) : "";
+        std::vector<std::string> tracked;
+        for (const Change& f : files) {
+            if (f.work == '?') {
+                std::error_code ec; // not tracked: deleted
+                std::filesystem::remove(root / f.path, ec);
+            } else if (f.work != ' ') {
+                tracked.push_back(f.path);
+            }
+        }
+        if (tracked.empty()) {
+            return true;
+        }
+        std::vector<char*> raw;
+        for (std::string& p : tracked) {
+            raw.push_back(p.data());
+        }
+        // the folder's copy comes back from the index: what was staged stays
+        git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
+        opts.checkout_strategy = GIT_CHECKOUT_FORCE | GIT_CHECKOUT_DISABLE_PATHSPEC_MATCH;
+        opts.paths = {raw.data(), raw.size()};
+        if (git_checkout_index(repo.get(), nullptr, &opts) != 0) {
+            error = lastError();
+            return false;
+        }
+        return true;
     }
 
     std::optional<std::string> snapshot(const std::string& cwd) {
@@ -241,7 +412,7 @@ namespace Git::Local {
         return out ? out : std::optional<std::string>(std::string());
     }
 
-    bool commit(const std::string& cwd, const std::string& message, std::string& output) {
+    bool commit(const std::string& cwd, const std::string& message, std::string& output, bool all) {
         const Repo repo = open(cwd);
         if (!repo) {
             output = "Not a git repository.";
@@ -254,7 +425,7 @@ namespace Git::Local {
         }
         const Index own(index);
         git_oid treeId, commitId;
-        if (git_index_add_all(index, nullptr, GIT_INDEX_ADD_DEFAULT, nullptr, nullptr) != 0 || git_index_write(index) != 0 ||
+        if ((all && git_index_add_all(index, nullptr, GIT_INDEX_ADD_DEFAULT, nullptr, nullptr) != 0) || git_index_write(index) != 0 ||
             git_index_write_tree(&treeId, index) != 0) {
             output = lastError();
             return false;

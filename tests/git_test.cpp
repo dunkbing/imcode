@@ -200,6 +200,94 @@ static int run() {
          graph[1].col == 0 && graph[1].pass == Lanes{1} && graph[1].parents == Lanes{0} && graph[2].col == 1 &&
          graph[2].pass == Lanes{0} && graph[2].parents == Lanes{0} && graph[3].col == 0 && graph[3].into == Lanes{0} &&
          graph[3].parents.empty();
+    // staging: libgit2 here and the shell commands an ssh host gets must leave the same index
+    {
+        const fs::path one = home / "stage one", two = home / "stage two";
+        const auto sh = [&](const std::string& cmd) { return std::system(cmd.c_str()) == 0; };
+        const auto porcelain = [&](const fs::path& r) {
+            const std::string out = (home / "porcelain.txt").string();
+            std::system(("git -C " + q(r) + " status --porcelain -uall > " + q(out)).c_str());
+            std::ifstream in(out);
+            return std::string(std::istreambuf_iterator<char>(in), {});
+        };
+        fs::create_directories(one);
+        bool staged = sh("cd " + q(one) + " && git init -q -b main . && printf '1\\n' > a.txt && printf 'x\\n' > gone.txt && printf 'r\\n' > ren.txt && "
+                         "git add -A && git -c user.email=t@t -c user.name=t commit -q -m base && printf '1\\n2\\n' > a.txt && rm gone.txt && "
+                         "mv ren.txt 'new name.txt' && printf 'n\\n' > n.txt");
+        staged = staged && sh("cp -R " + q(one) + " " + q(two));
+        const auto list = Git::changes("", one.string());
+        const auto pick = [&](std::initializer_list<const char*> names) {
+            std::vector<Git::Change> out;
+            for (const char* n : names) {
+                const auto at = std::ranges::find(list, std::string(n), &Git::Change::path);
+                if (at != list.end()) {
+                    out.push_back(*at);
+                }
+            }
+            return out;
+        };
+        const auto all = pick({"a.txt", "gone.txt", "ren.txt", "new name.txt", "n.txt"});
+        const auto some = pick({"a.txt", "n.txt"});
+        std::string e1, e2;
+        const std::pair<const char*, std::string (*)(const std::vector<Git::Change>&)> steps[] = {
+            {"stage", Git::stageScript}, {"unstage", Git::unstageScript}, {"discard", Git::discardScript}};
+        std::string same = all.size() == 5 ? "" : "list";
+        // each step on both copies: the files of the first steps, then the two left
+        bool ranAll = true;
+        for (int i = 0; i < 3 && same.empty(); ++i) {
+            const auto& files = i == 2 ? some : all;
+            std::vector<Git::Change> given = files;
+            if (i > 0) { // the states move on: read them again
+                const auto now = Git::changes("", one.string());
+                given.clear();
+                for (const auto& f : files) {
+                    const auto at = std::ranges::find(now, f.path, &Git::Change::path);
+                    given.push_back(at == now.end() ? f : *at);
+                }
+            }
+            ranAll = ranAll && (i == 0 ? Git::stage("", one.string(), given, e1) : i == 1 ? Git::unstage("", one.string(), given, e1)
+                                                                                         : Git::discard("", one.string(), given, e1));
+            ranAll = ranAll && sh("cd " + q(two) + " && " + steps[i].second(given) + " > /dev/null 2>&1");
+            if (porcelain(one) != porcelain(two)) {
+                same = std::string(steps[i].first) + ":\n" + porcelain(one) + "vs\n" + porcelain(two);
+            }
+        }
+        if (!staged || !ranAll || !same.empty()) {
+            std::printf("FAILED: staging (%d %d) %s %s\n", staged, ranAll, same.c_str(), e1.c_str());
+            ok = false;
+        }
+        // staged and unstaged diffs of one file apart: "2" is only in the folder, then only in the index
+        fs::remove_all(two);
+        std::ofstream(one / "a.txt") << "1\n2\n3\n";
+        sh("git -C " + q(one) + " add a.txt");
+        std::ofstream(one / "a.txt", std::ios::app) << "4\n";
+        const auto now = Git::changes("", one.string());
+        const auto a = std::ranges::find(now, std::string("a.txt"), &Git::Change::path);
+        bool sides = a != now.end() && a->index == 'M' && a->work == 'M';
+        if (sides) {
+            const auto inIndex = Git::fileDiff("", one.string(), *a, Git::Side::Staged);
+            const auto inFolder = Git::fileDiff("", one.string(), *a, Git::Side::Unstaged);
+            sides = std::ranges::count(inIndex, '+', &Diff::Line::kind) == 2 && std::ranges::count(inFolder, '+', &Diff::Line::kind) == 1;
+        }
+        // committing the index leaves the folder's own edit out
+        std::string said2;
+        sides = sides && Git::commit("", one.string(), "only the index", false, said2, true) &&
+                sh("test \"$(git -C " + q(one) + " show HEAD:a.txt | wc -l)\" -eq 3") && porcelain(one).starts_with(" M a.txt");
+        // a hook that refuses stops the commit (libgit2 would not have run it)
+        std::ofstream(one / ".git" / "hooks" / "pre-commit") << "#!/bin/sh\necho no commits today\nexit 1\n";
+        fs::permissions(one / ".git" / "hooks" / "pre-commit", fs::perms::owner_all);
+        std::string refused;
+        const bool hooked = !Git::commit("", one.string(), "blocked", false, refused) && refused.find("no commits today") != std::string::npos;
+        fs::remove(one / ".git" / "hooks" / "pre-commit");
+        // signing that cannot happen stops it too
+        sh("git -C " + q(one) + " config commit.gpgsign true && git -C " + q(one) + " config gpg.program /nonexistent-gpg");
+        std::string unsigned_;
+        const bool signedRefused = !Git::commit("", one.string(), "unsigned", false, unsigned_) && !unsigned_.empty();
+        if (!sides || !hooked || !signedRefused) {
+            std::printf("FAILED: sides %d hook %d (%s) signing %d (%s)\n", sides, hooked, refused.c_str(), signedRefused, unsigned_.c_str());
+            ok = false;
+        }
+    }
     std::string gone;
     ok = ok && refusedDirty && Git::removeWorktree("", repo.string(), made, gone) && !fs::exists(made);
     fs::remove_all(home, held);
