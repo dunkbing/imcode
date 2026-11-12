@@ -279,6 +279,12 @@ struct App : imshell::Delegate {
     // under the composer: the project (click to pick another) and its branch
     void statusLine(Thread& t, float left);
     void attachedRows(float left);
+    static constexpr float kAttachedStrip = 64;
+    struct Thumb {
+        ImTextureID tex{};
+        int w = 0, h = 0;
+    };
+    std::map<std::string, Thumb> thumbs; // attachments seen, by path
 
     // the agent's own mark, tinted like text; a generic one when there is none
     // rowHeight: the height of the row it sits in (a frame-height row of buttons), 0 = a text line

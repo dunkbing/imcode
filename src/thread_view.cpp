@@ -4,7 +4,9 @@
 #include "text.hpp"
 
 #include "imshell/clipboard.hpp"
+#include "imshell/image.hpp"
 #include <fstream>
+#include <iterator>
 #include <cstring>
 #include <chrono>
 #include "imshell/markdown.hpp"
@@ -898,26 +900,75 @@ void App::composer(Thread& t, float width) {
     }
 }
 
-// what will go with the next message, each removable
+// what will go with the next message: a strip of tiles above the composer, a picture as its
+// thumbnail, any other file as its name; each removable. kAttachedStrip tall, so the layout can
+// make room for it and keep the composer where it was
 void App::attachedRows(float left) {
+    if (attachments.empty()) {
+        return;
+    }
     const auto& colors = Theme::Current()->colors;
+    const float size = kAttachedStrip - 8;
     int drop = -1;
+    ImGui::SetCursorPosX(left + 8);
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    float x = origin.x;
     for (size_t i = 0; i < attachments.size(); ++i) {
-        ImGui::SetCursorPosX(left + 8);
+        const std::string& path = attachments[i];
+        auto found = thumbs.find(path);
+        if (found == thumbs.end()) { // decoded once; shortcut: textures are never freed, a few small ones per session
+            Thumb thumb;
+            std::error_code ec;
+            const auto bytes = std::filesystem::file_size(path, ec);
+            if (!ec && bytes < (24u << 20)) {
+                std::string ext = std::filesystem::path(path).extension().string();
+                std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return std::tolower(c); });
+                if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif" || ext == ".bmp") {
+                    std::ifstream in(path, std::ios::binary);
+                    const std::vector<uint8_t> data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+                    thumb.tex = upload ? imshell::LoadTexture(data.data(), data.size(), upload, &thumb.w, &thumb.h) : ImTextureID{};
+                }
+            }
+            found = thumbs.emplace(path, thumb).first;
+        }
+        const Thumb& thumb = found->second;
+        const std::string name = std::filesystem::path(path).filename().string();
+        const float width = thumb.tex && thumb.h > 0
+                                ? std::clamp(size * static_cast<float>(thumb.w) / static_cast<float>(thumb.h), 28.0f, 140.0f)
+                                : std::min(200.0f, ImGui::CalcTextSize(name.c_str()).x + 62);
+        const ImVec2 lo(x, origin.y), hi(x + width, origin.y + size);
         ImGui::PushID(static_cast<int>(1000 + i));
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-        ImGui::PushStyleColor(ImGuiCol_Text, colors.overlay1);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
-        if (ImGui::SmallButton(ICON_FA_XMARK)) {
+        ImGui::SetCursorScreenPos(lo);
+        ImGui::InvisibleButton("tile", ImVec2(width, size));
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("%s", path.c_str());
+        }
+        draw->AddRectFilled(lo, hi, ImGui::GetColorU32(colors.surface0), Round::Row);
+        if (thumb.tex) {
+            draw->AddImageRounded(thumb.tex, lo, hi, ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE, Round::Row);
+        } else {
+            draw->AddText(ImVec2(lo.x + 10, lo.y + (size - ImGui::GetTextLineHeight()) / 2), ImGui::GetColorU32(colors.overlay1),
+                          ICON_FA_PAPERCLIP);
+            draw->PushClipRect(lo, ImVec2(hi.x - 22, hi.y), true);
+            draw->AddText(ImVec2(lo.x + 30, lo.y + (size - ImGui::GetTextLineHeight()) / 2), ImGui::GetColorU32(colors.subtext0),
+                          name.c_str());
+            draw->PopClipRect();
+        }
+        // the remove button: a dot in the corner
+        const ImVec2 corner(hi.x - 11, lo.y + 11);
+        ImGui::SetCursorScreenPos(ImVec2(corner.x - 9, corner.y - 9));
+        if (ImGui::InvisibleButton("drop", ImVec2(18, 18))) {
             drop = static_cast<int>(i);
         }
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(2);
+        draw->AddCircleFilled(corner, 9, ImGui::GetColorU32(ImGui::IsItemHovered() ? colors.surface2 : colors.crust));
+        const ImVec2 cross = ImGui::CalcTextSize(ICON_FA_XMARK);
+        draw->AddText(ImVec2(corner.x - cross.x / 2, corner.y - cross.y / 2), ImGui::GetColorU32(colors.text), ICON_FA_XMARK);
         ImGui::PopID();
-        ImGui::SameLine();
-        ImGui::TextColored(colors.subtext0, ICON_FA_PAPERCLIP "  %s",
-                           std::filesystem::path(attachments[i]).filename().string().c_str());
+        x += width + 8;
     }
+    ImGui::SetCursorScreenPos(ImVec2(origin.x, origin.y + kAttachedStrip - ImGui::GetStyle().ItemSpacing.y)); // the dummy adds its spacing
+    ImGui::Dummy(ImVec2(0, 0));
     if (drop >= 0) {
         attachments.erase(attachments.begin() + drop);
     }
@@ -1054,8 +1105,9 @@ void App::threadBody(Thread& t) {
         const float askWidth = ImGui::CalcTextSize(ask.c_str()).x;
         // a third of the way down, or centred when the area is short (a tall terminal)
         const float block = composerHeight + 90;
+        const float room = attachments.empty() ? 0.0f : kAttachedStrip; // the strip goes in above the composer, which stays
         ImGui::SetCursorPos(ImVec2((avail.x - askWidth) * 0.5f,
-                                   std::max(0.0f, std::min(avail.y * 0.36f, (avail.y - block) * 0.5f))));
+                                   std::max(0.0f, std::min(avail.y * 0.36f, (avail.y - block) * 0.5f) - room)));
         ImGui::TextUnformatted(ask.c_str());
         ImGui::PopFont();
         ImGui::Dummy(ImVec2(0, Theme::Spacing::L));
@@ -1072,7 +1124,7 @@ void App::threadBody(Thread& t) {
     }
 
     const float queued =
-        static_cast<float>(t.queue.size() + attachments.size()) * ImGui::GetFrameHeightWithSpacing();
+        static_cast<float>(t.queue.size()) * ImGui::GetFrameHeightWithSpacing() + (attachments.empty() ? 0.0f : kAttachedStrip);
     // cmd+f: a find bar over the transcript; enter and shift+enter step through the hits
     if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_F)) {
         find.open = find.focus = true;
