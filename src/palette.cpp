@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "home.hpp"
 #include "text.hpp"
 
 #include "imshell/button.hpp"
@@ -58,7 +59,7 @@ void App::paletteGo(const std::string& host, std::string path) {
         path.replace(0, 1, p.home);
     }
     if (host.empty()) {
-        const char* home = std::getenv("HOME");
+        const char* home = homeEnv();
         p.home = home ? home : "/";
         std::error_code ec;
         const fs::path abs = fs::weakly_canonical(path.empty() ? p.home : path, ec);

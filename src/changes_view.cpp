@@ -11,6 +11,10 @@
 #include <chrono>
 #include <format>
 #include <utility>
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#endif
 
 namespace Theme = imshell::Theme;
 namespace ui = imshell::ui;
@@ -20,6 +24,8 @@ namespace {
     void openUrl(const std::string& url) {
 #if defined(__APPLE__)
         ProcessRunner::run({.args = {"/usr/bin/open", url}, .timeout = std::chrono::seconds(5)});
+#elif defined(_WIN32)
+        ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 #else
         ProcessRunner::run({.args = {"xdg-open", url}, .timeout = std::chrono::seconds(5)});
 #endif

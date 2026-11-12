@@ -3,11 +3,16 @@
 #include "imshell/button.hpp"
 #include "imshell/components.hpp"
 #include "imshell/themes.hpp"
+#include "imshell/updater.hpp"
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <format>
 #include <set>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 namespace Theme = imshell::Theme;
 namespace ui = imshell::ui;
@@ -182,6 +187,14 @@ void App::settingsDraw() {
     ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
     // which build this is: what to quote when something is off
     ImGui::TextColored(colors.overlay0, "ImCode " IMCODE_VERSION "  " IMCODE_COMMIT);
+#ifdef IMCODE_UPDATER
+    ImGui::SameLine();
+    const bool available = imshell::updater::Available();
+    if (imshell::Button(available ? ("Update to " + imshell::updater::LatestVersion()).c_str() : "Check for Updates",
+                        available ? imshell::ButtonVariant::Primary : imshell::ButtonVariant::Secondary)) {
+        imshell::updater::Check();
+    }
+#endif
     close |= ImGui::IsKeyPressed(ImGuiKey_Escape);
     close |= ImGui::IsMouseClicked(0) &&
              !ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows |
@@ -200,7 +213,13 @@ void App::onboarding() {
     ImGui::BeginChild("onboarding", ImVec2(width, 0));
 
     char hostName[256] = "this machine";
+#ifdef _WIN32
+    if (const char* name = std::getenv("COMPUTERNAME")) {
+        std::snprintf(hostName, sizeof(hostName), "%s", name);
+    }
+#else
     gethostname(hostName, sizeof(hostName));
+#endif
     if (char* dot = std::strchr(hostName, '.')) {
         *dot = 0; // "name.local"
     }

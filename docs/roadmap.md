@@ -205,8 +205,8 @@ The phone is remote only: it runs no agent and keeps no project of its own. It r
 
 - [~] Settings: theme (done), font size, keys, default agent and permissions ([#150](https://github.com/dunkbing/imcode/issues/150))
 - [x] ACP log view (every line in and out) ([#151](https://github.com/dunkbing/imcode/issues/151))
-- [~] App bundle for macOS (done, `scripts/package-macos.sh`), icon, installers; CI on macOS, Windows, Linux ([#152](https://github.com/dunkbing/imcode/issues/152))
-- [ ] Auto-update (imshell's updater) ([#153](https://github.com/dunkbing/imcode/issues/153))
+- [~] A signed, notarized macOS app (done, imshell's `imshell_app`, CI in `.github/workflows/macos.yml`), a Linux AppImage (done, `scripts/package-linux.sh`), builds on Windows (done); icon, Windows installer, CI on Windows and Linux ([#152](https://github.com/dunkbing/imcode/issues/152))
+- [~] Auto-update (imshell's updater): Sparkle on macOS and the AppImage swap on Linux (done); staged installs on Windows, the feed and its key ([#153](https://github.com/dunkbing/imcode/issues/153))
 - [~] Welcome page on first run: agents found, projects to import, phone setup ([#154](https://github.com/dunkbing/imcode/issues/154))
 - [~] Command palette: threads, projects, actions, themes, add project ([#155](https://github.com/dunkbing/imcode/issues/155))
 - [ ] Keybindings editor: rules with when-conditions, a config file, conflicts warned ([#156](https://github.com/dunkbing/imcode/issues/156))

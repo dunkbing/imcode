@@ -1,0 +1,83 @@
+# a signed, notarized ImCode.app for apple silicon: on a v* tag (a draft release gets the zip)
+# or by hand. secrets: MACOS_CERTIFICATE (the developer id application .p12, base64),
+# MACOS_CERTIFICATE_PASSWORD, NOTARY_KEY (an app store connect api key .p8, base64),
+# NOTARY_KEY_ID, NOTARY_ISSUER. variables, optional: IMCODE_APPCAST_URL, IMCODE_UPDATE_KEY
+name: macos
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/vcpkg/archives
+          key: vcpkg-arm64-osx-${{ hashFiles('vcpkg.json') }}
+
+      - name: Signing keychain
+        env:
+          CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password=$(openssl rand -hex 16)
+          echo "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+          echo "$NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          identity=$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
+          echo "IMSHELL_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+
+      - name: Build, sign, notarize
+        env:
+          IMSHELL_NOTARY_KEY: ${{ runner.temp }}/notary.p8
+          IMSHELL_NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          IMSHELL_NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
+        run: |
+          export VCPKG_BINARY_SOURCES="clear;files,$HOME/.cache/vcpkg/archives,readwrite"
+          mkdir -p "$HOME/.cache/vcpkg/archives"
+          version=""
+          case "$GITHUB_REF" in refs/tags/v*) version="-DIMCODE_VERSION=${GITHUB_REF_NAME#v}" ;; esac
+          cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET=arm64-osx-release -DVCPKG_OVERLAY_TRIPLETS=cmake/triplets \
+            -DIMCODE_UPDATER=ON -DIMCODE_APPCAST_URL="${{ vars.IMCODE_APPCAST_URL }}" \
+            -DIMCODE_UPDATE_KEY="${{ vars.IMCODE_UPDATE_KEY }}" $version
+          cmake --build build-release -j 4 --target imcode-app
+          spctl -a -vv build-release/ImCode.app
+
+      - name: Clean up
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/notary.p8"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: imcode-macos-arm64
+          path: build-release/imcode-macos-arm64.zip
+
+      - name: Draft release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: build-release/imcode-macos-arm64.zip

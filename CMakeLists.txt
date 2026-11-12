@@ -39,6 +39,19 @@ endif()
 # --recursive). imgui's core is compiled here, once; imshell only adds the backends it uses
 # emoji past U+FFFF in the ui: imgui with 32-bit characters (imshell passes it to everything)
 set(IMSHELL_WCHAR32 ON CACHE BOOL "" FORCE)
+if(WIN32) # windows.h without its min/max macros, for every target here
+    add_compile_definitions(NOMINMAX)
+    list(APPEND IMCODE_SSH ws2_32)
+endif()
+# auto-update through imshell's updater (packaging turns it on); an empty feed leaves it off.
+# macos reads its feed and key from Info.plist, which imshell_app writes
+option(IMCODE_UPDATER "Auto-update" OFF)
+set(IMCODE_APPCAST_URL "" CACHE STRING "macos and windows: the sparkle appcast")
+set(IMCODE_UPDATE_KEY "" CACHE STRING "macos and windows: the appcast's ed25519 public key (base64)")
+set(IMCODE_MANIFEST_URL "" CACHE STRING "linux: the json manifest")
+if(IMCODE_UPDATER)
+    set(IMSHELL_UPDATER ON CACHE BOOL "" FORCE) # before imshell reads it
+endif()
 add_subdirectory(external/imshell)
 option(IMCODE_BUILD_TESTS "Build the tests" OFF)
 if(IMCODE_BUILD_TESTS)
@@ -57,10 +70,18 @@ add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sideba
                src/terminal.cpp src/terminal_view.cpp src/files_view.cpp src/changes_view.cpp src/graph_view.cpp src/log_view.cpp src/syntax.cpp
                ${EMBEDDED_FONTS_FILE} ${EMBEDDED_IMAGES_FILE} ${IMGUI_CORE})
 target_include_directories(imcode PRIVATE external/IconFontCppHeaders)
+# the version shown and compared by the updater; a test build of an update overrides it
+set(IMCODE_VERSION ${PROJECT_VERSION} CACHE STRING "the version")
 # the commit it was built from, shown in settings
 execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
                 OUTPUT_VARIABLE IMCODE_COMMIT OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-target_compile_definitions(imcode PRIVATE IMCODE_VERSION="${PROJECT_VERSION}" IMCODE_COMMIT="${IMCODE_COMMIT}")
+target_compile_definitions(imcode PRIVATE IMCODE_VERSION="${IMCODE_VERSION}" IMCODE_COMMIT="${IMCODE_COMMIT}"
+    IMCODE_APPCAST_URL="${IMCODE_APPCAST_URL}" IMCODE_UPDATE_KEY="${IMCODE_UPDATE_KEY}" IMCODE_MANIFEST_URL="${IMCODE_MANIFEST_URL}")
+if(IMCODE_UPDATER)
+    target_compile_definitions(imcode PRIVATE IMCODE_UPDATER=1)
+endif()
+imshell_app(imcode NAME ImCode ID io.github.dunkbing.imcode VERSION ${IMCODE_VERSION}
+            APPCAST "${IMCODE_APPCAST_URL}" PUBLIC_KEY "${IMCODE_UPDATE_KEY}")
 target_link_libraries(imcode PRIVATE imshell::imshell imshell::components imshell::markdown acp::host ${IMCODE_SSH} ghostty-vt-static)
 
 # ctest: configure with -DIMCODE_BUILD_TESTS=ON (turns on the echo agent it talks to)
@@ -95,4 +116,9 @@ if(IMCODE_BUILD_TESTS)
     add_executable(imcode-syntax-test tests/syntax_test.cpp src/syntax.cpp)
     add_test(NAME imcode-syntax COMMAND imcode-syntax-test)
     add_test(NAME imcode-thread COMMAND imcode-thread-test $<TARGET_FILE:acp-echo-agent>)
+    if(WIN32)
+        foreach(test imcode-git-test imcode-history-test imcode-remote-test imcode-thread-test imcode-ssh-check)
+            target_compile_options(${test} PRIVATE /FI${CMAKE_CURRENT_SOURCE_DIR}/tests/posix_env.hpp)
+        endforeach()
+    endif()
 endif()

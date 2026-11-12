@@ -1,4 +1,5 @@
 #include "ssh.hpp"
+#include "home.hpp"
 
 #include "keychain.hpp"
 #include "acp_host/process_runner.hpp"
@@ -15,17 +16,71 @@
 #include <map>
 #include <mutex>
 
-// shortcut: posix sockets only; windows needs the winsock variants (DearSQL's ssh_tunnel.cpp)
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <cerrno>
 #include <fcntl.h>
 #include <netdb.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#endif
+
+namespace {
+    // the few socket calls that differ between winsock and posix
+#ifdef _WIN32
+    using Socket = SOCKET;
+    int pollSocket(Socket s, short events, int ms) {
+        WSAPOLLFD p{s, events, 0};
+        return WSAPoll(&p, 1, ms);
+    }
+    void closeSocket(Socket s) {
+        closesocket(s);
+    }
+    void setNonBlocking(Socket s, bool on) {
+        u_long value = on ? 1 : 0;
+        ioctlsocket(s, FIONBIO, &value);
+    }
+    bool connecting() {
+        return WSAGetLastError() == WSAEWOULDBLOCK;
+    }
+    std::string resolveError(int rc) {
+        return gai_strerrorA(rc); // the narrow one: UNICODE may be defined
+    }
+    // once per process, before the first socket
+    const bool winsockReady = [] {
+        WSADATA data;
+        return WSAStartup(MAKEWORD(2, 2), &data) == 0;
+    }();
+#else
+    using Socket = int;
+    int pollSocket(Socket s, short events, int ms) {
+        pollfd p{.fd = s, .events = events, .revents = 0};
+        return poll(&p, 1, ms);
+    }
+    void closeSocket(Socket s) {
+        ::close(s);
+    }
+    void setNonBlocking(Socket s, bool on) {
+        const int flags = fcntl(s, F_GETFL, 0);
+        fcntl(s, F_SETFL, on ? flags | O_NONBLOCK : flags & ~O_NONBLOCK);
+    }
+    bool connecting() {
+        return errno == EINPROGRESS;
+    }
+    std::string resolveError(int rc) {
+        return gai_strerror(rc);
+    }
+#endif
+    constexpr Socket kNoSocket = static_cast<Socket>(LIBSSH2_INVALID_SOCKET);
+} // namespace
 
 namespace Ssh {
 
     struct Session::Impl {
-        int sock = -1;
+        Socket sock = kNoSocket;
         LIBSSH2_SESSION* session = nullptr;
         LIBSSH2_SFTP* sftp = nullptr;
         std::mutex mutex; // libssh2 allows one thread in a session at a time
@@ -37,7 +92,7 @@ namespace Ssh {
         using Clock = std::chrono::steady_clock;
 
         std::string home() {
-            const char* h = std::getenv("HOME");
+            const char* h = homeEnv();
             return h ? h : "";
         }
 
@@ -54,10 +109,9 @@ namespace Ssh {
             return !made && libssh2_session_last_errno(session) == LIBSSH2_ERROR_EAGAIN;
         }
 
-        void waitSocket(int sock) {
+        void waitSocket(Socket sock) {
             // short: another thread may have read the packet this one waits for
-            pollfd p{.fd = sock, .events = POLLIN, .revents = 0};
-            poll(&p, 1, 20);
+            pollSocket(sock, POLLIN, 20);
         }
 
         // f under the session lock, again while libssh2 wants the socket. the session is
@@ -77,42 +131,40 @@ namespace Ssh {
         }
 
         // tcp connect with a timeout, trying every address of the host
-        int connectTo(const std::string& host, int port, std::string& error) {
+        Socket connectTo(const std::string& host, int port, std::string& error) {
             addrinfo hints{};
             hints.ai_family = AF_UNSPEC;
             hints.ai_socktype = SOCK_STREAM;
             addrinfo* res = nullptr;
             if (const int rc = getaddrinfo(host.c_str(), std::to_string(port).c_str(), &hints, &res);
                 rc != 0) {
-                error = "Could not resolve " + host + ": " + gai_strerror(rc);
-                return -1;
+                error = "Could not resolve " + host + ": " + resolveError(rc);
+                return kNoSocket;
             }
-            int result = -1;
-            for (addrinfo* a = res; a && result < 0; a = a->ai_next) {
-                const int s = socket(a->ai_family, a->ai_socktype, a->ai_protocol);
-                if (s < 0) {
+            Socket result = kNoSocket;
+            for (addrinfo* a = res; a && result == kNoSocket; a = a->ai_next) {
+                const Socket s = socket(a->ai_family, a->ai_socktype, a->ai_protocol);
+                if (s == kNoSocket) {
                     continue;
                 }
-                const int flags = fcntl(s, F_GETFL, 0);
-                fcntl(s, F_SETFL, flags | O_NONBLOCK);
-                pollfd p{.fd = s, .events = POLLOUT, .revents = 0};
+                setNonBlocking(s, true);
                 int err = 0;
                 socklen_t len = sizeof(err);
-                if ((connect(s, a->ai_addr, a->ai_addrlen) == 0 || errno == EINPROGRESS) &&
-                    poll(&p, 1, 10000) == 1 &&
-                    getsockopt(s, SOL_SOCKET, SO_ERROR, &err, &len) == 0 && err == 0) {
-                    fcntl(s, F_SETFL, flags);
+                if ((connect(s, a->ai_addr, a->ai_addrlen) == 0 || connecting()) &&
+                    pollSocket(s, POLLOUT, 10000) == 1 &&
+                    getsockopt(s, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&err), &len) == 0 && err == 0) {
+                    setNonBlocking(s, false);
 #ifdef SO_NOSIGPIPE
                     int on = 1;
                     setsockopt(s, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
 #endif
                     result = s;
                 } else {
-                    close(s);
+                    closeSocket(s);
                 }
             }
             freeaddrinfo(res);
-            if (result < 0) {
+            if (result == kNoSocket) {
                 error = "Could not reach " + host + ":" + std::to_string(port);
             }
             return result;
@@ -324,7 +376,7 @@ namespace Ssh {
             Session::Impl& i = *out->impl;
             i.secret = secret;
             i.sock = connectTo(t.host, t.port, error.message);
-            if (i.sock < 0) {
+            if (i.sock == kNoSocket) {
                 return nullptr;
             }
             i.session = libssh2_session_init_ex(nullptr, nullptr, nullptr, &i.secret);
@@ -553,8 +605,8 @@ namespace Ssh {
             libssh2_session_disconnect(impl->session, "bye");
             libssh2_session_free(impl->session);
         }
-        if (impl && impl->sock >= 0) {
-            close(impl->sock);
+        if (impl && impl->sock != kNoSocket) {
+            closeSocket(impl->sock);
         }
     }
 

@@ -1,4 +1,5 @@
 #include "ssh_config.hpp"
+#include "home.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -6,7 +7,7 @@
 
 static std::string expandTilde(const std::string& path) {
     if (path.starts_with("~/")) {
-        if (const char* home = std::getenv("HOME"))
+        if (const char* home = homeEnv())
             return std::string(home) + path.substr(1);
     }
     return path;

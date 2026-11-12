@@ -4,12 +4,35 @@
 #include "../src/git_graph.hpp"
 #include "../src/ssh.hpp"
 #include <cstdio>
+#include <exception>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
+#ifdef _WIN32
+#include "acp_host/process_runner.hpp"
+#include <windows.h>
+#endif
 
-int main() {
+namespace {
+    // a posix shell line's exit code: windows runs it in git for windows' sh, not cmd
+    int shell(const std::string& line) {
+#ifdef _WIN32
+        char git[MAX_PATH] = "";
+        SearchPathA(nullptr, "git.exe", nullptr, MAX_PATH, git, nullptr);
+        const std::string sh = (std::filesystem::path(git).parent_path().parent_path() / "bin" / "sh.exe").string();
+        const ProcessResult r = ProcessRunner::run({.args = {sh, "-c", line}});
+        if (!r.success) {
+            std::printf("sh failed (%d): %s %s\n", r.exitCode, r.output.c_str(), r.errorMessage.c_str());
+        }
+        return r.success ? 0 : 1;
+#else
+        return std::system(line.c_str());
+#endif
+    }
+} // namespace
+
+static int run() {
     const Git::Status a = Git::parse("## main...origin/main [ahead 1]\n M src/a.cpp\n?? new.txt\n");
     const Git::Status b = Git::parse("## No commits yet on trunk\n");
     const Git::Status c = Git::parse("## HEAD (no branch)\nA  x\n");
@@ -25,13 +48,14 @@ int main() {
 
     namespace fs = std::filesystem;
     const fs::path home = fs::temp_directory_path() / "imcode-git-test";
-    fs::remove_all(home);
+    std::error_code held; // windows: a git process can still hold the folder for a moment
+    fs::remove_all(home, held);
     const fs::path repo = home / "it's a repo";
     fs::create_directories(repo);
     setenv("HOME", home.c_str(), 1);
     const std::string init = "cd '" + home.string() + "/it'\\''s a repo' && git init -q -b main . && "
                              "git -c user.email=t@t -c user.name=t commit -q --allow-empty -m first";
-    ok = ok && std::system(init.c_str()) == 0;
+    ok = shell(init) == 0 && ok;
     const std::string name = Git::slug("Fix the Login test!\nmore");
     std::string error;
     const std::string made = Git::addWorktree("", repo.string(), name, error);
@@ -40,6 +64,9 @@ int main() {
     const bool refused = Git::addWorktree("", repo.string(), name, again).empty() && !again.empty();
     ok = ok && name.starts_with("fix-the-login-test-") && fs::is_directory(made) && in.repo &&
          in.branch == "imcode/" + name && refused;
+    if (!ok) {
+        std::printf("FAILED: worktree '%s' (%s) branch %s refused %d\n", made.c_str(), error.c_str(), in.branch.c_str(), refused);
+    }
     // a worktree with uncommitted work is kept; a clean one goes, its branch stays
     std::ofstream(fs::path(made) / "new.txt") << "x";
     std::string kept;
@@ -50,7 +77,7 @@ int main() {
     std::ofstream(repo / "a.txt") << "one\ntwo\nthree\n";
     const std::string commit = "cd '" + home.string() + "/it'\\''s a repo' && git add a.txt && "
                                "git -c user.email=t@t -c user.name=t commit -q -m a";
-    ok = ok && std::system(commit.c_str()) == 0;
+    ok = shell(commit) == 0 && ok;
     std::ofstream(repo / "a.txt") << "one\n2\nthree\nfour\n";
     std::ofstream(repo / "b c.txt") << "new\n";
     const auto found = Git::changes("", repo.string());
@@ -65,6 +92,9 @@ int main() {
                         added[0].text == "new";
     if (!listed || !diffed) {
         std::printf("FAILED: changes %zu, diff %zu, new %zu\n", found.size(), lines.size(), added.size());
+        for (const auto& f : found) {
+            std::printf("  %c [%s] +%d -%d\n", f.kind, f.path.c_str(), f.added, f.removed);
+        }
         for (const auto& l : lines) {
             std::printf("  %c%s\n", l.kind, l.text.c_str());
         }
@@ -100,7 +130,7 @@ int main() {
         }
         return out + "'";
     };
-    ok = ok && std::system(("git init -q --bare " + q(bare) + " && git -C " + q(repo) + " remote add origin " + q(bare)).c_str()) == 0;
+    ok = shell(("git init -q --bare " + q(bare) + " && git -C " + q(repo) + " remote add origin " + q(bare))) == 0 && ok;
     setenv("GIT_AUTHOR_NAME", "t", 1);
     setenv("GIT_AUTHOR_EMAIL", "t@t", 1);
     setenv("GIT_COMMITTER_NAME", "t", 1);
@@ -113,7 +143,7 @@ int main() {
     const bool second = Git::commit("", repo.string(), "more", true, again2); // to the upstream now set
     std::string nothing;
     const bool empty = !Git::commit("", repo.string(), "nothing", false, nothing) && !nothing.empty();
-    const bool pushed = std::system(("git -C " + q(bare) + " log --oneline main | grep -q more").c_str()) == 0;
+    const bool pushed = shell(("git -C " + q(bare) + " log --oneline main | grep -q more")) == 0;
     if (!committed || !clean || !second || !empty || !pushed) {
         std::printf("FAILED: commit %d clean %d second %d refused-empty %d pushed %d: %s | %s\n", committed, clean, second,
                     empty, pushed, said.c_str(), again2.c_str());
@@ -129,8 +159,8 @@ int main() {
     // the history: libgit2 here, and git's own log parsed the way an ssh host's is
     const auto history = Git::log("", repo.string(), 50, 0);
     const std::string logFile = (home / "log.txt").string();
-    std::system(("git -C " + q(repo) + " log --all --topo-order --format='%H%x1f%P%x1f%an%x1f%at%x1f%D%x1f%s%x1e' > " +
-                 q(logFile)).c_str());
+    shell("git -C " + q(repo) + " log --all --topo-order --format='%H%x1f%P%x1f%an%x1f%at%x1f%D%x1f%s%x1e' > " +
+          q(logFile));
     std::ifstream logIn(logFile);
     const auto viaCli = Git::parseLog(std::string(std::istreambuf_iterator<char>(logIn), {}));
     bool sameLog = history.size() >= 3 && history.size() == viaCli.size();
@@ -172,8 +202,17 @@ int main() {
          graph[3].parents.empty();
     std::string gone;
     ok = ok && refusedDirty && Git::removeWorktree("", repo.string(), made, gone) && !fs::exists(made);
-    fs::remove_all(home);
+    fs::remove_all(home, held);
     std::printf(ok ? "ok\n" : "FAILED: %s | %s | %s | %s\n", name.c_str(), made.c_str(), error.c_str(),
                 in.branch.c_str());
     return ok ? 0 : 1;
+}
+
+int main() {
+    try {
+        return run();
+    } catch (const std::exception& e) { // a filesystem or process error says what went wrong
+        std::printf("FAILED: %s\n", e.what());
+        return 1;
+    }
 }
