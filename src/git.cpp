@@ -1,4 +1,5 @@
 #include "git.hpp"
+#include "home.hpp"
 
 #include "acp_host/agents.hpp"
 #include "acp_host/process_runner.hpp"
@@ -8,6 +9,10 @@
 #include <cctype>
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace Git {
 
@@ -89,10 +94,27 @@ namespace Git {
             return out + "'";
         }
 
+        // the local sh. windows: git for windows' own (<Git>\cmd\git.exe is on PATH, sh is
+        // <Git>\bin\sh.exe); without it local git commands fail with its message
+        const std::string& localShell() {
+#ifdef _WIN32
+            static const std::string sh = [] {
+                char git[MAX_PATH];
+                if (SearchPathA(nullptr, "git.exe", nullptr, MAX_PATH, git, nullptr) == 0) {
+                    return std::string("sh.exe");
+                }
+                return (std::filesystem::path(git).parent_path().parent_path() / "bin" / "sh.exe").string();
+            }();
+#else
+            static const std::string sh = "/bin/sh";
+#endif
+            return sh;
+        }
+
         // a shell script on this machine or on the host, its output (both streams)
         std::string run(const std::string& host, const std::string& script) {
             if (host.empty()) {
-                return ProcessRunner::run({.args = {"/bin/sh", "-c", script},
+                return ProcessRunner::run({.args = {localShell(), "-c", script},
                                            .environment = {{"PATH", AcpAgents::loginShellPath()}},
                                            .timeout = std::chrono::seconds(60)})
                     .output;
@@ -346,7 +368,7 @@ namespace Git {
                             std::string& error) {
         const std::string repoName = repo.substr(repo.find_last_of('/') + 1);
         if (host.empty()) {
-            const char* home = std::getenv("HOME");
+            const char* home = homeEnv();
             const std::string folder = std::string(home ? home : "") + "/.imcode/worktrees/" + repoName + "/" + name;
             return Local::addWorktree(repo, folder, "imcode/" + name, error);
         }

@@ -5,10 +5,14 @@
 #include "imshell/themes.hpp"
 #include "imshell/updater.hpp"
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <format>
 #include <set>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 namespace Theme = imshell::Theme;
 namespace ui = imshell::ui;
@@ -209,7 +213,13 @@ void App::onboarding() {
     ImGui::BeginChild("onboarding", ImVec2(width, 0));
 
     char hostName[256] = "this machine";
+#ifdef _WIN32
+    if (const char* name = std::getenv("COMPUTERNAME")) {
+        std::snprintf(hostName, sizeof(hostName), "%s", name);
+    }
+#else
     gethostname(hostName, sizeof(hostName));
+#endif
     if (char* dot = std::strchr(hostName, '.')) {
         *dot = 0; // "name.local"
     }

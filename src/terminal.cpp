@@ -1,10 +1,15 @@
 #include "terminal.hpp"
 
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
-#include <csignal>
 #include <cstdlib>
 #include <cstring>
+#ifdef _WIN32
+#include <filesystem>
+#include <windows.h>
+#else
+#include <csignal>
 #include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
@@ -16,9 +21,97 @@
 #endif
 
 extern char** environ;
+#endif
 
 namespace {
-    // shortcut: posix ptys only; windows needs conpty
+#ifdef _WIN32
+    std::wstring wide(const std::string& s) {
+        const int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
+        std::wstring out(static_cast<size_t>(n), L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), out.data(), n);
+        return out;
+    }
+
+    // one argument for CreateProcess's command line (the msvc runtime's parsing rules)
+    std::wstring quoteArg(const std::wstring& arg) {
+        if (!arg.empty() && arg.find_first_of(L" \t\"") == std::wstring::npos) {
+            return arg;
+        }
+        std::wstring out = L"\"";
+        size_t slashes = 0;
+        for (const wchar_t c : arg) {
+            if (c == L'\\') {
+                ++slashes;
+                continue;
+            }
+            out.append(c == L'"' ? slashes * 2 + 1 : slashes, L'\\');
+            slashes = 0;
+            out += c;
+        }
+        return out.append(slashes * 2, L'\\') + L"\"";
+    }
+
+    // a conpty: the shell writes to `out_`, reads what is typed from `in_`
+    class LocalPty : public Pty {
+    public:
+        LocalPty(HPCON console, HANDLE in, HANDLE out, HANDLE process)
+            : console_(console), in_(in), out_(out), process_(process) {}
+
+        ~LocalPty() override {
+            TerminateProcess(process_, 1);
+            CloseHandle(process_);
+            CloseHandle(in_);
+            // the output first: ClosePseudoConsole can wait on output nobody reads
+            CloseHandle(out_);
+            ClosePseudoConsole(console_);
+        }
+
+        long read(char* buf, size_t size) override {
+            while (!closed_) {
+                // peek in short waits: close() comes from another thread
+                DWORD ready = 0;
+                if (!PeekNamedPipe(out_, nullptr, 0, nullptr, &ready, nullptr)) {
+                    return 0;
+                }
+                if (ready > 0) {
+                    DWORD n = 0;
+                    const DWORD want = static_cast<DWORD>(std::min<size_t>(size, ready));
+                    return ReadFile(out_, buf, want, &n, nullptr) ? static_cast<long>(n) : 0;
+                }
+                // conpty keeps the pipe open after the shell exits
+                if (WaitForSingleObject(process_, 10) == WAIT_OBJECT_0) {
+                    return 0;
+                }
+            }
+            return 0;
+        }
+
+        bool write(const char* data, size_t size) override {
+            while (size > 0) {
+                DWORD n = 0;
+                if (!WriteFile(in_, data, static_cast<DWORD>(size), &n, nullptr)) {
+                    return false;
+                }
+                data += n;
+                size -= n;
+            }
+            return true;
+        }
+
+        void resize(int cols, int rows) override {
+            ResizePseudoConsole(console_, COORD{static_cast<SHORT>(cols), static_cast<SHORT>(rows)});
+        }
+
+        void close() override {
+            closed_ = true;
+        }
+
+    private:
+        HPCON console_;
+        HANDLE in_, out_, process_;
+        std::atomic<bool> closed_{false};
+    };
+#else
     class LocalPty : public Pty {
     public:
         LocalPty(int fd, pid_t pid) : fd_(fd), pid_(pid) {}
@@ -78,12 +171,75 @@ namespace {
         pid_t pid_;
         std::atomic<bool> closed_{false};
     };
+#endif
 
     void toShell(GhosttyTerminal, void* self, const uint8_t* data, size_t size) {
         static_cast<Terminal*>(self)->write({reinterpret_cast<const char*>(data), size});
     }
 } // namespace
 
+#ifdef _WIN32
+std::unique_ptr<Pty> Terminal::local(const std::string& cwd, const std::vector<std::string>& argv,
+                                     int cols, int rows, std::string& error) {
+    // no argv: $SHELL when set (git bash), else powershell
+    const char* shellEnv = std::getenv("SHELL");
+    std::wstring command;
+    if (argv.empty()) {
+        command = quoteArg(wide(shellEnv && *shellEnv ? shellEnv : "powershell.exe"));
+    }
+    for (const auto& arg : argv) {
+        command += (command.empty() ? L"" : L" ") + quoteArg(wide(arg));
+    }
+    auto fail = [&](const char* what) {
+        error = std::string("Could not open a terminal: ") + what + " failed (" + std::to_string(GetLastError()) + ")";
+        return nullptr;
+    };
+    HANDLE inRead = nullptr, inWrite = nullptr, outRead = nullptr, outWrite = nullptr;
+    if (!CreatePipe(&inRead, &inWrite, nullptr, 0)) {
+        return fail("CreatePipe");
+    }
+    if (!CreatePipe(&outRead, &outWrite, nullptr, 0)) {
+        CloseHandle(inRead);
+        CloseHandle(inWrite);
+        return fail("CreatePipe");
+    }
+    HPCON console = nullptr;
+    const HRESULT made = CreatePseudoConsole(COORD{static_cast<SHORT>(cols), static_cast<SHORT>(rows)},
+                                             inRead, outWrite, 0, &console);
+    CloseHandle(inRead); // the console holds its own ends
+    CloseHandle(outWrite);
+    if (FAILED(made)) {
+        CloseHandle(inWrite);
+        CloseHandle(outRead);
+        return fail("CreatePseudoConsole");
+    }
+    SIZE_T attrSize = 0;
+    InitializeProcThreadAttributeList(nullptr, 1, 0, &attrSize);
+    std::vector<char> attrs(attrSize);
+    STARTUPINFOEXW si{};
+    si.StartupInfo.cb = sizeof(si);
+    si.lpAttributeList = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attrs.data());
+    InitializeProcThreadAttributeList(si.lpAttributeList, 1, 0, &attrSize);
+    UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, console,
+                              sizeof(console), nullptr, nullptr);
+    std::error_code ec;
+    const std::wstring dir = wide(cwd);
+    const bool dirOk = !cwd.empty() && std::filesystem::is_directory(dir, ec); // gone: where the app is
+    PROCESS_INFORMATION pi{};
+    const BOOL started = CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE, EXTENDED_STARTUPINFO_PRESENT,
+                                        nullptr, dirOk ? dir.c_str() : nullptr, &si.StartupInfo, &pi);
+    DeleteProcThreadAttributeList(si.lpAttributeList);
+    if (!started) {
+        auto result = fail("CreateProcess");
+        CloseHandle(inWrite);
+        CloseHandle(outRead);
+        ClosePseudoConsole(console);
+        return result;
+    }
+    CloseHandle(pi.hThread);
+    return std::make_unique<LocalPty>(console, inWrite, outRead, pi.hProcess);
+}
+#else
 std::unique_ptr<Pty> Terminal::local(const std::string& cwd, const std::vector<std::string>& argv,
                                      int cols, int rows, std::string& error) {
     // all built before the fork: the child of a threaded process must not allocate
@@ -133,6 +289,7 @@ std::unique_ptr<Pty> Terminal::local(const std::string& cwd, const std::vector<s
     }
     return std::make_unique<LocalPty>(fd, pid);
 }
+#endif
 
 Terminal::Terminal(Open open, int cols, int rows, std::function<void()> wake)
     : cols_(cols), rows_(rows), wake_(std::move(wake)) {

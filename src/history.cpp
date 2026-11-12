@@ -1,4 +1,5 @@
 #include "history.hpp"
+#include "home.hpp"
 #include "text.hpp"
 
 #include <algorithm>
@@ -80,7 +81,7 @@ namespace History {
     } // namespace
 
     std::string transcript(const std::string& agentId, const std::string& cwd, const std::string& sessionId) {
-        const char* home = std::getenv("HOME");
+        const char* home = homeEnv();
         const fs::path base = home ? home : "";
         std::error_code ec;
         if (agentId == "claude-code") {
@@ -208,7 +209,7 @@ namespace History {
     }
 
     std::vector<Found> scan(int perFolder) {
-        const char* home = std::getenv("HOME");
+        const char* home = homeEnv();
         const fs::path base = home ? home : "";
         std::error_code ec;
         // every session file with its agent, newest first

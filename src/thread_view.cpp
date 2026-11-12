@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "home.hpp"
 #include "imgui_internal.h" // RenderArrow
 #include "text.hpp"
 
@@ -943,7 +944,7 @@ void App::statusLine(Thread& t, float left) {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
     // the folder, short: ~ for the home folder, the last two parts when it is still long
     std::string where = t.cwd;
-    if (const char* home = std::getenv("HOME"); t.host.empty() && home && where.starts_with(home)) {
+    if (const char* home = homeEnv(); t.host.empty() && home && where.starts_with(home)) {
         where.replace(0, std::string(home).size(), "~");
     }
     if (where.size() > 44) {

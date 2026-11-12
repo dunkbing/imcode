@@ -226,7 +226,7 @@ namespace Git::Local {
         std::filesystem::copy_file(realPath, copy, std::filesystem::copy_options::overwrite_existing, ec);
         git_index* index = nullptr;
         std::optional<std::string> out;
-        if (git_index_open(&index, copy.c_str()) == 0) {
+        if (git_index_open(&index, copy.string().c_str()) == 0) {
             const Index own(index);
             git_repository_set_index(repo.get(), index);
             git_oid oid;
