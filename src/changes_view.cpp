@@ -159,7 +159,7 @@ void App::changesDraw() {
             for (int i = 0; i < static_cast<int>(c.list.size()); ++i) {
                 const Git::Change& change = c.list[static_cast<size_t>(i)];
                 ImGui::PushID(i);
-                if (rowButton("##file", i == c.selected, ImGui::GetTextLineHeight() + 10)) {
+                if (rowButton("##file", i == c.selected, ImGui::GetTextLineHeight() + 10, 0, 3)) {
                     c.selected = i;
                 }
                 const ImVec2 end = ImGui::GetItemRectMax(), start = ImGui::GetItemRectMin();
@@ -168,7 +168,7 @@ void App::changesDraw() {
                                     : change.kind == 'D'                    ? colors.red
                                                                             : colors.yellow;
                 const char letter[2] = {change.kind == '?' ? 'U' : change.kind, 0};
-                const float y = start.y + 5;
+                const float y = start.y + (end.y - start.y - ImGui::GetTextLineHeight()) / 2;
                 draw->AddText(ImVec2(start.x + 8, y), ImGui::GetColorU32(tone), letter);
                 // the name, then its folder dimmed, cut to the row
                 const size_t slash = change.path.rfind('/');

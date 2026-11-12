@@ -294,7 +294,7 @@ struct App : imshell::Delegate {
 // dragged, with a resting line when `line`. returns how far it was dragged this frame;
 // *released is set when the drag ends (time to save)
 // shortcut: imshell's Splitter only splits top from bottom; this belongs there
-bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags = 0);
+bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags = 0, float rounding = 8);
 
 // a project's mark: two letters of its name on a square in a colour of its own
 void projectBadge(const std::string& name, float size = 16);

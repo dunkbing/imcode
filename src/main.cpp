@@ -38,7 +38,7 @@ constexpr float barHeight = 40; // taller than the os default: air above and bel
 
 int runHeadless(App& app, const char* out, int width, int height, int frames); // headless.cpp
 
-bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags) {
+bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags, float rounding) {
     const auto& colors = Theme::Current()->colors;
     const ImVec2 min = ImGui::GetCursorScreenPos();
     const float width = ImGui::GetContentRegionAvail().x;
@@ -52,7 +52,7 @@ bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags f
         ImVec4 fill = colors.surface0;
         fill.w = chosen ? 1.0f : 0.5f;
         ImGui::GetWindowDrawList()->AddRectFilled(min, ImVec2(min.x + width, min.y + height),
-                                                  ImGui::GetColorU32(fill), 8);
+                                                  ImGui::GetColorU32(fill), rounding);
     }
     return clicked;
 }
