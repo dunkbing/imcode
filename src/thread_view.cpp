@@ -61,7 +61,21 @@ namespace {
             lead();
             ImGui::SameLine(0, 8);
         }
-        ImGui::TextUnformatted(label.c_str());
+        // room left of the check column, whole characters only
+        const float room = width - 8 - 28 - (ImGui::GetCursorPos().x - at.x - 8);
+        std::string shown = label;
+        if (ImGui::CalcTextSize(shown.c_str()).x > room) {
+            while (!shown.empty() && ImGui::CalcTextSize((shown + "...").c_str()).x > room) {
+                while (!shown.empty() && (static_cast<unsigned char>(shown.back()) & 0xC0) == 0x80) {
+                    shown.pop_back();
+                }
+                if (!shown.empty()) {
+                    shown.pop_back();
+                }
+            }
+            shown += "...";
+        }
+        ImGui::TextUnformatted(shown.c_str());
         if (chosen) {
             ImGui::SetCursorPos(ImVec2(at.x + width - 24, at.y + 4));
             ImGui::TextColored(colors.blue, ICON_FA_CHECK);
