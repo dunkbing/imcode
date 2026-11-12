@@ -219,6 +219,57 @@ namespace Git {
                             std::string_view(out).substr(mark + marker.size()));
     }
 
+    std::vector<LogEntry> parseLog(std::string_view text) {
+        std::vector<LogEntry> out;
+        const auto split = [](std::string_view s, char sep) {
+            std::vector<std::string> parts;
+            for (size_t at = 0;;) {
+                const size_t end = s.find(sep, at);
+                parts.emplace_back(s.substr(at, end == std::string_view::npos ? end : end - at));
+                if (end == std::string_view::npos) {
+                    return parts;
+                }
+                at = end + 1;
+            }
+        };
+        for (const auto& record : split(text, '\x1e')) {
+            const auto f = split(record, '\x1f');
+            if (f.size() < 6) {
+                continue;
+            }
+            LogEntry e;
+            e.hash = f[0];
+            e.hash.erase(0, e.hash.find_first_not_of('\n')); // git ends each record with a newline
+            e.author = f[2];
+            e.time = std::atoll(f[3].c_str());
+            e.subject = f[5];
+            for (auto& p : split(f[1], ' ')) {
+                if (!p.empty()) {
+                    e.parents.push_back(std::move(p));
+                }
+            }
+            for (auto& r : split(f[4], ',')) {
+                r.erase(0, r.find_first_not_of(' '));
+                if (!r.empty()) {
+                    e.refs.push_back(std::move(r));
+                }
+            }
+            if (!e.hash.empty()) {
+                out.push_back(std::move(e));
+            }
+        }
+        return out;
+    }
+
+    std::vector<LogEntry> log(const std::string& host, const std::string& cwd, size_t limit, size_t skip) {
+        if (host.empty()) {
+            return Local::log(cwd, limit, skip).value_or(std::vector<LogEntry>{});
+        }
+        return parseLog(run(host, "cd " + quote(cwd) + " && git log --all --topo-order --skip=" + std::to_string(skip) +
+                                      " -n " + std::to_string(limit) +
+                                      " --format='%H%x1f%P%x1f%an%x1f%at%x1f%D%x1f%s%x1e' 2>/dev/null"));
+    }
+
     std::string snapshot(const std::string& host, const std::string& cwd) {
         if (host.empty()) {
             return Local::snapshot(cwd).value_or("");

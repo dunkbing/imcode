@@ -27,11 +27,17 @@ namespace {
 } // namespace
 
 void App::changesOpen(Thread& t, const std::string& from, const std::string& to) {
+    changesOpenAt(t.host, t.cwd, from, to, "");
+}
+
+void App::changesOpenAt(const std::string& host, const std::string& cwd, const std::string& from,
+                        const std::string& to, const std::string& title) {
     changes.want = true;
-    changes.host = t.host;
-    changes.cwd = t.cwd;
+    changes.host = host;
+    changes.cwd = cwd;
     changes.from = from;
     changes.to = to;
+    changes.title = title;
     changes.pushed = false;
     changes.list.clear();
     changes.lines.clear();
@@ -104,7 +110,7 @@ void App::changesDraw() {
     const float button = ImGui::GetFrameHeight();
     ImGui::AlignTextToFramePadding();
     ImGui::PushFont(nullptr, 18.0f);
-    ImGui::TextUnformatted(c.from.empty() ? "Changes" : "Changes in this turn");
+    ImGui::TextUnformatted(!c.title.empty() ? c.title.c_str() : c.from.empty() ? "Changes" : "Changes in this turn");
     ImGui::PopFont();
     ImGui::SameLine();
     ImGui::AlignTextToFramePadding();

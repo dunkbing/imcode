@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <mutex>
 
@@ -35,6 +36,8 @@ namespace Git::Local {
         using Signature = Own<git_signature, git_signature_free>;
         using Object = Own<git_object, git_object_free>;
         using Worktree = Own<git_worktree, git_worktree_free>;
+        using Walk = Own<git_revwalk, git_revwalk_free>;
+        using RefIter = Own<git_reference_iterator, git_reference_iterator_free>;
 
         std::string lastError() {
             const git_error* e = git_error_last();
@@ -60,13 +63,13 @@ namespace Git::Local {
             return Tree(reinterpret_cast<git_tree*>(obj));
         }
 
-        Tree treeOf(git_repository* repo, const std::string& hex) {
-            git_oid oid;
-            git_tree* tree = nullptr;
-            if (git_oid_fromstr(&oid, hex.c_str()) != 0 || git_tree_lookup(&tree, repo, &oid) != 0) {
+        // the tree of a tree hash (a snapshot) or of a commit, or "<commit>^" (its first parent)
+        Tree treeOf(git_repository* repo, const std::string& rev) {
+            git_object* obj = nullptr;
+            if (git_revparse_single(&obj, repo, (rev + "^{tree}").c_str()) != 0) {
                 return nullptr;
             }
-            return Tree(tree);
+            return Tree(reinterpret_cast<git_tree*>(obj));
         }
 
         // the working folder against HEAD, untracked files included (their contents too)
@@ -281,6 +284,83 @@ namespace Git::Local {
             return false;
         }
         return true;
+    }
+
+    std::optional<std::vector<LogEntry>> log(const std::string& cwd, size_t limit, size_t skip) {
+        const Repo repo = open(cwd);
+        if (!repo) {
+            return std::nullopt;
+        }
+        // what points at each commit: branches, remote branches, tags, and where HEAD is
+        std::map<std::string, std::vector<std::string>> refs;
+        const auto hex = [](const git_oid& oid) {
+            char buf[GIT_OID_MAX_HEXSIZE + 1];
+            git_oid_tostr(buf, sizeof(buf), &oid);
+            return std::string(buf);
+        };
+        std::string headName;
+        git_reference* head = nullptr;
+        if (git_repository_head(&head, repo.get()) == 0) {
+            const Ref own(head);
+            if (git_repository_head_detached(repo.get()) == 1) {
+                refs[hex(*git_reference_target(head))].push_back("HEAD");
+            } else {
+                headName = git_reference_name(head);
+            }
+        }
+        git_reference_iterator* raw = nullptr;
+        if (git_reference_iterator_new(&raw, repo.get()) == 0) {
+            const RefIter iter(raw);
+            for (git_reference* r = nullptr; git_reference_next(&r, iter.get()) == 0;) {
+                const Ref own(r);
+                git_object* peeled = nullptr; // an annotated tag points at the commit through its tag object
+                if (git_reference_type(r) != GIT_REFERENCE_DIRECT || git_reference_peel(&peeled, r, GIT_OBJECT_COMMIT) != 0) {
+                    continue;
+                }
+                const Object commitObject(peeled);
+                const std::string name = git_reference_name(r), shown = git_reference_shorthand(r);
+                refs[hex(*git_object_id(peeled))].push_back(
+                    name.starts_with("refs/tags/") ? "tag: " + shown : (name == headName ? "HEAD -> " : "") + shown);
+            }
+        }
+        git_revwalk* walkRaw = nullptr;
+        if (git_revwalk_new(&walkRaw, repo.get()) != 0) {
+            return std::vector<LogEntry>{};
+        }
+        const Walk walk(walkRaw);
+        git_revwalk_sorting(walk.get(), GIT_SORT_TOPOLOGICAL | GIT_SORT_TIME);
+        git_revwalk_push_glob(walk.get(), "refs/*");
+        git_revwalk_push_head(walk.get()); // a detached HEAD, or no refs yet: errors are fine
+        std::vector<LogEntry> out;
+        git_oid oid;
+        for (size_t n = 0; git_revwalk_next(&oid, walk.get()) == 0; ++n) {
+            if (n < skip) {
+                continue;
+            }
+            if (out.size() >= limit) {
+                break;
+            }
+            git_commit* raw = nullptr;
+            if (git_commit_lookup(&raw, repo.get(), &oid) != 0) {
+                continue;
+            }
+            const Commit c(raw);
+            LogEntry e;
+            e.hash = hex(oid);
+            const char* summary = git_commit_summary(c.get());
+            e.subject = summary ? summary : "";
+            const git_signature* who = git_commit_author(c.get());
+            e.author = who && who->name ? who->name : "";
+            e.time = static_cast<long long>(git_commit_time(c.get()));
+            for (unsigned i = 0; i < git_commit_parentcount(c.get()); ++i) {
+                e.parents.push_back(hex(*git_commit_parent_id(c.get(), i)));
+            }
+            if (const auto at = refs.find(e.hash); at != refs.end()) {
+                e.refs = at->second;
+            }
+            out.push_back(std::move(e));
+        }
+        return out;
     }
 
     std::optional<std::vector<std::string>> files(const std::string& cwd, size_t cap) {

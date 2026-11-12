@@ -1,6 +1,7 @@
 // the branch and the count of changed files from git's porcelain status; a worktree of a
 // scratch repository
 #include "../src/git.hpp"
+#include "../src/git_graph.hpp"
 #include "../src/ssh.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -125,6 +126,50 @@ int main() {
          parsed[1].kind == '?' && parsed[1].path == "has space.txt" && parsed[2].kind == 'D' && parsed[2].added == -1;
     const auto hunks = Git::parseDiff("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n@@ -9 +9 @@\n c\n");
     ok = ok && hunks.size() == 4 && hunks[0].kind == '-' && hunks[2].kind == '~' && hunks[3].kind == ' ';
+    // the history: libgit2 here, and git's own log parsed the way an ssh host's is
+    const auto history = Git::log("", repo.string(), 50, 0);
+    const std::string logFile = (home / "log.txt").string();
+    std::system(("git -C " + q(repo) + " log --all --topo-order --format='%H%x1f%P%x1f%an%x1f%at%x1f%D%x1f%s%x1e' > " +
+                 q(logFile)).c_str());
+    std::ifstream logIn(logFile);
+    const auto viaCli = Git::parseLog(std::string(std::istreambuf_iterator<char>(logIn), {}));
+    bool sameLog = history.size() >= 3 && history.size() == viaCli.size();
+    for (const auto& e : history) {
+        const auto twin = std::ranges::find(viaCli, e.hash, &Git::LogEntry::hash);
+        sameLog = sameLog && twin != viaCli.end() && twin->subject == e.subject && twin->parents == e.parents &&
+                  twin->time == e.time && twin->author == e.author;
+    }
+    const bool refsShown = !history.empty() && history[0].subject == "more" &&
+                           std::ranges::find(history[0].refs, std::string("HEAD -> main")) != history[0].refs.end() &&
+                           std::ranges::find(history[0].refs, std::string("origin/main")) != history[0].refs.end() &&
+                           Git::log("", repo.string(), 1, 1).size() == 1 && Git::log("", home.string(), 5, 0).empty();
+    if (!sameLog || !refsShown) {
+        std::printf("FAILED: log %zu vs %zu, refs %d\n", history.size(), viaCli.size(), refsShown);
+        ok = false;
+    }
+    // a commit's files: against its first parent, and the first commit against the empty tree
+    const auto commitA = std::ranges::find(history, std::string("a"), &Git::LogEntry::subject);
+    const auto first = std::ranges::find(history, std::string("first"), &Git::LogEntry::subject);
+    bool commitDiff = false;
+    if (commitA != history.end() && first != history.end()) {
+        const auto files = Git::changes("", repo.string(), commitA->hash + "^", commitA->hash);
+        const auto root = Git::changes("", repo.string(), "4b825dc642cb6eb9a060e54bf8d69288fbee4904", first->hash);
+        commitDiff = files.size() == 1 && files[0].path == "a.txt" && files[0].kind == 'A' && root.empty();
+    }
+    if (!commitDiff) {
+        std::printf("FAILED: a commit's changes\n");
+        ok = false;
+    }
+    // the graph of a merge: a(b, c), b(d), c(d), d
+    const auto graph = Git::layoutGraph({{.hash = "a", .parents = {"b", "c"}},
+                                         {.hash = "b", .parents = {"d"}},
+                                         {.hash = "c", .parents = {"d"}},
+                                         {.hash = "d"}});
+    using Lanes = std::vector<int>;
+    ok = ok && graph.size() == 4 && graph[0].col == 0 && graph[0].parents == Lanes{0, 1} && graph[0].width == 2 &&
+         graph[1].col == 0 && graph[1].pass == Lanes{1} && graph[1].parents == Lanes{0} && graph[2].col == 1 &&
+         graph[2].pass == Lanes{0} && graph[2].parents == Lanes{0} && graph[3].col == 0 && graph[3].into == Lanes{0} &&
+         graph[3].parents.empty();
     std::string gone;
     ok = ok && refusedDirty && Git::removeWorktree("", repo.string(), made, gone) && !fs::exists(made);
     fs::remove_all(home);

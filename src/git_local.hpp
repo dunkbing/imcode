@@ -17,6 +17,8 @@ namespace Git::Local {
     std::optional<std::string> snapshot(const std::string& cwd);
     // add everything and commit; false with why. hooks and commit signing are not run
     bool commit(const std::string& cwd, const std::string& message, std::string& output);
+    // the history as Git::log gives it
+    std::optional<std::vector<LogEntry>> log(const std::string& cwd, size_t limit, size_t skip);
     // tracked files and new ones not ignored, under cwd and relative to it, at most cap
     std::optional<std::vector<std::string>> files(const std::string& cwd, size_t cap);
     // a new branch at HEAD checked out in `folder` (made, with its parents)

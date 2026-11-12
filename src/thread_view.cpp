@@ -964,7 +964,17 @@ void App::statusLine(Thread& t, float left) {
     if (gitFor == key && git.repo) {
         ImGui::SameLine(0, 16);
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(colors.subtext0, ICON_FA_CODE_BRANCH "  %s", git.branch.c_str());
+        // click: the history, as a graph
+        const std::string branchText = std::format(ICON_FA_CODE_BRANCH "  {}", git.branch);
+        ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
+        if (ImGui::Selectable((branchText + "##history").c_str(), false, 0, ImGui::CalcTextSize(branchText.c_str()))) {
+            graphOpen(t);
+        }
+        ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            ImGui::SetTooltip("See the history");
+        }
         if (git.changed > 0) {
             // click: what changed, file by file
             ImGui::SameLine(0, 10);

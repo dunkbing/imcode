@@ -58,6 +58,19 @@ namespace Git {
     // body from the commits. the request's address, or empty with what gh said; blocks
     std::string pullRequest(const std::string& host, const std::string& cwd, std::string& output);
 
+    // one commit of the history, as the graph lists it
+    struct LogEntry {
+        std::string hash, subject, author;
+        long long time = 0; // unix seconds
+        std::vector<std::string> parents;
+        std::vector<std::string> refs; // "HEAD -> main", "origin/main", "tag: v1"
+    };
+    // from `git log --format=%H%x1f%P%x1f%an%x1f%at%x1f%D%x1f%s%x1e`
+    std::vector<LogEntry> parseLog(std::string_view text);
+    // the history of every branch and tag, newest first with parents after children; `limit`
+    // entries from `skip`. here or on an ssh host; blocks
+    std::vector<LogEntry> log(const std::string& host, const std::string& cwd, size_t limit, size_t skip);
+
     // a branch-safe name from a prompt: its first words, and a few characters to keep it unique
     std::string slug(const std::string& text);
 } // namespace Git

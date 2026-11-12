@@ -4,6 +4,7 @@
 #include "acp_host/host.hpp"
 #include "acp_host/registry.hpp"
 #include "git.hpp"
+#include "git_graph.hpp"
 #include "history.hpp"
 #include "imshell/app.hpp"
 #include "imshell/editor.hpp"
@@ -188,6 +189,7 @@ struct App : imshell::Delegate {
         bool want = false, reload = false;
         std::string host, cwd;
         std::string from, to; // a turn's trees: what it changed; empty: since the last commit
+        std::string title;    // what the dialog says it shows; empty: by from
         std::vector<Git::Change> list;
         int selected = 0;
         float listWidth = 280;
@@ -206,7 +208,26 @@ struct App : imshell::Delegate {
         AcpHost::AsyncOp<Done> commitOp;
     } changes;
     void changesOpen(Thread& t, const std::string& from = "", const std::string& to = "");
+    void changesOpenAt(const std::string& host, const std::string& cwd, const std::string& from, const std::string& to,
+                       const std::string& title);
     void changesDraw();
+    // the history of the open thread's repository, as a graph in a dialog
+    struct Graph {
+        bool want = false, reload = false, done = false;
+        std::string host, cwd;
+        std::vector<Git::LogEntry> commits;
+        std::vector<Git::GraphRow> rows;
+        int lanes = 1; // the widest row
+        int selected = 0;
+        struct Page {
+            std::string key; // host and folder it was read for
+            size_t skip = 0;
+            std::vector<Git::LogEntry> got;
+        };
+        AcpHost::AsyncOp<Page> op;
+    } graph;
+    void graphOpen(Thread& t);
+    void graphDraw();
     void projectPopup(); // "projects": pick the folder a new thread goes to
     void installAgent(const AcpAgentDef& def);
     void pollInstall();
