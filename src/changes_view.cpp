@@ -54,20 +54,26 @@ void App::changesOpenAt(const std::string& host, const std::string& cwd, const s
 void App::changesDraw() {
     Changes& c = changes;
     const auto& colors = Theme::Current()->colors;
-    // the list, then the picked file's diff, each off the ui thread (a remote is slow)
-    c.listOp.check([&](std::vector<Git::Change> got) {
+    // the list, then the picked file's diff, each off the ui thread (a remote is slow). on this
+    // machine a read is held for a moment right after it starts: most finish in that time, so
+    // the dialog never shows a loader for them; a big one falls back to it
+    const auto quick = std::chrono::milliseconds(c.host.empty() ? 80 : 0);
+    const auto gotList = [&](std::vector<Git::Change> got) {
         c.list = std::move(got);
         c.selected = c.list.empty() ? -1 : std::clamp(c.selected, 0, static_cast<int>(c.list.size()) - 1);
         c.diffFor.clear();
-    });
-    if (std::exchange(c.reload, false) && !c.listOp.isRunning()) {
-        c.listOp.start([host = c.host, cwd = c.cwd, from = c.from, to = c.to] { return Git::changes(host, cwd, from, to); });
-    }
-    c.diffOp.check([&](std::pair<std::string, std::vector<Diff::Line>> got) {
+    };
+    const auto gotDiff = [&](std::pair<std::string, std::vector<Diff::Line>> got) {
         if (got.first == c.diffFor) {
             c.lines = std::move(got.second);
         }
-    });
+    };
+    c.listOp.check(gotList);
+    if (std::exchange(c.reload, false) && !c.listOp.isRunning()) {
+        c.listOp.start([host = c.host, cwd = c.cwd, from = c.from, to = c.to] { return Git::changes(host, cwd, from, to); });
+        c.listOp.check(gotList, quick);
+    }
+    c.diffOp.check(gotDiff);
     if (c.selected >= 0 && c.selected < static_cast<int>(c.list.size()) && c.diffFor != c.list[c.selected].path &&
         !c.diffOp.isRunning()) {
         c.diffFor = c.list[c.selected].path;
@@ -75,6 +81,7 @@ void App::changesDraw() {
         c.diffOp.start([host = c.host, cwd = c.cwd, change = c.list[c.selected], from = c.from, to = c.to] {
             return std::pair{change.path, Git::fileDiff(host, cwd, change, from, to)};
         });
+        c.diffOp.check(gotDiff, quick);
     }
 
     c.commitOp.check([&](Changes::Done done) {

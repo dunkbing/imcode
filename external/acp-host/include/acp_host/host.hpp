@@ -35,9 +35,11 @@ namespace AcpHost {
             });
         }
         // true once the task has finished; its result goes to done
-        bool check(const std::function<void(T)>& done = nullptr) {
+        // wait: how long to hold the caller for it first. a task that is quick finishes in the
+        // frame it started, so nothing flashes a loader
+        bool check(const std::function<void(T)>& done = nullptr, std::chrono::milliseconds wait = std::chrono::milliseconds(0)) {
             if (!future_.valid() ||
-                future_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+                future_.wait_for(wait) != std::future_status::ready) {
                 return false;
             }
             T result = future_.get();
