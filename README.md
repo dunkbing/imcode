@@ -15,7 +15,16 @@ cmake --build build -j 4
 
 Tests: configure with `-DIMCODE_BUILD_TESTS=ON`, then run `ctest --test-dir build`.
 
-Releases: on macOS, `cmake --build build-release --target imcode-app` makes `ImCode.app` and `imcode-macos-arm64.zip` in the build folder (imshell's `imshell_app`; signed and notarized with `IMSHELL_SIGN_IDENTITY` and `IMSHELL_NOTARY_PROFILE` in the environment, ad hoc otherwise); `scripts/package-linux.sh` makes an AppImage. Configure with `-DIMCODE_UPDATER=ON` and a feed for auto-update; it stays off without one.
+Releases on macOS go through imshell's `imshell_app`: `cmake --build build-release --target imcode-app` makes `ImCode.app` and `imcode-macos-arm64.zip` in the build folder, signed with `IMSHELL_SIGN_IDENTITY` and notarized with `IMSHELL_NOTARY_PROFILE` when they are in the environment (ad hoc otherwise). Configure the folder first; a feed and key turn auto-update on, and it stays off without them:
+
+```sh
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
+  -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+  -DVCPKG_TARGET_TRIPLET=arm64-osx-release -DVCPKG_OVERLAY_TRIPLETS=cmake/triplets \
+  -DIMCODE_UPDATER=ON -DIMCODE_APPCAST_URL=<appcast> -DIMCODE_UPDATE_KEY=<ed25519 public key>
+```
+
+`scripts/package-linux.sh` makes the Linux AppImage.
 
 ## Use
 
