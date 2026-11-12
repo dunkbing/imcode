@@ -21,7 +21,11 @@ namespace {
         char git[MAX_PATH] = "";
         SearchPathA(nullptr, "git.exe", nullptr, MAX_PATH, git, nullptr);
         const std::string sh = (std::filesystem::path(git).parent_path().parent_path() / "bin" / "sh.exe").string();
-        return ProcessRunner::run({.args = {sh, "-c", line}}).success ? 0 : 1;
+        const ProcessResult r = ProcessRunner::run({.args = {sh, "-c", line}});
+        if (!r.success) {
+            std::printf("sh failed (%d): %s %s\n", r.exitCode, r.output.c_str(), r.errorMessage.c_str());
+        }
+        return r.success ? 0 : 1;
 #else
         return std::system(line.c_str());
 #endif
