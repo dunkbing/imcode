@@ -84,6 +84,9 @@ static int run() {
                         added[0].text == "new";
     if (!listed || !diffed) {
         std::printf("FAILED: changes %zu, diff %zu, new %zu\n", found.size(), lines.size(), added.size());
+        for (const auto& f : found) {
+            std::printf("  %c [%s] +%d -%d\n", f.kind, f.path.c_str(), f.added, f.removed);
+        }
         for (const auto& l : lines) {
             std::printf("  %c%s\n", l.kind, l.text.c_str());
         }
