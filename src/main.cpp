@@ -429,6 +429,12 @@ void App::hostLoop() {
             }
             now[t.get()] = state;
         }
+        // the icon counts the threads waiting for an answer
+        static int badge = -1;
+        const int waiting = static_cast<int>(std::ranges::count_if(now, [](const auto& s) { return s.second.needsAnswer; }));
+        if (waiting != std::exchange(badge, waiting)) {
+            imshell::notifications::SetBadge(waiting);
+        }
         seen = std::move(now);
         // each one not listed yet becomes a thread of the same project and agent: what was
         // started in a terminal can be continued here
