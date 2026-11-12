@@ -78,7 +78,11 @@ void App::logDraw() {
                 const ImVec4 tone = line.dir == '>' ? colors.blue : line.dir == '<' ? colors.green : colors.peach;
                 const time_t secs = static_cast<time_t>(line.ms / 1000);
                 std::tm local{};
+#ifdef _WIN32
+                localtime_s(&local, &secs);
+#else
                 localtime_r(&secs, &local);
+#endif
                 char stamp[16];
                 std::strftime(stamp, sizeof stamp, "%H:%M:%S", &local);
                 char head[32];

@@ -19,9 +19,6 @@ app=dist/ImCode.app
 rm -rf dist && mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks"
 cp build-release/imcode "$app/Contents/MacOS/imcode"
 strip -x "$app/Contents/MacOS/imcode"
-# sparkle from the build's download, found through the bundle's Frameworks
-ditto build-release/_deps/sparkle-src/Sparkle.framework "$app/Contents/Frameworks/Sparkle.framework"
-install_name_tool -add_rpath @executable_path/../Frameworks "$app/Contents/MacOS/imcode"
 updates=""
 if [ -n "$IMCODE_APPCAST_URL" ] && [ -n "$IMCODE_UPDATE_KEY" ]; then
     updates="<key>SUFeedURL</key><string>$IMCODE_APPCAST_URL</string>
@@ -47,19 +44,14 @@ cat > "$app/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 # signing. IMCODE_SIGN_IDENTITY: a "Developer ID Application: ..." identity in the keychain;
-# unset: ad hoc. sparkle's parts are signed inside out, as its docs ask
+# unset: ad hoc. imshell embeds sparkle and signs its parts, then the app is signed
 identity=${IMCODE_SIGN_IDENTITY:--}
+sparkle=$(sed -n 's/^IMSHELL_SPARKLE_FRAMEWORK:PATH=//p' build-release/CMakeCache.txt)
+external/imshell/scripts/embed-sparkle.sh "$app" "$sparkle" "$identity"
 if [ "$identity" = "-" ]; then
-    codesign --force --deep -s - "$app"
+    codesign --force -s - "$app"
 else
-    sign() { codesign --force --timestamp --options runtime -s "$identity" "$@"; }
-    fw="$app/Contents/Frameworks/Sparkle.framework"
-    sign "$fw/Versions/B/XPCServices/Installer.xpc"
-    sign --preserve-metadata=entitlements "$fw/Versions/B/XPCServices/Downloader.xpc"
-    sign "$fw/Versions/B/Autoupdate"
-    sign "$fw/Versions/B/Updater.app"
-    sign "$fw"
-    sign "$app"
+    codesign --force --timestamp --options runtime -s "$identity" "$app"
 fi
 ditto -c -k --keepParent "$app" dist/imcode-macos-arm64.zip
 # notarizing: IMCODE_NOTARY_PROFILE (a notarytool keychain profile, on a mac of your own), or

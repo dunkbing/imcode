@@ -43,7 +43,15 @@ if(WIN32) # windows.h without its min/max macros, for every target here
     add_compile_definitions(NOMINMAX)
     list(APPEND IMCODE_SSH ws2_32)
 endif()
-include(cmake/Updater.cmake) # before imshell: it reads IMSHELL_UPDATER
+# auto-update through imshell's updater (packaging turns it on); an empty feed leaves it off.
+# macos reads its feed and key from Info.plist (scripts/package-macos.sh writes them)
+option(IMCODE_UPDATER "Auto-update" OFF)
+set(IMCODE_APPCAST_URL "" CACHE STRING "windows: the sparkle appcast")
+set(IMCODE_UPDATE_KEY "" CACHE STRING "windows: the appcast's ed25519 public key (base64)")
+set(IMCODE_MANIFEST_URL "" CACHE STRING "linux: the json manifest")
+if(IMCODE_UPDATER)
+    set(IMSHELL_UPDATER ON CACHE BOOL "" FORCE) # before imshell reads it
+endif()
 add_subdirectory(external/imshell)
 option(IMCODE_BUILD_TESTS "Build the tests" OFF)
 if(IMCODE_BUILD_TESTS)
@@ -72,9 +80,7 @@ target_compile_definitions(imcode PRIVATE IMCODE_VERSION="${IMCODE_VERSION}" IMC
 if(IMCODE_UPDATER)
     target_compile_definitions(imcode PRIVATE IMCODE_UPDATER=1)
 endif()
-if(IMCODE_UPDATER AND WIN32) # winsparkle next to the exe
-    add_custom_command(TARGET imcode POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:WinSparkle> $<TARGET_FILE_DIR:imcode>)
-endif()
+imshell_updater_runtime(imcode)
 target_link_libraries(imcode PRIVATE imshell::imshell imshell::components imshell::markdown acp::host ${IMCODE_SSH} ghostty-vt-static)
 
 # ctest: configure with -DIMCODE_BUILD_TESTS=ON (turns on the echo agent it talks to)
