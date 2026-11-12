@@ -275,7 +275,7 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         const ImVec2 textSize = ImGui::CalcTextSize(title.c_str(), nullptr, false, wrap);
         const ImVec2 top = ImGui::GetCursorScreenPos();
         const float rowHeight = textSize.y + 2 * pad;
-        if (ImGui::InvisibleButton("tool", ImVec2(arrow + textSize.x + 8, rowHeight)) && canOpen) {
+        if (ImGui::InvisibleButton("tool", ImVec2(arrow + textSize.x + 16, rowHeight)) && canOpen) {
             open = !open;
             ImGui::GetStateStorage()->SetBool(openId, open);
         }
@@ -285,7 +285,7 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
         }
         if (canOpen) {
-            ImGui::RenderArrow(draw, ImVec2(top.x + 6, top.y + pad + (line - ImGui::GetFontSize()) * 0.5f),
+            ImGui::RenderArrow(draw, ImVec2(top.x + 6, top.y + pad + line * 0.5f - ImGui::GetFontSize() * 0.35f), // centred on the first line
                                ImGui::GetColorU32(colors.overlay1), open ? ImGuiDir_Down : ImGuiDir_Right, 0.7f);
         }
         draw->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(top.x + arrow, top.y + pad), ImGui::GetColorU32(colors.text),
