@@ -109,14 +109,15 @@ void App::paletteDraw() {
     ImGui::SetNextWindowSize(ImVec2(std::min(580.0f, vp->WorkSize.x - 32), 0));
     // darker than a row's highlight, so the selected row shows
     ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
-    ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
+    ImGui::PushStyleColor(ImGuiCol_Border, colors.overlay0);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Round::Dialog);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14, 14));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1);
     const bool shown = ImGui::BeginPopupModal(
         "##palette", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
             ImGuiWindowFlags_NoSavedSettings);
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(2);
     if (!shown) {
         return;

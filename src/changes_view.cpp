@@ -163,11 +163,12 @@ void App::changesDraw() {
     ImGui::PushStyleColor(ImGuiCol_Border, colors.overlay0);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Round::Dialog);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, 14));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1);
     const bool shown = ImGui::BeginPopupModal("##changes", nullptr,
                                               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                                                   ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(2);
     if (!shown) {
         return;

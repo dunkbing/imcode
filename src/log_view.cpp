@@ -27,14 +27,15 @@ void App::logDraw() {
     ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(std::min(1000.0f, vp->WorkSize.x - 32), std::min(700.0f, vp->WorkSize.y - 32)));
     ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
-    ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
+    ImGui::PushStyleColor(ImGuiCol_Border, colors.overlay0);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Round::Dialog);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, 14));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1);
     const bool shown = ImGui::BeginPopupModal("##log", nullptr,
                                               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                                                   ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(2);
     if (!shown) {
         return;

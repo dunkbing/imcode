@@ -146,14 +146,15 @@ void App::settingsDraw() {
     ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(std::min(640.0f, vp->WorkSize.x - 32), 0));
     ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
-    ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
+    ImGui::PushStyleColor(ImGuiCol_Border, colors.overlay0);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Round::Dialog);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20, 18));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1);
     const bool shown = ImGui::BeginPopupModal(
         "##settings", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
             ImGuiWindowFlags_NoSavedSettings);
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(2);
     if (!shown) {
         return;
