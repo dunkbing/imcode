@@ -160,7 +160,7 @@ void App::changesDraw() {
     ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(std::min(1100.0f, vp->WorkSize.x - 32), std::min(720.0f, vp->WorkSize.y - 32)));
     ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
-    ImGui::PushStyleColor(ImGuiCol_Border, colors.surface1);
+    ImGui::PushStyleColor(ImGuiCol_Border, colors.overlay0);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Round::Dialog);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, 14));
     const bool shown = ImGui::BeginPopupModal("##changes", nullptr,
@@ -261,41 +261,52 @@ void App::changesDraw() {
                 const float y = start.y + (end.y - start.y - ImGui::GetTextLineHeight()) / 2;
                 draw->AddText(ImVec2(start.x + 8, y), ImGui::GetColorU32(tone), letter);
                 // the name, then its folder dimmed, cut to the row (and short of the buttons)
-                const float buttons = working && over && idle ? (row.staged ? 26.0f : 54.0f) : 0.0f;
-                const size_t slash = change.path.rfind('/');
-                const std::string name = change.path.substr(slash == std::string::npos ? 0 : slash + 1);
-                const std::string folder = slash == std::string::npos ? "" : change.path.substr(0, slash);
+                const float buttons = working && over && idle ? (row.staged ? 26.0f : 54.0f) : 0.0f; // the room they take
+                // the name, and only the folder it is in (not the whole path); none for a file at the top
+                std::string shown = change.path;
+                const bool dir = shown.ends_with('/'); // a folder not tracked yet
+                if (dir) {
+                    shown.pop_back();
+                }
+                const size_t slash = shown.rfind('/');
+                const std::string name = shown.substr(slash == std::string::npos ? 0 : slash + 1) + (dir ? "/" : "");
+                std::string folder = slash == std::string::npos ? "" : shown.substr(0, slash);
+                folder.erase(0, folder.rfind('/') == std::string::npos ? 0 : folder.rfind('/') + 1);
                 draw->PushClipRect(start, ImVec2(end.x - 4 - buttons, end.y), true);
                 draw->AddText(ImVec2(start.x + 26, y), ImGui::GetColorU32(colors.text), name.c_str());
                 draw->AddText(ImVec2(start.x + 34 + ImGui::CalcTextSize(name.c_str()).x, y),
                               ImGui::GetColorU32(colors.overlay0), folder.c_str());
                 draw->PopClipRect();
                 if (buttons > 0) {
-                    // on the row's own line, as full-height buttons: no cursor moves to get them there
-                    const float rowHeight = end.y - start.y - 4;
-                    ImGui::SameLine(end.x - buttons - 12 - (ImGui::GetWindowPos().x - ImGui::GetScrollX()), 0);
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface1);
-                    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
-                    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Round::Row);
-                    if (!row.staged) {
-                        if (ImGui::Button(ICON_FA_ROTATE_LEFT "##discard", ImVec2(26, rowHeight))) {
-                            c.asking = {change};
-                            c.askWant = true;
+                    // drawn and hit-tested by hand: items here would change the row's height, and the list would jump
+                    struct Action {
+                        const char* icon;
+                        const char* tip;
+                        char what;
+                    };
+                    const Action actions[] = {{ICON_FA_ROTATE_LEFT, change.work == '?' ? "Delete the file" : "Discard the changes", 'd'},
+                                              {row.staged ? ICON_FA_MINUS : ICON_FA_PLUS, row.staged ? "Unstage" : "Stage", row.staged ? 'u' : 's'}};
+                    const int first = row.staged ? 1 : 0; // a staged file is only unstaged here
+                    float x = end.x - buttons - 12;
+                    for (int a = first; a < 2; ++a, x += 28) {
+                        const ImVec2 lo(x, start.y + 2), hi(x + 26, end.y - 2);
+                        const bool hot = ImGui::IsMouseHoveringRect(lo, hi);
+                        if (hot) {
+                            draw->AddRectFilled(lo, hi, ImGui::GetColorU32(colors.surface1), Round::Row);
+                            ImGui::SetTooltip("%s", actions[a].tip);
+                            if (ImGui::IsMouseClicked(0)) {
+                                if (actions[a].what == 'd') {
+                                    c.asking = {change};
+                                    c.askWant = true;
+                                } else {
+                                    edit(actions[a].what, {change});
+                                }
+                            }
                         }
-                        if (ImGui::IsItemHovered()) {
-                            ImGui::SetTooltip(change.work == '?' ? "Delete the file" : "Discard the changes");
-                        }
-                        ImGui::SameLine(0, 2);
+                        const ImVec2 size = ImGui::CalcTextSize(actions[a].icon);
+                        draw->AddText(ImVec2(x + (26 - size.x) / 2, start.y + (end.y - start.y - size.y) / 2),
+                                      ImGui::GetColorU32(colors.text), actions[a].icon);
                     }
-                    if (ImGui::Button(row.staged ? ICON_FA_MINUS "##unstage" : ICON_FA_PLUS "##stage", ImVec2(26, rowHeight))) {
-                        edit(row.staged ? 'u' : 's', {change});
-                    }
-                    if (ImGui::IsItemHovered()) {
-                        ImGui::SetTooltip(row.staged ? "Unstage" : "Stage");
-                    }
-                    ImGui::PopStyleVar(2);
-                    ImGui::PopStyleColor(2);
                 } else if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("%s", change.path.c_str());
                 }
@@ -323,7 +334,15 @@ void App::changesDraw() {
     if (std::exchange(c.askWant, false)) {
         ImGui::OpenPopup("##discard");
     }
-    if (ImGui::BeginPopupModal("##discard", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
+    ImGui::PushStyleColor(ImGuiCol_Border, colors.overlay0);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Round::Dialog);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, 14));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1);
+    const bool asked = ImGui::BeginPopupModal("##discard", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(2);
+    if (asked) {
         const size_t fresh = static_cast<size_t>(std::ranges::count(c.asking, '?', &Git::Change::work));
         if (c.asking.size() == 1) {
             ImGui::TextUnformatted(fresh ? "Delete this file?" : "Discard the changes in this file?");
