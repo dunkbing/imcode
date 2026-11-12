@@ -44,10 +44,10 @@ if(WIN32) # windows.h without its min/max macros, for every target here
     list(APPEND IMCODE_SSH ws2_32)
 endif()
 # auto-update through imshell's updater (packaging turns it on); an empty feed leaves it off.
-# macos reads its feed and key from Info.plist (scripts/package-macos.sh writes them)
+# macos reads its feed and key from Info.plist, which imshell_app writes
 option(IMCODE_UPDATER "Auto-update" OFF)
-set(IMCODE_APPCAST_URL "" CACHE STRING "windows: the sparkle appcast")
-set(IMCODE_UPDATE_KEY "" CACHE STRING "windows: the appcast's ed25519 public key (base64)")
+set(IMCODE_APPCAST_URL "" CACHE STRING "macos and windows: the sparkle appcast")
+set(IMCODE_UPDATE_KEY "" CACHE STRING "macos and windows: the appcast's ed25519 public key (base64)")
 set(IMCODE_MANIFEST_URL "" CACHE STRING "linux: the json manifest")
 if(IMCODE_UPDATER)
     set(IMSHELL_UPDATER ON CACHE BOOL "" FORCE) # before imshell reads it
@@ -80,7 +80,8 @@ target_compile_definitions(imcode PRIVATE IMCODE_VERSION="${IMCODE_VERSION}" IMC
 if(IMCODE_UPDATER)
     target_compile_definitions(imcode PRIVATE IMCODE_UPDATER=1)
 endif()
-imshell_updater_runtime(imcode)
+imshell_app(imcode NAME ImCode ID io.github.dunkbing.imcode VERSION ${IMCODE_VERSION}
+            APPCAST "${IMCODE_APPCAST_URL}" PUBLIC_KEY "${IMCODE_UPDATE_KEY}")
 target_link_libraries(imcode PRIVATE imshell::imshell imshell::components imshell::markdown acp::host ${IMCODE_SSH} ghostty-vt-static)
 
 # ctest: configure with -DIMCODE_BUILD_TESTS=ON (turns on the echo agent it talks to)

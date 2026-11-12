@@ -15,7 +15,7 @@ cmake --build build -j 4
 
 Tests: configure with `-DIMCODE_BUILD_TESTS=ON`, then run `ctest --test-dir build`.
 
-Releases: `scripts/package-macos.sh` (a signed, notarized app with the variables at its top) and `scripts/package-linux.sh` (an AppImage). Both turn on auto-update, which stays off without a feed.
+Releases: on macOS, `cmake --build build-release --target imcode-app` makes `ImCode.app` and `imcode-macos-arm64.zip` in the build folder (imshell's `imshell_app`; signed and notarized with `IMSHELL_SIGN_IDENTITY` and `IMSHELL_NOTARY_PROFILE` in the environment, ad hoc otherwise); `scripts/package-linux.sh` makes an AppImage. Configure with `-DIMCODE_UPDATER=ON` and a feed for auto-update; it stays off without one.
 
 ## Use
 

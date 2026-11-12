@@ -44,21 +44,25 @@ jobs:
           rm "$RUNNER_TEMP/cert.p12"
           echo "$NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
           identity=$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
-          echo "IMCODE_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "IMSHELL_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
 
       - name: Build, sign, notarize
         env:
-          IMCODE_NOTARY_KEY: ${{ runner.temp }}/notary.p8
-          IMCODE_NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
-          IMCODE_NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
-          IMCODE_APPCAST_URL: ${{ vars.IMCODE_APPCAST_URL }}
-          IMCODE_UPDATE_KEY: ${{ vars.IMCODE_UPDATE_KEY }}
+          IMSHELL_NOTARY_KEY: ${{ runner.temp }}/notary.p8
+          IMSHELL_NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          IMSHELL_NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
         run: |
-          export VCPKG_ROOT="$VCPKG_INSTALLATION_ROOT" VCPKG_BINARY_SOURCES="clear;files,$HOME/.cache/vcpkg/archives,readwrite"
+          export VCPKG_BINARY_SOURCES="clear;files,$HOME/.cache/vcpkg/archives,readwrite"
           mkdir -p "$HOME/.cache/vcpkg/archives"
-          case "$GITHUB_REF" in refs/tags/v*) export IMCODE_VERSION="${GITHUB_REF_NAME#v}" ;; esac
-          ./scripts/package-macos.sh
-          spctl -a -vv dist/ImCode.app
+          version=""
+          case "$GITHUB_REF" in refs/tags/v*) version="-DIMCODE_VERSION=${GITHUB_REF_NAME#v}" ;; esac
+          cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET=arm64-osx-release -DVCPKG_OVERLAY_TRIPLETS=cmake/triplets \
+            -DIMCODE_UPDATER=ON -DIMCODE_APPCAST_URL="${{ vars.IMCODE_APPCAST_URL }}" \
+            -DIMCODE_UPDATE_KEY="${{ vars.IMCODE_UPDATE_KEY }}" $version
+          cmake --build build-release -j 4 --target imcode-app
+          spctl -a -vv build-release/ImCode.app
 
       - name: Clean up
         if: always()
@@ -69,11 +73,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: imcode-macos-arm64
-          path: dist/imcode-macos-arm64.zip
+          path: build-release/imcode-macos-arm64.zip
 
       - name: Draft release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          files: dist/imcode-macos-arm64.zip
+          files: build-release/imcode-macos-arm64.zip
