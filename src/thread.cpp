@@ -38,6 +38,24 @@ std::string Thread::underProject(std::string path) const {
 }
 
 namespace {
+    // the line under a turn: what it changed in the folder; none when nothing did
+    std::optional<Item> turnChanges(const std::string& host, const std::string& cwd, const std::string& before) {
+        const std::string after = Git::snapshot(host, cwd);
+        if (after.empty() || after == before) {
+            return std::nullopt;
+        }
+        Item item{.kind = Item::Kind::TurnChanges, .treeFrom = before, .treeTo = after};
+        for (const auto& change : Git::changes(host, cwd, before, after)) {
+            ++item.filesChanged;
+            item.linesAdded += std::max(0, change.added);
+            item.linesRemoved += std::max(0, change.removed);
+        }
+        if (item.filesChanged == 0) {
+            return std::nullopt;
+        }
+        return item;
+    }
+
     // the mime type of a picture the agent can be sent as data; null for other files
     const char* imageType(const std::string& file) {
         std::string ext = std::filesystem::path(file).extension().string();
@@ -314,13 +332,18 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
                 due.push_back(file);
             }
         }
-        if (!due.empty()) {
+        // the snapshot of the folder before the turn is a round trip too: it rides along
+        if (!due.empty() || !uploaded_.snapped) {
             uploadText_ = text;
             uploadFiles_ = files;
             uploadDropped_ = false;
-            add({.kind = Item::Kind::Info, .text = "Uploading " + std::to_string(due.size()) + " file(s) to " + host + "..."});
-            uploadOp_.start([host = host, due, stamp = std::chrono::steady_clock::now().time_since_epoch().count()] {
+            if (!due.empty()) {
+                add({.kind = Item::Kind::Info, .text = "Uploading " + std::to_string(due.size()) + " file(s) to " + host + "..."});
+            }
+            uploadOp_.start([host = host, cwd = cwd, due, stamp = std::chrono::steady_clock::now().time_since_epoch().count()] {
                 Uploaded out;
+                out.before = Git::snapshot(host, cwd);
+                out.snapped = true;
                 Ssh::Error sshError;
                 const auto session = Ssh::session(host, "", sshError);
                 long long n = 0;
@@ -385,8 +408,7 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
         add({.kind = Item::Kind::User, .text = text, .files = names});
     }
     // the folder as it is now: what the turn changes is measured against it
-    // shortcut: blocks for git (and ssh); move to the host thread with the other blocking starts
-    turnBefore_ = Git::snapshot(host, cwd);
+    turnBefore_ = uploaded_.snapped ? uploaded_.before : Git::snapshot(host, cwd);
     acp_->prompt(blocks); // held until the session is ready
 }
 
@@ -572,6 +594,11 @@ void Thread::noticeElsewhere() {
 }
 
 void Thread::poll() {
+    changesOp_.check([this](std::optional<Item> item) {
+        if (item) {
+            add(std::move(*item));
+        }
+    });
     uploadOp_.check([this](Uploaded got) {
         const std::string text = std::exchange(uploadText_, {});
         const auto files = std::exchange(uploadFiles_, {});
@@ -701,19 +728,16 @@ void Thread::poll() {
             }
             // what the turn changed in the folder, as a line under it
             if (!turnBefore_.empty()) {
-                const std::string after = Git::snapshot(host, cwd);
-                if (!after.empty() && after != turnBefore_) {
-                    Item item{.kind = Item::Kind::TurnChanges, .treeFrom = turnBefore_, .treeTo = after};
-                    for (const auto& change : Git::changes(host, cwd, turnBefore_, after)) {
-                        ++item.filesChanged;
-                        item.linesAdded += std::max(0, change.added);
-                        item.linesRemoved += std::max(0, change.removed);
+                const std::string before = std::exchange(turnBefore_, {});
+                if (host.empty()) {
+                    if (auto item = turnChanges(host, cwd, before)) {
+                        add(std::move(*item));
                     }
-                    if (item.filesChanged > 0) {
-                        add(std::move(item));
-                    }
+                } else if (!changesOp_.isRunning()) {
+                    // shortcut: one at a time, and the line lands when it is measured, after
+                    // anything sent meanwhile; a turn ending first gets no line
+                    changesOp_.start([host = host, cwd = cwd, before] { return turnChanges(host, cwd, before); });
                 }
-                turnBefore_.clear();
             }
             break;
         case AcpEvent::Type::Info:

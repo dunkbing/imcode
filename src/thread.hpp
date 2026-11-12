@@ -150,8 +150,12 @@ private:
     struct Uploaded {
         std::map<std::string, std::string> remote; // local path -> path on the host
         std::map<std::string, std::string> failed; // local path -> why not
+        std::string before;                        // the folder before the turn (a git tree), read on the host
+        bool snapped = false;
     };
     AcpHost::AsyncOp<Uploaded> uploadOp_;
+    // what a remote turn changed, measured off the ui thread
+    AcpHost::AsyncOp<std::optional<Item>> changesOp_;
     std::string uploadText_;
     std::vector<std::string> uploadFiles_;
     bool uploadDropped_ = false; // stopped meanwhile: the message is not sent
