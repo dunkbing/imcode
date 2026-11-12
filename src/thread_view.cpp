@@ -513,7 +513,9 @@ void App::composer(Thread& t, float width) {
                            (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootWindow) && !ImGui::GetIO().WantTextInput &&
                             !ImGui::IsPopupOpen(0u, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel));
     if (pasteHere &&
-        ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_V)) {
+        (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_V) ||
+         // a modifier left down by a screenshot shortcut (its key-up never reaches the window) must not block the chord
+         (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V, false)))) {
         const auto tempDir = std::filesystem::temp_directory_path() / "imcode-pasted";
         // copied files as they are; a picture (a screenshot, a copied image) saved as a png
         std::vector<std::string> pasted;
@@ -705,7 +707,7 @@ void App::composer(Thread& t, float width) {
     ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
     if (ImGui::Button(ICON_FA_PAPERCLIP, ImVec2(button, button))) {
-        imshell::OpenFileDialog({{"Any file", "*"}}, [this](const std::string& path) { attachments.push_back(path); });
+        imshell::OpenFileDialog({}, [this](const std::string& path) { attachments.push_back(path); });
     }
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(2);
@@ -945,6 +947,7 @@ void App::attachedRows(float left) {
         const ImVec2 lo(x, origin.y), hi(x + width, origin.y + size);
         ImGui::PushID(static_cast<int>(1000 + i));
         ImGui::SetCursorScreenPos(lo);
+        ImGui::SetNextItemAllowOverlap(); // the remove button sits on top of it
         ImGui::InvisibleButton("tile", ImVec2(width, size));
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("%s", path.c_str());

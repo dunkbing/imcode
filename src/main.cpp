@@ -758,11 +758,6 @@ void App::frame() {
         static int frames = 0;
         ++frames;
         const std::string all = std::string(";") + dev + ";";
-        if (frames == 6) { // attach:<path> (any number), for checking the strip
-            for (size_t at = all.find(";attach:"); at != std::string::npos; at = all.find(";attach:", at + 1)) {
-                attachments.push_back(all.substr(at + 8, all.find(';', at + 1) - at - 8));
-            }
-        }
         if (frames == 5 && (all.find(";new;") != std::string::npos)) {
             newThread(project);
         }
