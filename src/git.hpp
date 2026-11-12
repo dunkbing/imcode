@@ -97,6 +97,18 @@ namespace Git {
     // entries from `skip`. here or on an ssh host; blocks
     std::vector<LogEntry> log(const std::string& host, const std::string& cwd, size_t limit, size_t skip);
 
+    // one commit in full: who, when, the whole message and the files it changed
+    struct CommitDetail {
+        std::string hash, author, authorEmail, committer, committerEmail, message;
+        long long time = 0, committed = 0; // unix seconds: authored, committed
+        std::vector<std::string> parents;
+        std::vector<Change> files; // against the first parent; a first commit against nothing
+    };
+    // from `git show -s --format=%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%at%x1f%ct%x1f%B`
+    CommitDetail parseShow(std::string_view text);
+    // here or on an ssh host; blocks. an empty hash when the commit is not found
+    CommitDetail show(const std::string& host, const std::string& cwd, const std::string& hash);
+
     // a branch-safe name from a prompt: its first words, and a few characters to keep it unique
     std::string slug(const std::string& text);
 } // namespace Git

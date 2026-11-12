@@ -190,6 +190,24 @@ static int run() {
         std::printf("FAILED: a commit's changes\n");
         ok = false;
     }
+    // one commit in full: libgit2 here, git's own show parsed the way an ssh host's is
+    {
+        const auto last = history.empty() ? Git::LogEntry{} : history[0]; // "more": a.txt changed
+        const Git::CommitDetail via = Git::show("", repo.string(), last.hash);
+        const std::string showFile = (home / "show.txt").string();
+        std::system(("git -C " + q(repo) + " show -s --format='%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%at%x1f%ct%x1f%B' " + last.hash + " > " + q(showFile)).c_str());
+        std::ifstream showIn(showFile);
+        const Git::CommitDetail cli = Git::parseShow(std::string(std::istreambuf_iterator<char>(showIn), {}));
+        const bool same = !via.hash.empty() && via.hash == cli.hash && via.parents == cli.parents && via.author == cli.author &&
+                          via.authorEmail == cli.authorEmail && via.committer == cli.committer && via.time == cli.time &&
+                          via.committed == cli.committed && via.message == cli.message;
+        const bool files = via.files.size() == 1 && via.files[0].path == "a.txt" && via.message == "more" &&
+                           Git::show("", repo.string(), "0000000000").hash.empty();
+        if (!same || !files) {
+            std::printf("FAILED: show same %d files %d (%s | %s)\n", same, files, via.message.c_str(), cli.message.c_str());
+            ok = false;
+        }
+    }
     // the graph of a merge: a(b, c), b(d), c(d), d
     const auto graph = Git::layoutGraph({{.hash = "a", .parents = {"b", "c"}},
                                          {.hash = "b", .parents = {"d"}},

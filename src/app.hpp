@@ -236,6 +236,12 @@ struct App : imshell::Delegate {
             std::vector<Git::LogEntry> got;
         };
         AcpHost::AsyncOp<Page> op;
+        // the selected commit opened out under its row
+        bool expanded = false, reveal = false;
+        std::string detailHash;
+        Git::CommitDetail detail;
+        bool detailReady = false;
+        AcpHost::AsyncOp<std::pair<std::string, Git::CommitDetail>> detailOp;
     } graph;
     void graphOpen(Thread& t);
     void graphDraw();
@@ -314,3 +320,5 @@ std::vector<std::string> projectFiles(const std::string& host, const std::string
 
 // "now", "5m", "2h", "3d"
 std::string ago(long long unixSeconds);
+// the clock time of a unix time, in this machine's zone
+std::tm localTm(time_t when);

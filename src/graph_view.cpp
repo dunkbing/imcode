@@ -7,6 +7,8 @@
 #include "imshell/themes.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <ctime>
 #include <utility>
 
 namespace Theme = imshell::Theme;
@@ -121,76 +123,213 @@ void App::graphDraw() {
         const bool moved = step != 0;
         g.selected = std::clamp(g.selected + step, 0, count - 1);
         open = focused && (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter));
-        const float graphWidth = 10 + static_cast<float>(g.lanes) * laneWidth;
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0)); // rows touch: the lines run on
-        ImGuiListClipper clipper;
-        clipper.Begin(count, rowHeight);
-        if (moved) {
-            clipper.IncludeItemByIndex(g.selected);
+        if (focused && ImGui::IsKeyPressed(ImGuiKey_Space, false)) {
+            g.expanded = !g.expanded;
         }
-        while (clipper.Step()) {
-            for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
-                const Git::LogEntry& e = g.commits[static_cast<size_t>(i)];
-                const Git::GraphRow& row = g.rows[static_cast<size_t>(i)];
-                ImGui::PushID(i);
-                if (rowButton("##commit", i == g.selected, rowHeight)) {
-                    g.selected = i;
+        // the selected commit, opened out under its row: read in full off the ui thread
+        const Git::LogEntry& picked = g.commits[static_cast<size_t>(g.selected)];
+        g.detailOp.check([&](std::pair<std::string, Git::CommitDetail> got) {
+            if (got.first == g.detailHash) {
+                g.detail = std::move(got.second);
+                g.detailReady = true;
+            }
+        });
+        if (g.expanded && g.detailHash != picked.hash && !g.detailOp.isRunning()) {
+            g.detailHash = picked.hash;
+            g.detailReady = false;
+            g.detailOp.start([host = g.host, cwd = g.cwd, hash = picked.hash] { return std::pair{hash, Git::show(host, cwd, hash)}; });
+            g.detailOp.check([&](std::pair<std::string, Git::CommitDetail> got) {
+                if (got.first == g.detailHash) {
+                    g.detail = std::move(got.second);
+                    g.detailReady = true;
                 }
-                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
-                    open = true;
-                }
-                if (moved && i == g.selected) {
-                    ImGui::SetScrollHereY(0.5f);
-                }
-                const ImVec2 start = ImGui::GetItemRectMin(), end = ImGui::GetItemRectMax();
-                ImDrawList* draw = ImGui::GetWindowDrawList();
-                draw->PushClipRect(start, end, true);
-                const auto x = [&](int lane) { return start.x + 10 + static_cast<float>(lane) * laneWidth; };
-                const float mid = start.y + rowHeight / 2;
-                for (const int lane : row.pass) {
-                    draw->AddLine(ImVec2(x(lane), start.y), ImVec2(x(lane), end.y), laneColor(lane), 1.5f);
-                }
-                for (const int lane : row.into) {
-                    draw->AddLine(ImVec2(x(lane), start.y), ImVec2(x(row.col), mid), laneColor(lane), 1.5f);
-                }
-                for (const int lane : row.parents) {
-                    draw->AddLine(ImVec2(x(row.col), mid), ImVec2(x(lane), end.y), laneColor(lane), 1.5f);
-                }
-                draw->AddCircleFilled(ImVec2(x(row.col), mid), 4.0f, laneColor(row.col));
-                // refs as small chips, then the subject; author and age at the right
-                float at = start.x + graphWidth + 8;
-                const float right = end.x - 8 - 190;
-                const float textY = start.y + (rowHeight - ImGui::GetTextLineHeight()) / 2;
-                for (const std::string& ref : e.refs) {
-                    const bool head = ref.starts_with("HEAD -> "), tag = ref.starts_with("tag: ");
-                    const std::string label = head ? ref.substr(8) : tag ? ref.substr(5) : ref;
-                    const ImVec4 tone = head ? colors.blue : tag ? colors.yellow : (label.starts_with("origin/") || label.starts_with("upstream/")) ? colors.overlay1 : colors.green;
-                    const float width = ImGui::CalcTextSize(label.c_str()).x + 12;
-                    if (at + width > right) {
-                        break;
-                    }
-                    ImVec4 fill = tone;
-                    fill.w = 0.18f;
-                    draw->AddRectFilled(ImVec2(at, start.y + 4), ImVec2(at + width, end.y - 4), ImGui::GetColorU32(fill), 4);
-                    draw->AddText(ImVec2(at + 6, textY), ImGui::GetColorU32(tone), label.c_str());
-                    at += width + 6;
-                }
-                draw->PushClipRect(ImVec2(start.x, start.y), ImVec2(right, end.y), true);
-                draw->AddText(ImVec2(at, textY), ImGui::GetColorU32(colors.text), e.subject.c_str());
-                draw->PopClipRect();
-                draw->PushClipRect(ImVec2(end.x - 190, start.y), ImVec2(end.x - 54, end.y), true);
-                draw->AddText(ImVec2(end.x - 190, textY), ImGui::GetColorU32(colors.overlay1), e.author.c_str());
-                draw->PopClipRect();
-                draw->AddText(ImVec2(end.x - 46, textY), ImGui::GetColorU32(colors.overlay0), ago(e.time).c_str());
-                draw->PopClipRect();
+            }, std::chrono::milliseconds(g.host.empty() ? 80 : 0)); // a quick one is there in this frame
+        }
+        // what the opened row holds: the commit at the left, the files it changed at the right
+        const auto detailDraw = [&](const Git::LogEntry&, float width) {
+            if (!g.detailReady) {
+                ui::Progress(-1, "Reading the commit");
+                return;
+            }
+            const Git::CommitDetail& d = g.detail;
+            const auto when = [](long long unixSeconds) {
+                const std::tm local = localTm(static_cast<time_t>(unixSeconds));
+                char text[64];
+                std::strftime(text, sizeof text, "%a %b %d %Y %H:%M:%S", &local);
+                return std::string(text);
+            };
+            const auto field = [&](const char* label, const std::string& value) {
+                ImGui::TextColored(colors.overlay1, "%s", label);
+                ImGui::SameLine(0, 8);
+                ImGui::TextUnformatted(value.c_str());
+            };
+            const float leftWidth = std::max(240.0f, width * 0.5f);
+            if (ImGui::BeginChild("##meta", ImVec2(leftWidth, 0), ImGuiChildFlags_None, ImGuiWindowFlags_None)) {
+                ImGui::TextColored(colors.overlay1, "Commit");
+                ImGui::SameLine(0, 8);
+                ImGui::TextUnformatted(d.hash.c_str());
                 if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("%s  %s", e.hash.substr(0, 10).c_str(), e.subject.c_str());
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                    ImGui::SetTooltip("Copy");
                 }
-                ImGui::PopID();
+                if (ImGui::IsItemClicked()) {
+                    ImGui::SetClipboardText(d.hash.c_str());
+                }
+                if (!d.parents.empty()) {
+                    ImGui::TextColored(colors.overlay1, "%s", d.parents.size() == 1 ? "Parent" : "Parents");
+                    for (const std::string& parent : d.parents) {
+                        ImGui::SameLine(0, 8);
+                        ImGui::TextColored(colors.blue, "%s", parent.substr(0, 10).c_str());
+                        if (ImGui::IsItemHovered()) {
+                            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                        }
+                        if (ImGui::IsItemClicked()) { // jump to it, when it is loaded
+                            const auto at = std::ranges::find(g.commits, parent, &Git::LogEntry::hash);
+                            if (at != g.commits.end()) {
+                                g.selected = static_cast<int>(at - g.commits.begin());
+                                g.reveal = true;
+                            }
+                        }
+                    }
+                }
+                field("Author", d.author + " <" + d.authorEmail + ">");
+                if (d.committer != d.author || d.committerEmail != d.authorEmail) {
+                    field("Committer", d.committer + " <" + d.committerEmail + ">");
+                }
+                field("Date", when(d.time));
+                ImGui::Dummy(ImVec2(0, 4));
+                ImGui::TextWrapped("%s", d.message.c_str());
+            }
+            ImGui::EndChild();
+            ImGui::SameLine();
+            if (ImGui::BeginChild("##files", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_None)) {
+                ImGui::TextColored(colors.overlay1, "%zu %s", d.files.size(), d.files.size() == 1 ? "file" : "files");
+                for (size_t i = 0; i < d.files.size(); ++i) {
+                    const Git::Change& f = d.files[i];
+                    ImGui::PushID(static_cast<int>(i));
+                    const ImVec4 tone = f.kind == 'A' ? colors.green : f.kind == 'D' ? colors.red : colors.yellow;
+                    ImGui::TextColored(tone, "%c", f.kind);
+                    ImGui::SameLine(0, 8);
+                    if (ImGui::Selectable(f.path.c_str())) {
+                        open = true; // its diff, with the others of the commit
+                    }
+                    if (f.added >= 0) {
+                        ImGui::SameLine(0, 8);
+                        ImGui::TextColored(colors.green, "+%d", f.added);
+                        ImGui::SameLine(0, 4);
+                        ImGui::TextColored(colors.red, "-%d", f.removed);
+                    }
+                    ImGui::PopID();
+                }
+            }
+            ImGui::EndChild();
+        };
+        const float graphWidth = 10 + static_cast<float>(g.lanes) * laneWidth;
+        // tall enough for the message, between a floor and a ceiling
+        const float extra = !g.expanded ? 0.0f : !g.detailReady ? 140.0f : std::clamp(112.0f + 18.0f * static_cast<float>(1 + std::ranges::count(g.detail.message, '\n')), 140.0f, 320.0f);
+        // rows are placed by hand: the open one is taller than the rest
+        const auto rowTop = [&](int i) { return static_cast<float>(i) * rowHeight + (g.expanded && i > g.selected ? extra : 0); };
+        const float top = ImGui::GetCursorPosY();
+        const float total = static_cast<float>(count) * rowHeight + extra;
+        if (moved || g.reveal) {
+            g.reveal = false;
+            const float want = rowTop(g.selected), room = ImGui::GetWindowHeight();
+            if (want < ImGui::GetScrollY()) {
+                ImGui::SetScrollY(want);
+            } else if (want + rowHeight + extra > ImGui::GetScrollY() + room) {
+                ImGui::SetScrollY(want + rowHeight + extra - room);
             }
         }
+        const float seen = ImGui::GetScrollY(), view = ImGui::GetWindowHeight();
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0)); // rows touch: the lines run on
+        int lastShown = 0;
+        for (int i = 0; i < count; ++i) {
+            const float y = rowTop(i);
+            const float height = rowHeight + (g.expanded && i == g.selected ? extra : 0);
+            if (y + height < seen || y > seen + view) {
+                continue;
+            }
+            lastShown = i;
+            const Git::LogEntry& e = g.commits[static_cast<size_t>(i)];
+            const Git::GraphRow& row = g.rows[static_cast<size_t>(i)];
+            ImGui::PushID(i);
+            ImGui::SetCursorPosY(top + y);
+            if (rowButton("##commit", i == g.selected, rowHeight)) {
+                g.expanded = i == g.selected ? !g.expanded : true; // a second click folds it
+                g.selected = i;
+            }
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+                open = true;
+            }
+            const ImVec2 start = ImGui::GetItemRectMin(), end = ImGui::GetItemRectMax();
+            ImDrawList* draw = ImGui::GetWindowDrawList();
+            const auto x = [&](int lane) { return start.x + 10 + static_cast<float>(lane) * laneWidth; };
+            const bool opened = g.expanded && i == g.selected;
+            // the lines run through the opened detail too
+            draw->PushClipRect(start, ImVec2(end.x, end.y + (opened ? extra : 0)), true);
+            const float mid = start.y + rowHeight / 2;
+            for (const int lane : row.pass) {
+                draw->AddLine(ImVec2(x(lane), start.y), ImVec2(x(lane), end.y + (opened ? extra : 0)), laneColor(lane), 1.5f);
+            }
+            for (const int lane : row.into) {
+                draw->AddLine(ImVec2(x(lane), start.y), ImVec2(x(row.col), mid), laneColor(lane), 1.5f);
+            }
+            for (const int lane : row.parents) {
+                draw->AddLine(ImVec2(x(row.col), mid), ImVec2(x(lane), end.y + (opened ? extra : 0)), laneColor(lane), 1.5f);
+            }
+            draw->AddCircleFilled(ImVec2(x(row.col), mid), 4.0f, laneColor(row.col));
+            draw->PopClipRect();
+            draw->PushClipRect(start, end, true);
+            // refs as small chips, then the subject; author and age at the right
+            float at = start.x + graphWidth + 8;
+            const float right = end.x - 8 - 190;
+            const float textY = start.y + (rowHeight - ImGui::GetTextLineHeight()) / 2;
+            for (const std::string& ref : e.refs) {
+                const bool head = ref.starts_with("HEAD -> "), tag = ref.starts_with("tag: ");
+                const std::string label = head ? ref.substr(8) : tag ? ref.substr(5) : ref;
+                const ImVec4 tone = head ? colors.blue : tag ? colors.yellow : (label.starts_with("origin/") || label.starts_with("upstream/")) ? colors.overlay1 : colors.green;
+                const float width = ImGui::CalcTextSize(label.c_str()).x + 12;
+                if (at + width > right) {
+                    break;
+                }
+                ImVec4 fill = tone;
+                fill.w = 0.18f;
+                draw->AddRectFilled(ImVec2(at, start.y + 4), ImVec2(at + width, end.y - 4), ImGui::GetColorU32(fill), Round::Row);
+                draw->AddText(ImVec2(at + 6, textY), ImGui::GetColorU32(tone), label.c_str());
+                at += width + 6;
+            }
+            draw->PushClipRect(ImVec2(start.x, start.y), ImVec2(right, end.y), true);
+            draw->AddText(ImVec2(at, textY), ImGui::GetColorU32(colors.text), e.subject.c_str());
+            draw->PopClipRect();
+            draw->PushClipRect(ImVec2(end.x - 190, start.y), ImVec2(end.x - 54, end.y), true);
+            draw->AddText(ImVec2(end.x - 190, textY), ImGui::GetColorU32(colors.overlay1), e.author.c_str());
+            draw->PopClipRect();
+            draw->AddText(ImVec2(end.x - 46, textY), ImGui::GetColorU32(colors.overlay0), ago(e.time).c_str());
+            draw->PopClipRect();
+            if (ImGui::IsItemHovered() && !g.expanded) {
+                ImGui::SetTooltip("%s  %s", e.hash.substr(0, 10).c_str(), e.subject.c_str());
+            }
+            if (opened) {
+                // the detail: the commit at the left, its files at the right
+                const float left = graphWidth + 8;
+                ImGui::SetCursorPos(ImVec2(left, top + y + rowHeight));
+                const float width = ImGui::GetContentRegionAvail().x - 8;
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, colors.crust);
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12, 8));
+                if (ImGui::BeginChild("##detail", ImVec2(width, extra - 6), ImGuiChildFlags_AlwaysUseWindowPadding, ImGuiWindowFlags_NoScrollbar)) {
+                    detailDraw(picked, width);
+                }
+                ImGui::EndChild();
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor();
+            }
+            ImGui::PopID();
+        }
+        (void)lastShown;
+        ImGui::SetCursorPosY(top + total - 1);
+        ImGui::Dummy(ImVec2(1, 1));
         // near the end of what is loaded: the next page
-        if (!g.done && clipper.DisplayEnd >= count - 30) {
+        if (!g.done && lastShown >= count - 30) {
             more();
         }
         ImGui::PopStyleVar();

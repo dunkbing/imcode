@@ -308,6 +308,59 @@ namespace Git {
                                       " --format='%H%x1f%P%x1f%an%x1f%at%x1f%D%x1f%s%x1e' 2>/dev/null"));
     }
 
+    CommitDetail parseShow(std::string_view text) {
+        std::vector<std::string> f;
+        for (size_t at = 0; f.size() < 8; ) {
+            const size_t end = text.find('\x1f', at);
+            if (end == std::string_view::npos) {
+                return {};
+            }
+            f.emplace_back(text.substr(at, end - at));
+            at = end + 1;
+            if (f.size() == 8) {
+                text = text.substr(at);
+            }
+        }
+        CommitDetail out;
+        out.hash = f[0];
+        out.hash.erase(0, out.hash.find_first_not_of('\n'));
+        std::string parents = f[1];
+        for (size_t at = 0; at < parents.size();) {
+            const size_t end = std::min(parents.find(' ', at), parents.size());
+            if (end > at) {
+                out.parents.push_back(parents.substr(at, end - at));
+            }
+            at = end + 1;
+        }
+        out.author = f[2];
+        out.authorEmail = f[3];
+        out.committer = f[4];
+        out.committerEmail = f[5];
+        out.time = std::atoll(f[6].c_str());
+        out.committed = std::atoll(f[7].c_str());
+        out.message = std::string(text);
+        while (!out.message.empty() && std::isspace(static_cast<unsigned char>(out.message.back()))) {
+            out.message.pop_back(); // the format ends it with a line break of its own
+        }
+        return out;
+    }
+
+    CommitDetail show(const std::string& host, const std::string& cwd, const std::string& hash) {
+        CommitDetail out;
+        if (host.empty()) {
+            out = Local::show(cwd, hash).value_or(CommitDetail{});
+        } else {
+            out = parseShow(run(host, "cd " + quote(cwd) + " && git show -s --format='%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%at%x1f%ct%x1f%B' " +
+                                          quote(hash) + " -- 2>/dev/null"));
+        }
+        if (out.hash.empty()) {
+            return out;
+        }
+        // against the first parent; a first commit against the tree of no files
+        out.files = changes(host, cwd, out.parents.empty() ? "4b825dc642cb6eb9a060e54bf8d69288fbee4904" : out.parents[0], out.hash);
+        return out;
+    }
+
     std::string snapshot(const std::string& host, const std::string& cwd) {
         if (host.empty()) {
             return Local::snapshot(cwd).value_or("");

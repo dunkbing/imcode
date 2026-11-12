@@ -23,6 +23,8 @@ namespace Git::Local {
     // commit the index, after adding everything unless `all` is false; false with why. hooks and
     // commit signing are not run (the fallback where there is no git command)
     bool commit(const std::string& cwd, const std::string& message, std::string& output, bool all = true);
+    // a commit as Git::show gives it, without the files
+    std::optional<CommitDetail> show(const std::string& cwd, const std::string& hash);
     // the history as Git::log gives it
     std::optional<std::vector<LogEntry>> log(const std::string& cwd, size_t limit, size_t skip);
     // tracked files and new ones not ignored, under cwd and relative to it, at most cap

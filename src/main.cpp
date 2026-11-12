@@ -86,6 +86,16 @@ void projectBadge(const std::string& name, float size) {
     ImGui::PopFont();
 }
 
+std::tm localTm(time_t when) {
+    std::tm out{};
+#ifdef _WIN32
+    localtime_s(&out, &when);
+#else
+    localtime_r(&when, &out);
+#endif
+    return out;
+}
+
 std::string ago(long long unixSeconds) {
     const long long s = std::max(0LL, static_cast<long long>(std::time(nullptr)) - unixSeconds);
     return unixSeconds == 0 ? ""

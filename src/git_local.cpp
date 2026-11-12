@@ -5,6 +5,7 @@
 #include <git2/sys/repository.h> // git_repository_set_index
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <filesystem>
 #include <map>
@@ -455,6 +456,40 @@ namespace Git::Local {
             return false;
         }
         return true;
+    }
+
+    std::optional<CommitDetail> show(const std::string& cwd, const std::string& hash) {
+        const Repo repo = open(cwd);
+        if (!repo) {
+            return std::nullopt;
+        }
+        git_object* obj = nullptr;
+        if (git_revparse_single(&obj, repo.get(), (hash + "^{commit}").c_str()) != 0) {
+            return std::nullopt;
+        }
+        const Object own(obj);
+        const auto* commit = reinterpret_cast<git_commit*>(obj);
+        CommitDetail out;
+        char buf[GIT_OID_MAX_HEXSIZE + 1];
+        git_oid_tostr(buf, sizeof(buf), git_commit_id(commit));
+        out.hash = buf;
+        const git_signature* a = git_commit_author(commit);
+        const git_signature* c = git_commit_committer(commit);
+        out.author = a && a->name ? a->name : "";
+        out.authorEmail = a && a->email ? a->email : "";
+        out.committer = c && c->name ? c->name : "";
+        out.committerEmail = c && c->email ? c->email : "";
+        out.time = a ? static_cast<long long>(a->when.time) : 0;
+        out.committed = c ? static_cast<long long>(c->when.time) : 0;
+        out.message = git_commit_message(commit) ? git_commit_message(commit) : "";
+        while (!out.message.empty() && std::isspace(static_cast<unsigned char>(out.message.back()))) {
+            out.message.pop_back();
+        }
+        for (unsigned i = 0; i < git_commit_parentcount(commit); ++i) {
+            git_oid_tostr(buf, sizeof(buf), git_commit_parent_id(commit, i));
+            out.parents.push_back(buf);
+        }
+        return out;
     }
 
     std::optional<std::vector<LogEntry>> log(const std::string& cwd, size_t limit, size_t skip) {
