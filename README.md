@@ -4,7 +4,7 @@ Run coding agents (Claude Code, Codex, Gemini, any [ACP](https://agentclientprot
 
 ## Build
 
-Needs CMake and [vcpkg](https://vcpkg.io).
+Needs CMake and [vcpkg](https://vcpkg.io). On Linux and Windows also [zig](https://ziglang.org) 0.17 or later on PATH (the terminal library builds from source there); on Windows, local git commands need Git for Windows.
 
 ```sh
 git submodule update --init --recursive
@@ -14,6 +14,8 @@ cmake --build build -j 4
 ```
 
 Tests: configure with `-DIMCODE_BUILD_TESTS=ON`, then run `ctest --test-dir build`.
+
+Releases: `scripts/package-macos.sh` (a signed, notarized app with the variables at its top) and `scripts/package-linux.sh` (an AppImage). Both turn on auto-update, which stays off without a feed.
 
 ## Use
 
