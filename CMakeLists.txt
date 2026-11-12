@@ -39,6 +39,7 @@ endif()
 # --recursive). imgui's core is compiled here, once; imshell only adds the backends it uses
 # emoji past U+FFFF in the ui: imgui with 32-bit characters (imshell passes it to everything)
 set(IMSHELL_WCHAR32 ON CACHE BOOL "" FORCE)
+include(cmake/Updater.cmake) # before imshell: it reads IMSHELL_UPDATER
 add_subdirectory(external/imshell)
 option(IMCODE_BUILD_TESTS "Build the tests" OFF)
 if(IMCODE_BUILD_TESTS)
@@ -57,10 +58,19 @@ add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sideba
                src/terminal.cpp src/terminal_view.cpp src/files_view.cpp src/changes_view.cpp src/graph_view.cpp src/syntax.cpp
                ${EMBEDDED_FONTS_FILE} ${EMBEDDED_IMAGES_FILE} ${IMGUI_CORE})
 target_include_directories(imcode PRIVATE external/IconFontCppHeaders)
+# the version shown and compared by the updater; a test build of an update overrides it
+set(IMCODE_VERSION ${PROJECT_VERSION} CACHE STRING "the version")
 # the commit it was built from, shown in settings
 execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
                 OUTPUT_VARIABLE IMCODE_COMMIT OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-target_compile_definitions(imcode PRIVATE IMCODE_VERSION="${PROJECT_VERSION}" IMCODE_COMMIT="${IMCODE_COMMIT}")
+target_compile_definitions(imcode PRIVATE IMCODE_VERSION="${IMCODE_VERSION}" IMCODE_COMMIT="${IMCODE_COMMIT}"
+    IMCODE_APPCAST_URL="${IMCODE_APPCAST_URL}" IMCODE_UPDATE_KEY="${IMCODE_UPDATE_KEY}" IMCODE_MANIFEST_URL="${IMCODE_MANIFEST_URL}")
+if(IMCODE_UPDATER)
+    target_compile_definitions(imcode PRIVATE IMCODE_UPDATER=1)
+endif()
+if(IMCODE_UPDATER AND WIN32) # winsparkle next to the exe
+    add_custom_command(TARGET imcode POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:WinSparkle> $<TARGET_FILE_DIR:imcode>)
+endif()
 target_link_libraries(imcode PRIVATE imshell::imshell imshell::components imshell::markdown acp::host ${IMCODE_SSH} ghostty-vt-static)
 
 # ctest: configure with -DIMCODE_BUILD_TESTS=ON (turns on the echo agent it talks to)

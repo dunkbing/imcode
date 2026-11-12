@@ -3,6 +3,7 @@
 #include "imshell/button.hpp"
 #include "imshell/components.hpp"
 #include "imshell/themes.hpp"
+#include "imshell/updater.hpp"
 #include <algorithm>
 #include <cstring>
 #include <format>
@@ -182,6 +183,14 @@ void App::settingsDraw() {
     ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
     // which build this is: what to quote when something is off
     ImGui::TextColored(colors.overlay0, "ImCode " IMCODE_VERSION "  " IMCODE_COMMIT);
+#ifdef IMCODE_UPDATER
+    ImGui::SameLine();
+    const bool available = imshell::updater::Available();
+    if (imshell::Button(available ? ("Update to " + imshell::updater::LatestVersion()).c_str() : "Check for Updates",
+                        available ? imshell::ButtonVariant::Primary : imshell::ButtonVariant::Secondary)) {
+        imshell::updater::Check();
+    }
+#endif
     close |= ImGui::IsKeyPressed(ImGuiKey_Escape);
     close |= ImGui::IsMouseClicked(0) &&
              !ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows |

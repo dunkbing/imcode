@@ -15,6 +15,7 @@
 #include "imshell/frames.hpp"
 #include "imshell/themes.hpp"
 #include "imshell/title_bar.hpp"
+#include "imshell/updater.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cctype>
@@ -851,6 +852,12 @@ void App::frame() {
         newThread(project, std::exchange(switchAgentTo, {}));
     }
     ImGui::End();
+    // linux finds updates quietly (macos and windows prompt by themselves): say so once
+    static bool updateTold = false;
+    if (!updateTold && imshell::updater::Available()) {
+        updateTold = true;
+        ui::Toast(("ImCode " + imshell::updater::LatestVersion() + " is available: Settings to update").c_str(), ui::Tone::Info, 8);
+    }
     ui::RenderToasts();
     imshell::Alert::render(); // last: over everything
 }
@@ -890,7 +897,11 @@ int main(int argc, char** argv) {
     if (!shell.create(config, app)) {
         return 1;
     }
+    // empty feeds (a dev build) leave it off
+    imshell::updater::Start({.appName = "ImCode", .version = IMCODE_VERSION, .appcastUrl = IMCODE_APPCAST_URL,
+                             .publicKey = IMCODE_UPDATE_KEY, .manifestUrl = IMCODE_MANIFEST_URL});
     shell.run();
+    imshell::updater::Stop();
     app.icons.clear();
     imshell::Markdown::Shutdown();
     // stop the shells and the agents while the loop they wake still exists, not during static teardown
