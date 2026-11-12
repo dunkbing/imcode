@@ -144,6 +144,14 @@ One host per machine owns the agents and the threads; every screen is a client o
 - [ ] Device panel: a live iOS simulator or Android emulator beside the thread, for you and the agent ([#107](https://github.com/dunkbing/imcode/issues/107))
 - [ ] Capture another window by a global key, attached to the draft with its accessibility text ([#108](https://github.com/dunkbing/imcode/issues/108))
 - [ ] Right panel: tabs, maximize, resize ([#109](https://github.com/dunkbing/imcode/issues/109))
+- [ ] Git staging area: stage and unstage files and hunks, discard changes; commit what is staged with the repo's hooks and signing ([#183](https://github.com/dunkbing/imcode/issues/183))
+- [ ] Git history: the commit list with a branch graph, search by message, author or file; a commit's details and diff; the history of one file ([#184](https://github.com/dunkbing/imcode/issues/184))
+- [ ] Git branches: list, create, switch, rename, delete; merge and rebase; ahead and behind; fetch and pull ([#185](https://github.com/dunkbing/imcode/issues/185))
+- [ ] Git stash: save with a message, list, apply, pop, drop ([#186](https://github.com/dunkbing/imcode/issues/186))
+- [ ] Git conflicts: conflicted files listed, take ours or theirs or edit; continue or abort the merge or rebase ([#187](https://github.com/dunkbing/imcode/issues/187))
+- [ ] Git blame in the file viewer; jump from a line to its commit ([#188](https://github.com/dunkbing/imcode/issues/188))
+- [ ] Git tags, cherry-pick, revert a commit, reset with a confirmation; interactive rebase ([#189](https://github.com/dunkbing/imcode/issues/189))
+- [ ] Every git operation also works on an ssh project and never blocks the window ([#190](https://github.com/dunkbing/imcode/issues/190))
 
 ## 5. Phone (iOS and Android)
 
