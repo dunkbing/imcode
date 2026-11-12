@@ -508,7 +508,11 @@ void App::composer(Thread& t, float width) {
     const ImVec2 boxAt = ImGui::GetWindowPos();
     // paste: a picture or copied files on the clipboard become attachments. the field would
     // also paste a copied file's name as text: its text is put back
-    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
+    // from anywhere in the window (the transcript was clicked, say), unless another field is being typed in
+    const bool pasteHere = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) ||
+                           (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootWindow) && !ImGui::GetIO().WantTextInput &&
+                            !ImGui::IsPopupOpen(0u, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel));
+    if (pasteHere &&
         ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_V)) {
         const auto tempDir = std::filesystem::temp_directory_path() / "imcode-pasted";
         // copied files as they are; a picture (a screenshot, a copied image) saved as a png
@@ -540,6 +544,7 @@ void App::composer(Thread& t, float width) {
         if (!pasted.empty()) {
             attachments.insert(attachments.end(), pasted.begin(), pasted.end());
             picker.replace = std::string(input);
+            focusInput = true;
         }
     }
     // another client is writing this conversation: read only here, shown live
