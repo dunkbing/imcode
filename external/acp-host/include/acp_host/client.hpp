@@ -141,6 +141,15 @@ public:
 
     std::vector<AcpEvent> drainEvents();
 
+    // everything that crossed the wire, newest last: dir is > sent, < received, ! agent stderr.
+    // count rises with every line, so a reader sees a change without comparing the lines
+    struct WireLine {
+        char dir;
+        long long ms;
+        std::string text;
+    };
+    std::vector<WireLine> wire(size_t& count);
+
 private:
     // acp::Client
     void sessionUpdate(const acp::SessionNotification& n) override;
@@ -167,6 +176,11 @@ private:
     std::string pendingRestartAuth_; // method to restart with, consumed by tick()
     void onSessionOpened(const std::string& method, const acp::Response& r);
     void pushEvent(AcpEvent ev);
+    std::unique_ptr<acp::Transport> traced(std::unique_ptr<acp::Transport> inner);
+    void trace(char dir, const std::string& line);
+    std::mutex wireMutex_;
+    std::vector<WireLine> wire_;
+    size_t wireCount_ = 0;
 
     std::unique_ptr<acp::Connection> conn_;
     std::mutex stateMutex_; // guards events_, sessionId_, queued_

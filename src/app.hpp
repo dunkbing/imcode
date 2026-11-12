@@ -228,6 +228,14 @@ struct App : imshell::Delegate {
     } graph;
     void graphOpen(Thread& t);
     void graphDraw();
+    // the agent log of the open thread: every line in and out
+    struct Log {
+        bool want = false;
+        Thread* thread = nullptr;
+        bool follow = true;
+    } log;
+    void logOpen(Thread& t);
+    void logDraw();
     void projectPopup(); // "projects": pick the folder a new thread goes to
     void installAgent(const AcpAgentDef& def);
     void pollInstall();
