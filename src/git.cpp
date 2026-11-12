@@ -369,8 +369,10 @@ namespace Git {
         const std::string repoName = repo.substr(repo.find_last_of('/') + 1);
         if (host.empty()) {
             const char* home = homeEnv();
-            const std::string folder = std::string(home ? home : "") + "/.imcode/worktrees/" + repoName + "/" + name;
-            return Local::addWorktree(repo, folder, "imcode/" + name, error);
+            // the local name by path rules: a windows path splits at backslashes
+            const auto folder = std::filesystem::path(home ? home : "") / ".imcode" / "worktrees" /
+                                std::filesystem::path(repo).filename() / name;
+            return Local::addWorktree(repo, folder.string(), "imcode/" + name, error);
         }
         // one script for both: it prints the new folder on its last line
         const std::string script = "dir=\"$HOME/.imcode/worktrees/\"" + quote(repoName) + " && mkdir -p \"$dir\" && git -C " +
