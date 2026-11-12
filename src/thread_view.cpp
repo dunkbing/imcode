@@ -513,6 +513,12 @@ void App::composer(Thread& t, float width) {
     const bool pasteHere = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) ||
                            (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootWindow) && !ImGui::GetIO().WantTextInput &&
                             !ImGui::IsPopupOpen(0u, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel));
+    if (std::getenv("IMCODE_PASTE_LOG") && ImGui::IsKeyPressed(ImGuiKey_V, false)) { // to find why a paste is missed
+        const ImGuiIO& io = ImGui::GetIO();
+        std::fprintf(stderr, "paste: ctrl %d super %d shift %d alt %d focusedChild %d focusedRoot %d wantText %d here %d\n", io.KeyCtrl, io.KeySuper,
+                     io.KeyShift, io.KeyAlt, ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows), ImGui::IsWindowFocused(ImGuiFocusedFlags_RootWindow),
+                     io.WantTextInput, pasteHere);
+    }
     if (pasteHere &&
         (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_V) ||
          // a modifier left down by a screenshot shortcut (its key-up never reaches the window) must not block the chord
