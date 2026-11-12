@@ -52,6 +52,9 @@ int main() {
     if (!printed || !typed) {
         std::printf("FAILED: printed=%d typed=%d first row=\"%s\"\n", printed, typed,
                     out.rowText(0).c_str());
+        for (int y = 0; y < 6; ++y) {
+            std::printf("  in %d: \"%s\"\n", y, in.rowText(y).c_str());
+        }
         return 1;
     }
     std::printf("ok\n");

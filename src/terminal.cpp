@@ -67,6 +67,7 @@ namespace {
         }
 
         long read(char* buf, size_t size) override {
+            int quietAfterExit = 0;
             while (!closed_) {
                 // peek in short waits: close() comes from another thread
                 DWORD ready = 0;
@@ -78,8 +79,9 @@ namespace {
                     const DWORD want = static_cast<DWORD>(std::min<size_t>(size, ready));
                     return ReadFile(out_, buf, want, &n, nullptr) ? static_cast<long>(n) : 0;
                 }
-                // conpty keeps the pipe open after the shell exits
-                if (WaitForSingleObject(process_, 10) == WAIT_OBJECT_0) {
+                // conpty keeps the pipe open after the shell exits, and the last output can still
+                // be on its way: done after 300 ms of nothing
+                if (WaitForSingleObject(process_, 10) == WAIT_OBJECT_0 && ++quietAfterExit > 30) {
                     return 0;
                 }
             }

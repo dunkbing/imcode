@@ -4,6 +4,7 @@
 #include "../src/git_graph.hpp"
 #include "../src/ssh.hpp"
 #include <cstdio>
+#include <exception>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -27,7 +28,7 @@ namespace {
     }
 } // namespace
 
-int main() {
+static int run() {
     const Git::Status a = Git::parse("## main...origin/main [ahead 1]\n M src/a.cpp\n?? new.txt\n");
     const Git::Status b = Git::parse("## No commits yet on trunk\n");
     const Git::Status c = Git::parse("## HEAD (no branch)\nA  x\n");
@@ -194,4 +195,13 @@ int main() {
     std::printf(ok ? "ok\n" : "FAILED: %s | %s | %s | %s\n", name.c_str(), made.c_str(), error.c_str(),
                 in.branch.c_str());
     return ok ? 0 : 1;
+}
+
+int main() {
+    try {
+        return run();
+    } catch (const std::exception& e) { // a filesystem or process error says what went wrong
+        std::printf("FAILED: %s\n", e.what());
+        return 1;
+    }
 }

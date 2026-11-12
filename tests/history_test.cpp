@@ -58,7 +58,7 @@ int main() {
     const std::string path = History::transcript("claude-code", cwd, "s1");
     size_t offset = 0;
     auto entries = History::readFrom("claude-code", path, offset);
-    bool ok = path == live.string() && entries.size() == 3 && entries[0].text == "rename it" &&
+    bool ok = fs::path(path) == live && entries.size() == 3 && entries[0].text == "rename it" &&
               entries[1].kind == History::Entry::Kind::Assistant && entries[2].text == "Edit a.cpp";
     std::ofstream(live, std::ios::app) << R"(xt","text":"Done."}]}})" << "\n"; // the line completes
     entries = History::readFrom("claude-code", path, offset);
@@ -75,7 +75,7 @@ int main() {
     size_t codexOffset = 0;
     const std::string codexPath = History::transcript("codex", "x", "cdx2");
     entries = History::readFrom("codex", codexPath, codexOffset);
-    ok = ok && codexPath == rollout.string() && entries.size() == 3 && entries[0].text == "hi" &&
+    ok = ok && fs::path(codexPath) == rollout && entries.size() == 3 && entries[0].text == "hi" &&
          entries[1].text == "exec ls -la" && entries[2].text == "Hello";
     if (!ok) {
         std::printf("FAILED: transcripts (%zu entries) claude path '%s' codex path '%s'\n", entries.size(), path.c_str(),
