@@ -645,6 +645,19 @@ void App::frame() {
                                    data.projects.empty() ? "Add project" : "New thread")) {
                     newThread(project);
                 }
+                if (data.projects.empty()) {
+                    // the other ways to the same place, centred under the button
+                    const std::string mod = ImGui::GetIO().ConfigMacOSXBehaviors ? "Cmd" : "Ctrl";
+                    const std::string hints[] = {std::string(ICON_FA_FOLDER_PLUS "  The folder button, top left"),
+                                                 std::string(ICON_FA_KEYBOARD "  ") + mod + "+Shift+P, then Add project",
+                                                 std::string(ICON_FA_SERVER "  Pick a host there for a folder over ssh")};
+                    ImGui::Dummy(ImVec2(0, Theme::Spacing::L));
+                    const float width = ImGui::GetContentRegionAvail().x;
+                    for (const auto& hint : hints) {
+                        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (width - ImGui::CalcTextSize(hint.c_str()).x) / 2));
+                        ImGui::TextColored(Theme::Current()->colors.overlay1, "%s", hint.c_str());
+                    }
+                }
                 return;
             }
             Thread& t = *data.threads[current];
