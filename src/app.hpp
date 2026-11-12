@@ -47,6 +47,7 @@ struct App : imshell::Delegate {
     // what the agent writes does not move it (the user may be reading further up)
     int shownRevision = -3;
     bool focusInput = false;
+    std::string pressedSession; // a notification clicked: its thread opens next frame
     std::string openFolder; // `imcode <folder>`: opened as a project with a new thread
     int recall = -1; // the sent prompt shown by up/down, counted back from the newest; -1 = none
     bool settingsWant = false;

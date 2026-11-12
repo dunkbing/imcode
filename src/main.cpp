@@ -15,6 +15,7 @@
 #include "imshell/frames.hpp"
 #include "imshell/themes.hpp"
 #include "imshell/title_bar.hpp"
+#include "imshell/notifications.hpp"
 #include "imshell/updater.hpp"
 #include <algorithm>
 #include <chrono>
@@ -421,9 +422,9 @@ void App::hostLoop() {
             // tell the user what they did not see happen
             if (!watched && before != seen.end() && !t->title.empty()) {
                 if (state.needsAnswer && !before->second.needsAnswer) {
-                    notify("Needs your answer", t->title);
+                    notify(t->sessionId, "Needs your answer", t->title);
                 } else if (before->second.busy && !state.busy && !state.needsAnswer) {
-                    notify("Finished", t->title);
+                    notify(t->sessionId, "Finished", t->title);
                 }
             }
             now[t.get()] = state;
@@ -511,6 +512,12 @@ void App::stopHost() {
 void App::frame() {
     std::lock_guard lock(hostMutex);
     lastFrameMs = nowMs();
+    for (int i = 0; !pressedSession.empty() && i < static_cast<int>(data.threads.size()); ++i) {
+        if (data.threads[i]->sessionId == pressedSession) {
+            select(i);
+        }
+    }
+    pressedSession.clear();
     scanOp.check([this](Scan got) {
         scan = std::move(got);
         // first launch: the agents whose cli is here start turned on
@@ -904,6 +911,9 @@ int main(int argc, char** argv) {
     if (!shell.create(config, app)) {
         return 1;
     }
+    // a click on a "finished" notification opens its thread (set before the loop: a click that
+    // launched the app waits for it)
+    imshell::notifications::OnPress([](const std::string& id) { app.pressedSession = id; });
     // empty feeds (a dev build) leave it off
     imshell::updater::Start({.appName = "ImCode", .version = IMCODE_VERSION, .appcastUrl = IMCODE_APPCAST_URL,
                              .publicKey = IMCODE_UPDATE_KEY, .manifestUrl = IMCODE_MANIFEST_URL});
