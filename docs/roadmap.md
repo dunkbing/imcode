@@ -199,7 +199,7 @@ The phone is remote only: it runs no agent and keeps no project of its own. It r
 - [ ] Scheduled tasks: once or recurring, into a new thread each run or one thread; pause, run now ([#146](https://github.com/dunkbing/imcode/issues/146))
 - [ ] Webhook tasks: a URL starts a run; placeholders, filters, signature check, dedupe, a delivery log ([#147](https://github.com/dunkbing/imcode/issues/147))
 - [ ] Agents start and message other threads; stop reaches the subagents ([#148](https://github.com/dunkbing/imcode/issues/148))
-- [ ] Notification settings per event; background thread events announced ([#149](https://github.com/dunkbing/imcode/issues/149))
+- [~] Notification settings per event; background thread events announced ([#149](https://github.com/dunkbing/imcode/issues/149))
 
 ## 7. Shipping
 
