@@ -16,14 +16,18 @@ int main() {
     fs::create_directories(home / ".codex/sessions/2026/11/11");
     setenv("HOME", home.c_str(), 1);
     const std::string cwd = work.string();
+    std::string cwdJson; // as json writes it: a windows path's backslashes escaped
+    for (const char c : cwd) {
+        cwdJson += c == '\\' ? std::string("\\\\") : std::string(1, c);
+    }
     std::ofstream(home / ".claude/projects/-x/abc.jsonl")
         << R"({"type":"mode","sessionId":"abc"})" << "\n"
-        << R"({"type":"user","cwd":")" << cwd << R"(","message":{"role":"user","content":"<command>x</command>"}})" << "\n"
-        << R"({"type":"user","cwd":")" << cwd << R"(","message":{"role":"user","content":[{"type":"text","text":"fix the bug\nplease"}]}})" << "\n";
+        << R"({"type":"user","cwd":")" << cwdJson << R"(","message":{"role":"user","content":"<command>x</command>"}})" << "\n"
+        << R"({"type":"user","cwd":")" << cwdJson << R"(","message":{"role":"user","content":[{"type":"text","text":"fix the bug\nplease"}]}})" << "\n";
     std::ofstream(home / ".claude/projects/-x/abc/subagents/sub.jsonl")
-        << R"({"type":"user","cwd":")" << cwd << R"(","message":{"role":"user","content":"a subagent"}})" << "\n";
+        << R"({"type":"user","cwd":")" << cwdJson << R"(","message":{"role":"user","content":"a subagent"}})" << "\n";
     std::ofstream(home / ".codex/sessions/2026/11/11/rollout-1.jsonl")
-        << R"({"type":"session_meta","payload":{"id":"cdx","cwd":")" << cwd << R"("}})" << "\n"
+        << R"({"type":"session_meta","payload":{"id":"cdx","cwd":")" << cwdJson << R"("}})" << "\n"
         << R"({"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"# AGENTS.md"}]}})" << "\n"
         << R"({"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello?"}]}})" << "\n";
     const auto found = History::scan();

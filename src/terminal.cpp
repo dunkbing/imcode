@@ -218,6 +218,9 @@ std::unique_ptr<Pty> Terminal::local(const std::string& cwd, const std::vector<s
     std::vector<char> attrs(attrSize);
     STARTUPINFOEXW si{};
     si.StartupInfo.cb = sizeof(si);
+    // null std handles: otherwise a parent with redirected stdio (a test runner, a launcher)
+    // hands its own to the shell, which then bypasses the console
+    si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
     si.lpAttributeList = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attrs.data());
     InitializeProcThreadAttributeList(si.lpAttributeList, 1, 0, &attrSize);
     UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, console,
