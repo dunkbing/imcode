@@ -1,7 +1,7 @@
 #!/bin/sh
 # a release build as dist/ImCode.app and dist/imcode-macos-arm64.zip, for macos 14 and later.
-# VCPKG_ROOT must point at vcpkg. the app is signed ad hoc: on another mac, open it the
-# first time with right-click > Open (or clear the quarantine flag)
+# VCPKG_ROOT must point at vcpkg. signed and notarized with the variables below; without them
+# it is signed ad hoc, and another mac opens it only after right-click > Open
 # auto-update: IMCODE_APPCAST_URL and IMCODE_UPDATE_KEY (the ed25519 public key) go into
 # Info.plist with Sparkle embedded; without them the app does not update itself.
 # IMCODE_VERSION overrides the project's version (a test build of an update)
@@ -46,6 +46,34 @@ cat > "$app/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
-codesign --force --deep -s - "$app"
+# signing. IMCODE_SIGN_IDENTITY: a "Developer ID Application: ..." identity in the keychain;
+# unset: ad hoc. sparkle's parts are signed inside out, as its docs ask
+identity=${IMCODE_SIGN_IDENTITY:--}
+if [ "$identity" = "-" ]; then
+    codesign --force --deep -s - "$app"
+else
+    sign() { codesign --force --timestamp --options runtime -s "$identity" "$@"; }
+    fw="$app/Contents/Frameworks/Sparkle.framework"
+    sign "$fw/Versions/B/XPCServices/Installer.xpc"
+    sign --preserve-metadata=entitlements "$fw/Versions/B/XPCServices/Downloader.xpc"
+    sign "$fw/Versions/B/Autoupdate"
+    sign "$fw/Versions/B/Updater.app"
+    sign "$fw"
+    sign "$app"
+fi
 ditto -c -k --keepParent "$app" dist/imcode-macos-arm64.zip
+# notarizing: IMCODE_NOTARY_PROFILE (a notarytool keychain profile, on a mac of your own), or
+# an app store connect api key in IMCODE_NOTARY_KEY (the .p8 file), _KEY_ID and _ISSUER (ci)
+if [ -n "$IMCODE_NOTARY_PROFILE" ]; then
+    notary="--keychain-profile $IMCODE_NOTARY_PROFILE"
+elif [ -n "$IMCODE_NOTARY_KEY" ]; then
+    notary="--key $IMCODE_NOTARY_KEY --key-id $IMCODE_NOTARY_KEY_ID --issuer $IMCODE_NOTARY_ISSUER"
+fi
+if [ -n "$notary" ]; then
+    # shellcheck disable=SC2086
+    xcrun notarytool submit dist/imcode-macos-arm64.zip $notary --wait
+    xcrun stapler staple "$app"
+    rm dist/imcode-macos-arm64.zip
+    ditto -c -k --keepParent "$app" dist/imcode-macos-arm64.zip
+fi
 echo "dist/imcode-macos-arm64.zip ($version)"
