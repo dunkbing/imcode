@@ -48,7 +48,8 @@ static int run() {
 
     namespace fs = std::filesystem;
     const fs::path home = fs::temp_directory_path() / "imcode-git-test";
-    fs::remove_all(home);
+    std::error_code gone; // windows: a git process can still hold the folder for a moment
+    fs::remove_all(home, gone);
     const fs::path repo = home / "it's a repo";
     fs::create_directories(repo);
     setenv("HOME", home.c_str(), 1);
@@ -201,7 +202,7 @@ static int run() {
          graph[3].parents.empty();
     std::string gone;
     ok = ok && refusedDirty && Git::removeWorktree("", repo.string(), made, gone) && !fs::exists(made);
-    fs::remove_all(home);
+    fs::remove_all(home, gone);
     std::printf(ok ? "ok\n" : "FAILED: %s | %s | %s | %s\n", name.c_str(), made.c_str(), error.c_str(),
                 in.branch.c_str());
     return ok ? 0 : 1;
