@@ -23,6 +23,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#ifdef _WIN32
+#define timegm _mkgmtime // the same, under msvc's name
+#endif
 #include <format>
 #include <iomanip>
 #include <sstream>
