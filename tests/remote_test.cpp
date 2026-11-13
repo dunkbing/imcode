@@ -9,6 +9,12 @@
 #endif
 
 int main(int argc, char** argv) {
+    if (argc > 2) { // manual: the command for an npm agent, run over ssh to check a host
+        AcpAgentDef npm;
+        npm.npmPackage = argv[1];
+        std::printf("%s\n", Remote::agentCommand(npm, argv[2]).c_str());
+        return 0;
+    }
     if (argc > 1) { // manual: the bun install script, to run under a clean HOME
         std::printf("%s\n", Remote::bunSetup().c_str());
         return 0;

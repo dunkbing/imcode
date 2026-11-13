@@ -2,6 +2,8 @@
 
 #include "acp_host/registry.hpp"
 
+#include <cctype>
+
 namespace Remote {
 
     namespace {
@@ -59,8 +61,21 @@ namespace Remote {
         }
         std::string run;
         if (!def.npmPackage.empty()) {
-            // bun runs npm agents: the user's, else one the app keeps under ~/.imcode/bun
-            run = bunSetup() + cd(dir) + " && exec bun x --bun " + quote(def.npmPackage) + args;
+            // bun runs npm agents, installed once under ~/.imcode/agents and refreshed weekly. not
+            // through `bun x`: it fails to pick the executable on some hosts, and resolves the
+            // package again on every start
+            std::string slug;
+            for (const char c : def.npmPackage) {
+                slug += std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '.' ? c : '-';
+            }
+            run = bunSetup() + "p=" + quote(def.npmPackage) + "; d=\"$HOME/.imcode/agents/" + slug + "\"; " +
+                  "if [ ! -e \"$d/.ok\" ] || [ -n \"$(find \"$d/.ok\" -mtime +7 2>/dev/null)\" ]; then "
+                  "if mkdir -p \"$d\" && ( cd \"$d\" && bun add \"$p@latest\" >&2 ); then touch \"$d/.ok\"; "
+                  "elif [ ! -e \"$d/.ok\" ]; then echo \"imcode: could not install $p\" >&2; exit 127; fi; fi; "
+                  // the executable the package declares: the one named like it, else the first
+                  "e=$(F=\"$d/node_modules/$p/package.json\" bun -e 'const j=require(process.env.F),b=j.bin,"
+                  "n=j.name.split(\"/\").pop();console.log(typeof b===\"string\"?b:b[n]||Object.values(b)[0])') && "
+                  + cd(dir) + " && exec bun --bun \"$d/node_modules/$p/$e\"" + args;
         } else if (!def.runCmd.empty()) {
             run = cd(dir) + " && exec";
             for (const auto& part : def.runCmd) {
