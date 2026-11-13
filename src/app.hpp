@@ -319,6 +319,7 @@ bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags f
 
 // a project's mark: two letters of its name on a square in a colour of its own
 void projectBadge(const std::string& name, float size = 16);
+void drawProjectBadge(ImDrawList* draw, ImVec2 min, const std::string& name, float size);
 
 // every file of a project, by git's list when it is a repository (files_view.cpp); blocks
 std::vector<std::string> projectFiles(const std::string& host, const std::string& cwd);

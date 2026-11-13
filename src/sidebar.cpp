@@ -34,10 +34,19 @@ void App::sidebar() {
     ImGui::SameLine();
     // which project's threads are listed; picking one also makes it where new threads go
     // lit while one project is picked
-    ImGui::PushStyleColor(ImGuiCol_Text, filterProject >= 0 ? colors.blue : colors.text);
+    // the picked project's mark replaces the glyph
+    const bool picked = filterProject >= 0 && filterProject < static_cast<int>(data.projects.size());
+    ImGui::PushStyleColor(ImGuiCol_Text, picked ? ImVec4(0, 0, 0, 0) : colors.text);
     const bool openFilter =
         imshell::IconButton(ICON_FA_BARS_STAGGERED, imshell::ButtonVariant::Secondary, ImVec2(button, button));
     ImGui::PopStyleColor();
+    if (picked) {
+        const float mark = 22;
+        const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
+        drawProjectBadge(ImGui::GetWindowDrawList(),
+                         ImVec2(std::floor((min.x + max.x - mark - 4) * 0.5f), std::floor((min.y + max.y - mark) * 0.5f)),
+                         std::filesystem::path(data.projects[filterProject].cwd).filename().string(), mark);
+    }
     if (openFilter) {
         projectSearch[0] = 0;
         ImGui::OpenPopup("filter");

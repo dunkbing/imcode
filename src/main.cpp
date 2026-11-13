@@ -57,7 +57,8 @@ bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags f
     return clicked;
 }
 
-void projectBadge(const std::string& name, float size) {
+// the mark drawn at min, no layout; width size + 4
+void drawProjectBadge(ImDrawList* draw, ImVec2 min, const std::string& name, float size) {
     const Colors colors = themeColors();
     const ImVec4 tints[] = {colors.blue, colors.peach, colors.green, colors.purple, colors.teal, colors.rose};
     size_t hash = 0;
@@ -72,11 +73,6 @@ void projectBadge(const std::string& name, float size) {
             letters += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
         }
     }
-    const float line = ImGui::GetTextLineHeight();
-    const ImVec2 at = ImGui::GetCursorScreenPos();
-    ImGui::Dummy(ImVec2(size + 4, line));
-    const ImVec2 min(at.x, std::floor(at.y + (line - size) * 0.5f));
-    ImDrawList* draw = ImGui::GetWindowDrawList();
     draw->AddRectFilled(min, ImVec2(min.x + size + 4, min.y + size),
                         ImGui::GetColorU32(ImVec4(tint.x, tint.y, tint.z, 0.22f)), 4);
     ImGui::PushFont(nullptr, size * 0.62f);
@@ -84,6 +80,13 @@ void projectBadge(const std::string& name, float size) {
     draw->AddText(ImVec2(min.x + (size + 4 - text.x) * 0.5f, min.y + (size - text.y) * 0.5f),
                   ImGui::GetColorU32(tint), letters.c_str());
     ImGui::PopFont();
+}
+
+void projectBadge(const std::string& name, float size) {
+    const float line = ImGui::GetTextLineHeight();
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    ImGui::Dummy(ImVec2(size + 4, line));
+    drawProjectBadge(ImGui::GetWindowDrawList(), ImVec2(at.x, std::floor(at.y + (line - size) * 0.5f)), name, size);
 }
 
 std::tm localTm(time_t when) {
