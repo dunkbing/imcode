@@ -366,6 +366,12 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
                     }
                     out.failed[file] = failed;
                 }
+                if (session && !due.empty()) { // old uploads: the folder would only grow
+                    std::string ignored;
+                    auto lines = session->exec(Remote::cleanUploadsCommand(), nullptr, ignored);
+                    for (std::string line; lines && lines->readLine(line);) {
+                    }
+                }
                 return out;
             });
             return;

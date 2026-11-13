@@ -78,4 +78,8 @@ namespace Remote {
         return "/tmp/imcode-uploads/" + std::to_string(stamp) + "-" + name;
     }
 
+    std::string cleanUploadsCommand() {
+        return "find /tmp/imcode-uploads -type f -mmin +1440 -delete 2>/dev/null; true";
+    }
+
 } // namespace Remote

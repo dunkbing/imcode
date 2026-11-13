@@ -17,4 +17,7 @@ namespace Remote {
     // where an attached file goes on the host: a stamp keeps same-named files apart
     std::string uploadPath(const std::string& name, long long stamp);
 
+    // sh: removes uploads older than a day (shortcut: an agent still reading one older than that loses it)
+    std::string cleanUploadsCommand();
+
 } // namespace Remote
