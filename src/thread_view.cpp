@@ -1164,6 +1164,7 @@ void App::threadView(Thread& t) {
 }
 
 void App::threadBody(Thread& t) {
+    t.unread = false; // it is being looked at
     const Colors colors = themeColors();
     const AcpAgentDef* def = AcpAgents::find(t.agentId);
     const ImVec2 avail = ImGui::GetContentRegionAvail();

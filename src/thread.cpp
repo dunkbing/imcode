@@ -333,6 +333,7 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
     if (title.empty()) {
         title = text.empty() ? "Attachment" : text.substr(0, text.find('\n'));
     }
+    errored = false;
     updatedAt = ownWriteAt = std::time(nullptr);
     changed_ = true;
     if (!ensureStarted()) {
@@ -764,6 +765,7 @@ void Thread::poll() {
         case AcpEvent::Type::TurnEnded:
             idleSize_ = 0;
             idleSinceMs_ = nowMs();
+            unread = true;
             updatedAt = ownWriteAt = std::time(nullptr);
             changed_ = true;
             // a stop keeps the queue for the user to decide, unless it was made for "send now"
@@ -771,6 +773,7 @@ void Thread::poll() {
             sendNow_ = false;
             if (ev.text != "end_turn" && ev.text != "cancelled" && !ev.text.empty()) {
                 add({.kind = Item::Kind::Info, .text = "Turn stopped: " + ev.text});
+                errored = true;
             }
             // what the turn changed in the folder, as a line under it
             if (!turnBefore_.empty()) {
@@ -797,6 +800,7 @@ void Thread::poll() {
                                : "Could not resume this conversation: " + ev.text,
                  .resumeChoice = true});
             gone = true; // the agent is stopped: nothing runs until the user picks
+            errored = true;
             if (inUse) {
                 followAfter = true; // shown live from its transcript meanwhile
             }
@@ -809,10 +813,12 @@ void Thread::poll() {
                 text += "\n" + def->authHint;
             }
             add({.kind = Item::Kind::Error, .text = std::move(text)});
+            errored = true;
             break;
         }
         case AcpEvent::Type::Exited:
             if (!ev.text.empty()) { // why it died, as the agent put it
+                errored = true;
                 add({.kind = Item::Kind::Error, .text = ev.text});
             }
             add({.kind = Item::Kind::Info, .text = "Agent exited. The next message restarts it."});

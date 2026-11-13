@@ -276,10 +276,18 @@ void App::sidebar() {
             }
         }
         ImGui::PopStyleColor();
-        if (t.needsAnswer() || t.busy()) {
+        // one state, the most urgent first: waiting for the user, working, errored, finished and not seen yet
+        const char* state = t.needsAnswer() ? "needs you"
+                            : t.busy()      ? "working"
+                            : t.errored     ? "error"
+                            : (t.unread && i != current) ? "done"
+                                                         : nullptr;
+        if (state) {
             ImGui::SameLine();
-            ui::Badge(t.needsAnswer() ? "needs you" : "working",
-                      t.needsAnswer() ? ui::Tone::Warning : ui::Tone::Info);
+            ui::Badge(state, t.needsAnswer() ? ui::Tone::Warning
+                             : t.busy()      ? ui::Tone::Info
+                             : t.errored     ? ui::Tone::Danger
+                                             : ui::Tone::Success);
         }
         ImGui::SetCursorPos(next);
         ImGui::Dummy(ImVec2(0, 0)); // imgui wants an item after a cursor move

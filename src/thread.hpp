@@ -103,6 +103,8 @@ public:
     // conversation is free for the agent's cli and comes back fresh when opened again
     void release();
     long long leftAt = 0; // when it was last left, to keep the latest idle agents running
+    bool errored = false; // the last turn or start ended in an error: shown in the list until the next message
+    bool unread = false; // a turn ended and the thread has not been looked at since
     [[nodiscard]] bool hasAgent() const {
         return acp_ != nullptr;
     }
