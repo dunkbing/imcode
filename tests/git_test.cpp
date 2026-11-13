@@ -3,7 +3,9 @@
 #include "../src/git.hpp"
 #include "../src/git_graph.hpp"
 #include "../src/ssh.hpp"
+#include <chrono>
 #include <cstdio>
+#include <thread>
 #include <exception>
 #include <cstdlib>
 #include <filesystem>
@@ -99,6 +101,22 @@ static int run() {
             std::printf("  %c%s\n", l.kind, l.text.c_str());
         }
         ok = false;
+    }
+    // the counts are kept for a file that settled (older than two seconds), and follow it when it is written
+    {
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+        const auto first = Git::changes("", repo.string());
+        const auto kept = Git::changes("", repo.string()); // from the kept counts
+        const auto a1 = std::ranges::find(first, std::string("a.txt"), &Git::Change::path);
+        const auto a2 = std::ranges::find(kept, std::string("a.txt"), &Git::Change::path);
+        std::ofstream(repo / "a.txt") << "one\n2\nthree\nfour\nfive\nsix\n";
+        const auto edited = Git::changes("", repo.string());
+        const auto a3 = std::ranges::find(edited, std::string("a.txt"), &Git::Change::path);
+        if (a1 == first.end() || a2 == kept.end() || a3 == edited.end() || a1->added != a2->added || a1->removed != a2->removed ||
+            a3->added != a1->added + 2) {
+            std::printf("FAILED: kept counts do not follow the file\n");
+            ok = false;
+        }
     }
     // what a turn changed: two snapshots, the files between them (new ones too), the index untouched
     const std::string before = Git::snapshot("", repo.string());

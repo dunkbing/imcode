@@ -173,6 +173,10 @@ namespace Git {
             c.path = std::string(path);
             out.push_back(std::move(c));
         });
+        std::unordered_map<std::string_view, size_t> byPath; // a path's place, not a scan for each line
+        for (size_t i = 0; i < out.size(); ++i) {
+            byPath[out[i].path] = i;
+        }
         // "<added>\t<removed>\t<path>", "-" for binary files
         eachLine(numstat, [&](std::string_view line) {
             const size_t t1 = line.find('\t'), t2 = line.find('\t', t1 + 1);
@@ -183,11 +187,13 @@ namespace Git {
             if (const size_t arrow = path.find(" => "); arrow != std::string::npos) {
                 path = path.substr(arrow + 4);
             }
-            for (Change& c : out) {
-                if (c.path == path && line[0] != '-') {
-                    c.added = std::atoi(std::string(line.substr(0, t1)).c_str());
-                    c.removed = std::atoi(std::string(line.substr(t1 + 1, t2 - t1 - 1)).c_str());
-                }
+            if (line[0] == '-') {
+                return;
+            }
+            if (const auto at = byPath.find(path); at != byPath.end()) {
+                Change& c = out[at->second];
+                c.added = std::atoi(std::string(line.substr(0, t1)).c_str());
+                c.removed = std::atoi(std::string(line.substr(t1 + 1, t2 - t1 - 1)).c_str());
             }
         });
         return out;

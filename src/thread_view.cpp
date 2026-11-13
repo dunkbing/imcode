@@ -1050,7 +1050,7 @@ void App::statusLine(Thread& t, float left) {
         gitFor = got.first;
         git = got.second;
     });
-    if (!gitOp.isRunning() && (gitFor != key || now - gitAt > 5000)) {
+    if (!gitOp.isRunning() && (gitFor != key || (now - gitAt > 5000 && !ImGui::GetIO().AppFocusLost))) { // not polled while in the background
         gitAt = now;
         gitOp.start([key, host = t.host, cwd = t.cwd] { return std::pair{key, Git::status(host, cwd)}; });
     }

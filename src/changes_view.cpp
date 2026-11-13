@@ -69,7 +69,7 @@ void App::dockOpen(Thread& t) {
 
 void App::changesDraw(Changes& c, bool docked) {
     const Colors colors = themeColors();
-    if (docked && !c.listOp.isRunning() && !c.reload && ImGui::GetTime() - c.readAt > 3) {
+    if (docked && !ImGui::GetIO().AppFocusLost && !c.listOp.isRunning() && !c.reload && ImGui::GetTime() - c.readAt > 3) {
         c.reload = true; // the folder changes under the panel: agents, editors, the user
     }
     // the list, then the picked file's diff, each off the ui thread (a remote is slow). on this

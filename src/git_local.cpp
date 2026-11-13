@@ -8,6 +8,8 @@
 #include <cctype>
 #include <cstdio>
 #include <filesystem>
+#include <chrono>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -74,9 +76,9 @@ namespace Git::Local {
         }
 
         // the working folder against HEAD, untracked files included (their contents too)
-        DiffList workdirDiff(git_repository* repo, const char* path = nullptr) {
+        DiffList workdirDiff(git_repository* repo, const char* path = nullptr, bool content = true) {
             git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
-            opts.flags = GIT_DIFF_INCLUDE_UNTRACKED | GIT_DIFF_RECURSE_UNTRACKED_DIRS | GIT_DIFF_SHOW_UNTRACKED_CONTENT;
+            opts.flags = GIT_DIFF_INCLUDE_UNTRACKED | GIT_DIFF_RECURSE_UNTRACKED_DIRS | (content ? GIT_DIFF_SHOW_UNTRACKED_CONTENT : 0);
             char* spec[] = {const_cast<char*>(path)};
             if (path) {
                 opts.pathspec = {spec, 1};
@@ -108,13 +110,30 @@ namespace Git::Local {
             return DiffList(diff);
         }
 
-        std::vector<Change> changesOf(git_diff* diff) {
+        // line counts kept per file while it is the same one: a list read again every few seconds then
+        // only walks the folder, the patches (most of its time) are not made again
+        struct Counted {
+            std::uintmax_t size;
+            std::int64_t mtime;
+            git_oid before; // the committed blob
+            int added, removed;
+        };
+        std::mutex countedLock;
+        std::map<std::string, std::map<std::string, Counted>> counted; // by folder, then path
+
+        std::vector<Change> changesOf(git_diff* diff, const std::string& root = "") {
             std::vector<Change> out;
             if (!diff) {
                 return out;
             }
             git_diff_find_options find = GIT_DIFF_FIND_OPTIONS_INIT; // renames, as git status shows them
             git_diff_find_similar(diff, &find);
+            std::map<std::string, Counted> before, after; // the counts kept, and those to keep
+            if (!root.empty()) {
+                const std::lock_guard lock(countedLock);
+                before = counted[root];
+            }
+            const auto now = std::filesystem::file_time_type::clock::now();
             for (size_t i = 0; i < git_diff_num_deltas(diff); ++i) {
                 const git_diff_delta* d = git_diff_get_delta(diff, i);
                 Change c;
@@ -127,6 +146,22 @@ namespace Git::Local {
                 if (c.kind == 'R' && d->old_file.path) {
                     c.from = d->old_file.path;
                 }
+                // the folder's file as it is now; a deleted one has none and is counted each time
+                std::error_code ec;
+                const auto file = std::filesystem::path(root) / c.path;
+                const auto size = root.empty() ? 0 : std::filesystem::file_size(file, ec);
+                const auto written = root.empty() || ec ? std::filesystem::file_time_type{} : std::filesystem::last_write_time(file, ec);
+                const bool known = !root.empty() && !ec;
+                const std::int64_t mtime = written.time_since_epoch().count();
+                if (const auto kept = before.find(c.path);
+                    known && kept != before.end() && kept->second.size == size && kept->second.mtime == mtime &&
+                    git_oid_equal(&kept->second.before, &d->old_file.id)) {
+                    c.added = kept->second.added;
+                    c.removed = kept->second.removed;
+                    after[c.path] = kept->second;
+                    out.push_back(std::move(c));
+                    continue;
+                }
                 git_patch* patch = nullptr;
                 if (c.kind != '?' && git_patch_from_diff(&patch, diff, i) == 0 && patch &&
                     !(git_patch_get_delta(patch)->flags & GIT_DIFF_FLAG_BINARY)) {
@@ -136,7 +171,16 @@ namespace Git::Local {
                     c.removed = static_cast<int>(removed);
                 }
                 git_patch_free(patch);
+                // a file written in the last two seconds may be written again within the same
+                // timestamp: not kept yet
+                if (known && c.kind != '?' && now - written > std::chrono::seconds(2)) {
+                    after[c.path] = {size, mtime, d->old_file.id, c.added, c.removed};
+                }
                 out.push_back(std::move(c));
+            }
+            if (!root.empty()) {
+                const std::lock_guard lock(countedLock);
+                counted[root] = std::move(after);
             }
             return out;
         }
@@ -228,8 +272,9 @@ namespace Git::Local {
         if (!repo) {
             return std::nullopt;
         }
-        const DiffList diff = from.empty() ? workdirDiff(repo.get()) : treesDiff(repo.get(), from, to);
-        std::vector<Change> out = changesOf(diff.get());
+        const DiffList diff = from.empty() ? workdirDiff(repo.get(), nullptr, false) : treesDiff(repo.get(), from, to);
+        const char* workdir = git_repository_workdir(repo.get());
+        std::vector<Change> out = changesOf(diff.get(), from.empty() && workdir ? workdir : "");
         if (from.empty()) {
             fillStates(repo.get(), out);
         }
