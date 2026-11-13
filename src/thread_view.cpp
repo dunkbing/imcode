@@ -17,6 +17,7 @@
 #include "imshell/components.hpp"
 #include "colors.hpp"
 #include <algorithm>
+#include <set>
 #include <cstdlib>
 #include <format>
 #include <functional>
@@ -1289,7 +1290,16 @@ void App::threadBody(Thread& t) {
     }
     ImGui::PopTextWrapPos();
     ImGui::Unindent(left);
-    if (shownRevision < 0 || t.replaying()) {
+    // a scroll up while history is still arriving stops the pull to the end
+    static std::set<const Thread*> scrolledAway;
+    if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel > 0) {
+        scrolledAway.insert(&t);
+        shownRevision = std::max(shownRevision, 0);
+    }
+    if (!t.replaying()) {
+        scrolledAway.erase(&t);
+    }
+    if (shownRevision < 0 || (t.replaying() && !scrolledAway.contains(&t))) {
         ImGui::SetScrollHereY(1.0f);
         // a few frames: what was just added is laid out by then; history still arriving restarts it
         shownRevision = t.replaying() ? -3 : shownRevision + 1;
