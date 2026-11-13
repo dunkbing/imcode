@@ -101,6 +101,13 @@ bool Thread::starting() const {
     return connectOp_.isRunning() || (acp_ && acp_->isRunning() && !acp_->isSessionReady());
 }
 
+std::string Thread::startStep() const {
+    if (connectOp_.isRunning()) {
+        return "Connecting to " + host;
+    }
+    return acp_ && acp_->isInitialized() ? "Opening the session" : "Starting the agent";
+}
+
 bool Thread::busy() const {
     return uploadOp_.isRunning() || (connectOp_.isRunning() && !heldPrompt_.empty()) ||
            (acp_ && acp_->isRunning() && (acp_->isTurnActive() || (queued_ && starting())));

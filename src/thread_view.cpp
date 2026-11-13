@@ -112,6 +112,18 @@ namespace {
 } // namespace
 
 namespace {
+    // what the start-up indicator says: the step it is on and how long it has taken
+    std::string startLabel(const Thread& t) {
+        static std::map<const Thread*, std::chrono::steady_clock::time_point> since;
+        if (!t.starting()) {
+            since.erase(&t);
+            return {};
+        }
+        const auto secs = std::chrono::duration_cast<std::chrono::seconds>(
+                              std::chrono::steady_clock::now() - since.try_emplace(&t, std::chrono::steady_clock::now()).first->second)
+                              .count();
+        return std::format("{}  ·  {}s", t.startStep(), secs);
+    }
     bool foldable(const Item& it) {
         return it.kind == Item::Kind::Tool && it.changes.empty() &&
                (it.toolStatus == "completed" || it.toolStatus == "failed");
@@ -907,7 +919,7 @@ void App::composer(Thread& t, float width) {
             choices(t, *model, filter);
         } else {
             ImGui::TextColored(colors.overlay1, "%s",
-                               t.starting() ? "Starting the agent..." : "This agent offers no models");
+                               t.starting() ? startLabel(t).c_str() : "This agent offers no models");
         }
         ImGui::EndChild();
         ImGui::SameLine();
@@ -1165,6 +1177,13 @@ void App::threadView(Thread& t) {
 
 void App::threadBody(Thread& t) {
     t.unread = false; // it is being looked at
+    // typing starts the agent, so its start-up overlaps with writing the message
+    static std::set<const Thread*> woken;
+    if (input[0] == 0) {
+        woken.erase(&t);
+    } else if (!t.hasAgent() && woken.insert(&t).second) {
+        t.wake();
+    }
     const Colors colors = themeColors();
     const AcpAgentDef* def = AcpAgents::find(t.agentId);
     const ImVec2 avail = ImGui::GetContentRegionAvail();
@@ -1192,8 +1211,7 @@ void App::threadBody(Thread& t) {
         statusLine(t, left);
         if (t.starting()) {
             ImGui::SetCursorPosX(left + 8);
-            ImGui::TextColored(colors.overlay1, "Starting %s...",
-                               def ? def->name.c_str() : t.agentId.c_str());
+            ImGui::TextColored(colors.overlay1, "%s", startLabel(t).c_str());
         }
         return;
     }
@@ -1377,7 +1395,7 @@ void App::threadBody(Thread& t) {
         turnSince.erase(&t);
     }
     if (t.busy() || t.starting()) {
-        ui::Progress(-1, t.starting() ? "Starting" : working.c_str(), 160);
+        ui::Progress(-1, t.starting() ? startLabel(t).c_str() : working.c_str(), 200);
         ImGui::Dummy(ImVec2(0, Theme::Spacing::M)); // clear of the child's bottom edge
     }
     ImGui::PopTextWrapPos();

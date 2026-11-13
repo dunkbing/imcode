@@ -126,6 +126,7 @@ public:
     void continueAfterTerminalSignIn(Item& item);
 
     [[nodiscard]] bool starting() const;    // the agent is coming up: no session yet
+    [[nodiscard]] std::string startStep() const; // which part of coming up it is on
     [[nodiscard]] bool busy() const;        // a turn is running, or waits for the session
     [[nodiscard]] bool needsAnswer() const; // an unanswered permission or sign-in
     [[nodiscard]] bool replaying() const { // a saved conversation is coming back in
