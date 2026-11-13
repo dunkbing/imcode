@@ -240,6 +240,20 @@ void App::sidebar() {
         ImGui::SetCursorPos(ImVec2(at.x + 8, at.y + 4 + 2 * (line + 3)));
         const AcpAgentDef* def = AcpAgents::find(t.agentId);
         ImGui::PushStyleColor(ImGuiCol_Text, colors.overlay1);
+        {
+            // a dot while this thread's agent process is running (idle ones stay up for a while)
+            const ImVec2 dot = ImGui::GetCursorScreenPos();
+            const float r = 3;
+            if (t.hasAgent()) {
+                ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(dot.x + r, dot.y + ImGui::GetTextLineHeight() * 0.5f), r,
+                                                            ImGui::GetColorU32(colors.green));
+            }
+            ImGui::Dummy(ImVec2(2 * r, ImGui::GetTextLineHeight()));
+            if (t.hasAgent() && ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("The agent is running on this thread");
+            }
+            ImGui::SameLine(0, 5);
+        }
         agentIcon(t.agentId, 13);
         ImGui::SameLine(0, 6);
         ImGui::TextUnformatted(def ? def->name.c_str() : t.agentId.c_str());
