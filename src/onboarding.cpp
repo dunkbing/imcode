@@ -221,7 +221,6 @@ void App::settingsDraw() {
             ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + 38, textY), ink, pages[i].name);
         }
     };
-    bool escapeUsed = false;
     const auto pageBody = [&] {
     const auto heading = [&](const char* title, const char* about) {
         ImGui::TextColored(colors.overlay1, "%s", title);
@@ -312,35 +311,11 @@ void App::settingsDraw() {
             }
         }
         ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
-        if (!machineAdding) {
-            if (imshell::Button("Add a machine", imshell::ButtonVariant::Secondary)) {
-                machineAdding = true;
-                machineFocus = true;
-            }
-        } else {
-            if (std::exchange(machineFocus, false)) {
-                ImGui::SetKeyboardFocusHere();
-            }
-            ImGui::SetNextItemWidth(std::max(160.0f, ImGui::GetContentRegionAvail().x - 150));
-            bool add = ImGui::InputTextWithHint("##machine", "user@host, or a name from ~/.ssh/config", machineInput,
-                                                sizeof(machineInput), ImGuiInputTextFlags_EnterReturnsTrue);
-            ImGui::SameLine();
-            add |= imshell::Button("Add", imshell::ButtonVariant::Primary);
-            ImGui::SameLine();
-            if (imshell::Button("Cancel", imshell::ButtonVariant::Secondary) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-                machineAdding = false;
-                machineInput[0] = 0;
-                escapeUsed = true;
-            }
-            if (add) {
-                const std::string host = Ssh::destination(machineInput);
-                if (!host.empty() && std::ranges::find(hosts, host) == hosts.end()) {
-                    data.machines.push_back(host);
-                    save();
-                }
-                machineAdding = false;
-                machineInput[0] = 0;
-            }
+        if (imshell::Button("Add a machine", imshell::ButtonVariant::Secondary)) {
+            machineAdding = true; // its dialog opens below, over the settings
+            machineFocus = true;
+            machineError.clear();
+            machineInput[0] = 0;
         }
         break;
     }
@@ -384,12 +359,118 @@ void App::settingsDraw() {
         }
         imshell::EndResizable();
     }
-    if (!escapeUsed) {
-        close |= ImGui::IsKeyPressed(ImGuiKey_Escape);
+    // adding a machine: a dialog over the settings. its own escape and outside click close it, not these
+    bool nested = false;
+    static std::vector<SSHHostEntry> configured; // ~/.ssh/config, read when the dialog opens
+    if (std::exchange(machineAdding, false)) {
+        const char* config = std::getenv("IMCODE_SSH_CONFIG");
+        configured = parseSSHConfig(config ? config : "");
+        ImGui::OpenPopup("##addMachine");
     }
-    close |= ImGui::IsMouseClicked(0) &&
-             !ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows |
-                                     ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(520.0f, vp->WorkSize.x - 32), 0));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
+    ImGui::PushStyleColor(ImGuiCol_Border, colors.overlay0);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Round::Dialog);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20, 18));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1);
+    const bool adding = ImGui::BeginPopupModal("##addMachine", nullptr,
+                                               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                                                   ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(2);
+    if (adding) {
+        nested = true;
+        const auto known = [&](const std::string& host) {
+            return std::ranges::find(data.machines, host) != data.machines.end() ||
+                   std::ranges::any_of(data.projects, [&](const Store::Project& p) { return p.host == host; });
+        };
+        // true: added, and the dialog is done
+        const auto add = [&](const std::string& typed, const std::string& host) {
+            // words are only for a pasted ssh command: anything else with a space is not a target
+            const bool spaced = typed.find_first_of(" \t") != std::string::npos;
+            if (host.empty() || (spaced && !typed.starts_with("ssh "))) {
+                machineError = "bad ssh target \"" + typed + "\"";
+            } else if (known(host)) {
+                machineError = host + " is already there";
+            } else {
+                data.machines.push_back(host);
+                save();
+                return true;
+            }
+            return false;
+        };
+        bool done = false;
+        ImGui::PushFont(nullptr, 18.0f);
+        ImGui::TextUnformatted("Add a machine");
+        ImGui::PopFont();
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - ImGui::CalcTextSize("Esc").x);
+        ImGui::TextColored(colors.overlay1, "Esc");
+        ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
+        ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
+        ImGui::TextWrapped("A VPS, a Mac mini, a box at home: ImCode reaches it over ssh, and agents there keep running while your laptop sleeps.");
+        ImGui::PopStyleColor();
+        ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
+        const float addWidth = 64;
+        bool header = false;
+        for (const SSHHostEntry& entry : configured) {
+            if (known(entry.alias)) {
+                continue;
+            }
+            if (!header) {
+                ImGui::TextColored(colors.overlay1, "From your ssh config");
+                ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
+                header = true;
+            }
+            ImGui::PushID(entry.alias.c_str());
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(colors.overlay1, ICON_FA_SERVER);
+            ImGui::SameLine(0, 12);
+            ImGui::TextUnformatted(entry.alias.c_str());
+            if (!entry.hostname.empty()) {
+                ImGui::SameLine(0, 10);
+                ImGui::TextColored(colors.overlay0, "%s", (entry.user.empty() ? entry.hostname : entry.user + "@" + entry.hostname).c_str());
+            }
+            ImGui::SameLine(ImGui::GetContentRegionMax().x - addWidth);
+            if (imshell::Button("Add", imshell::ButtonVariant::Secondary, ImVec2(addWidth, 0))) {
+                done = add(entry.alias, entry.alias);
+            }
+            ImGui::PopID();
+        }
+        if (header) {
+            ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
+        }
+        ImGui::TextColored(colors.overlay1, header ? "Or type how ssh reaches it" : "Type how ssh reaches it");
+        ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
+        if (std::exchange(machineFocus, false)) {
+            ImGui::SetKeyboardFocusHere();
+        }
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - addWidth - 8);
+        bool enter = ImGui::InputTextWithHint("##typed", "user@host, or ssh user@host", machineInput, sizeof(machineInput),
+                                              ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::SameLine(0, 8);
+        enter |= imshell::Button("Add##typed", imshell::ButtonVariant::Primary, ImVec2(addWidth, 0));
+        if (enter) {
+            done = add(machineInput, Ssh::destination(machineInput));
+        }
+        if (!machineError.empty()) {
+            ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
+            ImGui::TextColored(colors.red, "%s", machineError.c_str());
+        }
+        if (done || ImGui::IsKeyPressed(ImGuiKey_Escape) ||
+            (ImGui::IsMouseClicked(0) && !ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows |
+                                                                 ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+    if (!nested) { // the dialog over it takes these
+        close |= ImGui::IsKeyPressed(ImGuiKey_Escape);
+        close |= ImGui::IsMouseClicked(0) &&
+                 !ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows |
+                                         ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+    }
     if (close) {
         ImGui::CloseCurrentPopup();
     }

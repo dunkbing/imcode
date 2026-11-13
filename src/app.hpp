@@ -10,6 +10,7 @@
 #include "imshell/editor.hpp"
 #include "imshell/frames.hpp"
 #include "ssh.hpp"
+#include "ssh_config.hpp"
 #include "store.hpp"
 #include "terminal.hpp"
 #include <atomic>
@@ -92,6 +93,7 @@ struct App : imshell::Delegate {
     bool machineAdding = false;     // the field for a new machine is open
     bool machineFocus = false;
     char machineInput[256] = "";
+    std::string machineError;
     int switchProjectTo = -1; // picked in the projects popup: applied after the frame's ui
     bool sidebarOpen = false; // narrow windows (phones): the thread list covers the thread
     bool devOpenModels = false; // ui checks: open the model popup once
