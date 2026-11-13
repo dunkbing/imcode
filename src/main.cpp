@@ -788,7 +788,7 @@ void App::frame() {
         ImGui::IsKeyPressed(ImGuiKey_B, false)) {
         files.open = !files.open;
     }
-    // ui checks: IMCODE_DEV="new;palette;actions;models;send:<text>" (any of them), each once
+    // ui checks: IMCODE_DEV="new;palette;actions;models;import;addmachine;send:<text>" (any of them), each once
     if (const char* dev = std::getenv("IMCODE_DEV"); dev) {
         static int frames = 0;
         ++frames;
@@ -818,6 +818,14 @@ void App::frame() {
         }
         if (const auto at = all.find(";attach:"); frames == 39 && at != std::string::npos) {
             attachments.push_back(all.substr(at + 8, all.find(';', at + 1) - at - 8));
+        }
+        if (frames == 40 && all.find(";import;") != std::string::npos) {
+            hostImport.host = "opc@129.150.46.134";
+            hostImport.found = {{"claude-code", "/srv/app", "s1", "fix the bug", 1}, {"codex", "/srv/api", "s2", "hello", 2}};
+            hostImport.wantOpen = true;
+        }
+        if (frames == 40 && all.find(";addmachine;") != std::string::npos) {
+            machineAdding = machineFocus = true;
         }
         if (frames == 40 && all.find(";settings;") != std::string::npos) {
             settingsWant = true;
@@ -921,6 +929,8 @@ void App::frame() {
         focusTerminal = true;
     }
     paletteDraw();
+    machineDialog(false);
+    importDialog();
     settingsDraw();
     graphDraw();
     logDraw();

@@ -90,12 +90,24 @@ struct App : imshell::Delegate {
     int recall = -1; // the sent prompt shown by up/down, counted back from the newest; -1 = none
     bool settingsWant = false;
     int settingsTab = 0;            // the page of the settings dialog
-    bool machineAdding = false;     // the field for a new machine is open
+    bool machineAdding = false;     // asked for the add dialog over the app
+    bool machineAddingIn = false;   // ... and over the settings (a popup opens at the level it is asked at)
+    bool machineDone = false;       // the machine was reached and saved: the dialog closes
     bool machineFocus = false;
     char machineInput[256] = "";
     std::string machineError, machineSecret; // the add dialog: what failed, and a password it may ask for
     bool machineAskSecret = false;
     std::string pickError; // the machine picked in the sidebar could not be reached
+    bool machineDialog(bool inSettings);
+    // the first time a machine is reached: its earlier agent sessions, offered as projects and threads
+    struct HostImport {
+        std::string host;
+        std::vector<History::Found> found;
+        bool wantOpen = false;
+        AcpHost::AsyncOp<std::vector<History::Found>> op;
+    } hostImport;
+    void offerImport(const std::string& host);
+    void importDialog();
     // connecting to a host, off the ui thread: the add dialog tries the typed one, the sidebar the one picked
     struct MachineTry {
         std::string typed, host;

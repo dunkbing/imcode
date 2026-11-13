@@ -42,6 +42,22 @@ int main() {
         std::printf("FAILED: %zu found, claude=%d codex=%d\n", found.size(), claude, codex);
         return 1;
     }
+    // the same two formats as an ssh host prints them: newest first by time, a folder's sessions capped
+    const std::string remote = std::string("@@imcode\t100\t/home/u/.claude/projects/-srv-app/old.jsonl\n") +
+                               R"({"type":"user","cwd":"/srv/app","message":{"role":"user","content":"older ask"}})" "\n"
+                               "@@imcode\t300\t/home/u/.codex/sessions/2026/11/11/rollout-1-cdx.jsonl\n"
+                               R"({"type":"session_meta","payload":{"id":"cdx","cwd":"/srv/api"}})" "\n"
+                               R"({"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello?"}]}})" "\n"
+                               "@@imcode\t200\t/home/u/.claude/projects/-srv-app/new.jsonl\n"
+                               "not json\n"
+                               R"({"type":"user","cwd":"/srv/app","message":{"role":"user","content":"newer ask"}})" "\n";
+    const auto fromHost = History::parseRemote(remote);
+    if (fromHost.size() != 3 || fromHost[0].sessionId != "cdx" || fromHost[0].cwd != "/srv/api" ||
+        fromHost[1].sessionId != "new" || fromHost[1].title != "newer ask" || fromHost[1].updatedAt != 200 ||
+        fromHost[2].agentId != "claude-code" || History::parseRemote(remote, 1).size() != 2) {
+        std::printf("FAILED: remote parse, %zu found\n", fromHost.size());
+        return 1;
+    }
     // a conversation read as its cli writes it: the cwd's folder named the way claude does
     std::string folder = cwd;
     for (char& c : folder) {

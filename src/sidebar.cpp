@@ -317,9 +317,11 @@ void App::sidebar() {
             return; // another one was picked meanwhile
         }
         pickError = r.ok ? "" : r.error.message;
+        if (r.ok) {
+            offerImport(r.host);
+        }
         if (r.error.needsSecret) { // the add dialog asks for it
-            settingsWant = machineAdding = machineFocus = machineAskSecret = true;
-            settingsTab = 2;
+            machineAdding = machineFocus = machineAskSecret = true;
             machineError = r.error.message;
             machineSecret.clear();
             std::snprintf(machineInput, sizeof(machineInput), "%s", r.host.c_str());
@@ -380,8 +382,7 @@ void App::sidebar() {
         }
         ImGui::Separator();
         if (row("add", ICON_FA_PLUS, "Add a machine...", false, -1)) {
-            settingsWant = machineAdding = machineFocus = true; // its dialog opens over the settings
-            settingsTab = 2;
+            machineAdding = machineFocus = true;
             machineError.clear();
             machineAskSecret = false;
             machineSecret.clear();

@@ -1,5 +1,6 @@
 #include "history.hpp"
 #include "home.hpp"
+#include "ssh.hpp"
 #include "text.hpp"
 
 #include <algorithm>
@@ -9,6 +10,8 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <set>
+#include <sstream>
 #include <nlohmann/json.hpp>
 
 namespace fs = std::filesystem;
@@ -41,8 +44,7 @@ namespace History {
         }
 
         // folder, session id and first prompt from the head of a session file
-        bool readHead(const fs::path& file, Found& out) {
-            std::ifstream in(file);
+        bool readHead(std::istream& in, Found& out) {
             int lines = 0;
             for (std::string line; std::getline(in, line) && lines < 400; ++lines) {
                 const json row = json::parse(line, nullptr, false);
@@ -242,7 +244,8 @@ namespace History {
             if (found.agentId == "claude-code") {
                 found.sessionId = files[i].first.stem().string();
             }
-            if (!readHead(files[i].first, found) || !fs::is_directory(found.cwd, ec) ||
+            std::ifstream in(files[i].first);
+            if (!readHead(in, found) || !fs::is_directory(found.cwd, ec) ||
                 ++taken[found.agentId + "\n" + found.cwd] > perFolder) {
                 continue;
             }
@@ -251,4 +254,92 @@ namespace History {
         return out;
     }
 
+
+    namespace {
+        // shell words: ' becomes '\'' inside single quotes
+        std::string quoted(const std::string& text) {
+            std::string out = "'";
+            for (const char c : text) {
+                out += c == '\'' ? std::string("'\\''") : std::string(1, c);
+            }
+            return out + "'";
+        }
+
+        std::string runOn(const std::string& host, const std::string& script) {
+            Ssh::Error error;
+            const auto session = Ssh::session(host, "", error);
+            std::string failed, out;
+            auto lines = session ? session->exec(script, nullptr, failed) : nullptr;
+            for (std::string line; lines && lines->readLine(line);) {
+                out += line + "\n";
+            }
+            return out;
+        }
+    } // namespace
+
+    std::vector<Found> parseRemote(const std::string& output, int perFolder) {
+        struct File {
+            std::string path, head;
+            long long when = 0;
+        };
+        std::vector<File> files;
+        std::istringstream in(output);
+        for (std::string line; std::getline(in, line);) {
+            if (line.starts_with("@@imcode\t")) {
+                const size_t tab = line.find('\t', 9);
+                if (tab == std::string::npos) {
+                    continue;
+                }
+                files.push_back({line.substr(tab + 1), "", std::atoll(line.substr(9, tab - 9).c_str())});
+            } else if (!files.empty()) {
+                files.back().head += line + "\n";
+            }
+        }
+        std::ranges::stable_sort(files, std::greater<>{}, &File::when);
+        std::vector<Found> out;
+        std::map<std::string, int> taken;
+        for (const auto& file : files) {
+            Found found;
+            found.updatedAt = file.when;
+            found.agentId = file.path.find("/.claude/") != std::string::npos ? "claude-code" : "codex";
+            if (found.agentId == "claude-code") {
+                found.sessionId = fs::path(file.path).stem().string();
+            }
+            std::istringstream head(file.head);
+            if (!readHead(head, found) || ++taken[found.agentId + "\n" + found.cwd] > perFolder) {
+                continue;
+            }
+            out.push_back(std::move(found));
+        }
+        return out;
+    }
+
+    std::vector<Found> scanRemote(const std::string& host, int perFolder) {
+        // the newest session files, each with its first lines (long lines cut: a picture in one)
+        const std::string list =
+            "ls -t \"$HOME\"/.claude/projects/*/*.jsonl \"$HOME\"/.codex/sessions/*/*/*/rollout-*.jsonl 2>/dev/null"
+            " | head -150 | while IFS= read -r f; do"
+            " t=$(stat -c %Y \"$f\" 2>/dev/null || stat -f %m \"$f\" 2>/dev/null);"
+            " printf '@@imcode\\t%s\\t%s\\n' \"$t\" \"$f\"; head -n 200 \"$f\" | cut -c1-3000; done";
+        auto found = parseRemote(runOn(host, list), perFolder);
+        // only folders that are still there
+        std::string check = "for d in";
+        std::set<std::string> folders;
+        for (const auto& f : found) {
+            if (folders.insert(f.cwd).second) {
+                check += " " + quoted(f.cwd);
+            }
+        }
+        if (folders.empty()) {
+            return {};
+        }
+        check += "; do [ -d \"$d\" ] && printf '%s\\n' \"$d\"; done";
+        std::set<std::string> there;
+        std::istringstream lines(runOn(host, check));
+        for (std::string line; std::getline(lines, line);) {
+            there.insert(line);
+        }
+        std::erase_if(found, [&](const Found& f) { return !there.contains(f.cwd); });
+        return found;
+    }
 } // namespace History

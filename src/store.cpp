@@ -29,6 +29,7 @@ namespace Store {
         out.notifyOthers = root.value("notifyOthers", true);
         out.machines = root.value("machines", std::vector<std::string>{});
         out.machine = root.value("machine", "");
+        out.importAsked = root.value("importAsked", std::vector<std::string>{});
         out.defaults = root.value("defaults", out.defaults);
         if (const auto layout = root.value("layout", std::vector<float>{}); layout.size() == 4) {
             out.sidebarWidth = layout[0];
@@ -84,6 +85,7 @@ namespace Store {
                                    {"notifyOthers", data.notifyOthers},
                                    {"machines", data.machines},
                                    {"machine", data.machine},
+                                   {"importAsked", data.importAsked},
                                    {"defaults", data.defaults},
                                    {"layout", {data.sidebarWidth, data.filesWidth, data.treeWidth, data.terminalHeight}},
                                    {"projects", projects},

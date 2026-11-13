@@ -32,6 +32,7 @@ namespace Store {
         std::map<std::string, std::map<std::string, std::string>> defaults;
         std::vector<std::string> machines; // ssh hosts added in Settings, besides those a project is on
         std::string machine; // the working machine: an ssh host, empty = this computer
+        std::vector<std::string> importAsked; // hosts whose earlier sessions were offered once
         std::vector<Project> projects;
         std::vector<std::unique_ptr<Thread>> threads;
     };

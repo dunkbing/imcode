@@ -14,6 +14,13 @@ namespace History {
     // Codex (~/.codex/sessions/<y>/<m>/<d>/rollout-*.jsonl)
     std::vector<Found> scan(int perFolder = 5);
 
+    // the same for a host reached over ssh (one shell command, run there). empty when it
+    // cannot be reached or has none
+    std::vector<Found> scanRemote(const std::string& host, int perFolder = 5);
+    // what the shell command of scanRemote printed: "@@imcode<TAB>mtime<TAB>path" before
+    // each file's first lines. the folders are not checked
+    std::vector<Found> parseRemote(const std::string& output, int perFolder = 5);
+
     // a conversation as its agent's cli writes it on this machine, read as it grows: another
     // client (a terminal) can be followed live, read only
     struct Entry {
