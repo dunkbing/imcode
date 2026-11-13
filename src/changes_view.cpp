@@ -24,6 +24,7 @@ namespace {
     struct ChangeRow {
         int index;
         bool staged;
+        int section; // 0 staged, 1 tracked, 2 not tracked (a turn's list: 1)
     };
 
     // in the browser of this machine
@@ -112,13 +113,14 @@ void App::changesDraw() {
             return error;
         });
     };
-    // the rows: the staged files, then the rest (a partly staged file is in both); a turn's are one list
+    // the rows: the staged files, then the tracked ones with changes left, then the new ones (a
+    // partly staged file is in more than one); a turn's are one list
     std::vector<ChangeRow> rows;
-    for (int pass = 0; pass < (working ? 2 : 1); ++pass) {
+    for (int section = working ? 0 : 1; section < (working ? 3 : 2); ++section) {
         for (int i = 0; i < static_cast<int>(c.list.size()); ++i) {
             const Git::Change& ch = c.list[static_cast<size_t>(i)];
-            if (!working || (pass == 0 ? ch.staged() : ch.unstaged())) {
-                rows.push_back({i, working && pass == 0});
+            if (!working || (section == 0 ? ch.staged() : ch.unstaged() && (section == 2) == (ch.work == '?'))) {
+                rows.push_back({i, working && section == 0, section});
             }
         }
     }
@@ -229,7 +231,13 @@ void App::changesDraw() {
             if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && c.asking.empty()) {
                 const int step = (ImGui::IsKeyPressed(ImGuiKey_DownArrow) ? 1 : 0) - (ImGui::IsKeyPressed(ImGuiKey_UpArrow) ? 1 : 0);
                 if (step != 0) {
-                    select(std::clamp(c.selected + step, 0, static_cast<int>(rows.size()) - 1));
+                    int to = c.selected + step; // past the rows of a folded section
+                    while (to >= 0 && to < static_cast<int>(rows.size()) && working && c.folded[rows[static_cast<size_t>(to)].section]) {
+                        to += step;
+                    }
+                    if (to >= 0 && to < static_cast<int>(rows.size())) {
+                        select(to);
+                    }
                 }
             }
             const bool idle = !c.opOp.isRunning();
@@ -242,27 +250,102 @@ void App::changesDraw() {
                 }
                 return out;
             };
+            const auto filesOfSection = [&](int section) {
+                std::vector<Git::Change> out;
+                for (const ChangeRow& r : rows) {
+                    if (r.section == section) {
+                        out.push_back(c.list[static_cast<size_t>(r.index)]);
+                    }
+                }
+                return out;
+            };
+            const float rowH = ImGui::GetTextLineHeight() + 12;
+            const float listRight = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x; // where the boxes end
+            // a small square: empty, or filled with a check; hit-tested by hand by its caller
+            const auto checkbox = [&](ImDrawList* draw, ImVec2 min, bool on, bool hot) {
+                const ImVec2 max(min.x + 16, min.y + 16);
+                draw->AddRectFilled(min, max, ImGui::GetColorU32(on ? colors.blue : hot ? colors.surface1 : ImVec4(0, 0, 0, 0)), 4);
+                draw->AddRect(min, max, ImGui::GetColorU32(on ? colors.blue : colors.overlay0), 4);
+                if (on) {
+                    ImGui::PushFont(nullptr, 10.0f);
+                    const ImVec2 size = ImGui::CalcTextSize(ICON_FA_CHECK);
+                    draw->AddText(ImVec2(min.x + (16 - size.x) / 2, min.y + (16 - size.y) / 2), ImGui::GetColorU32(colors.crust), ICON_FA_CHECK);
+                    ImGui::PopFont();
+                }
+            };
+            // a status mark: a square outline with a dot (changed), a plus (new) or a minus (deleted)
+            const auto mark = [&](ImDrawList* draw, ImVec2 at, char state) {
+                const ImU32 tone = ImGui::GetColorU32(state == '?' || state == 'A' ? colors.green : state == 'D' ? colors.red : colors.yellow);
+                draw->AddRect(at, ImVec2(at.x + 14, at.y + 14), tone, 3, 0, 1.5f);
+                const ImVec2 mid(at.x + 7, at.y + 7);
+                if (state == 'D') {
+                    draw->AddLine(ImVec2(mid.x - 3, mid.y), ImVec2(mid.x + 3, mid.y), tone, 1.5f);
+                } else if (state == '?' || state == 'A') {
+                    draw->AddLine(ImVec2(mid.x - 3, mid.y), ImVec2(mid.x + 3, mid.y), tone, 1.5f);
+                    draw->AddLine(ImVec2(mid.x, mid.y - 3), ImVec2(mid.x, mid.y + 3), tone, 1.5f);
+                } else {
+                    draw->AddCircleFilled(mid, 2.5f, tone);
+                }
+            };
+            // the top of the list: what the files add up to, and every change staged at once
+            if (working) {
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextColored(colors.green, "+%d", added);
+                ImGui::SameLine(0, 6);
+                ImGui::TextColored(colors.red, "-%d", removed);
+                const std::vector<Git::Change> unstaged = filesOf(false);
+                if (!unstaged.empty()) {
+                    ImGui::SameLine(ImGui::GetContentRegionMax().x - ImGui::CalcTextSize("Stage All").x - 2 * ImGui::GetStyle().FramePadding.x - 8);
+                    ImGui::BeginDisabled(!idle);
+                    if (ImGui::SmallButton("Stage All")) {
+                        edit('s', unstaged);
+                    }
+                    ImGui::EndDisabled();
+                }
+                ImGui::Spacing();
+            }
+            const char* const sectionNames[] = {"Staged", "Tracked", "Untracked"};
             for (int i = 0; i < static_cast<int>(rows.size()); ++i) {
                 const ChangeRow& row = rows[static_cast<size_t>(i)];
                 const Git::Change& change = c.list[static_cast<size_t>(row.index)];
-                if (working && (i == 0 || rows[static_cast<size_t>(i) - 1].staged != row.staged)) {
-                    ImGui::PushID(row.staged ? "staged" : "others");
-                    if (i > 0) {
-                        ImGui::Dummy(ImVec2(0, 4));
+                if (working && (i == 0 || rows[static_cast<size_t>(i) - 1].section != row.section)) {
+                    // a section: fold it, or move all its files across with the box
+                    ImGui::PushID(sectionNames[row.section]);
+                    const std::vector<Git::Change> section = filesOfSection(row.section);
+                    const bool open = !c.folded[row.section];
+                    ImGui::InvisibleButton("##section", ImVec2(ImGui::GetContentRegionAvail().x, rowH));
+                    const ImVec2 start = ImGui::GetItemRectMin(), end = ImGui::GetItemRectMax();
+                    ImDrawList* draw = ImGui::GetWindowDrawList();
+                    const float mid = (start.y + end.y) / 2;
+                    const ImVec2 box(listRight - 8 - 16, mid - 8);
+                    const bool onBox = ImGui::IsMouseHoveringRect(box, ImVec2(box.x + 16, box.y + 16));
+                    if (ImGui::IsItemClicked()) {
+                        if (onBox) {
+                            edit(row.section == 0 ? 'u' : 's', section);
+                        } else {
+                            c.folded[row.section] = open;
+                        }
                     }
-                    const std::vector<Git::Change> section = filesOf(row.staged);
-                    ImGui::AlignTextToFramePadding();
-                    ImGui::TextColored(colors.overlay1, "%s  %zu", row.staged ? "Staged" : "Changes", section.size());
-                    ImGui::SameLine(ImGui::GetContentRegionMax().x - ImGui::CalcTextSize(row.staged ? "Unstage all" : "Stage all").x - 2 * ImGui::GetStyle().FramePadding.x - 8);
-                    ImGui::BeginDisabled(!idle);
-                    if (ImGui::SmallButton(row.staged ? "Unstage all" : "Stage all")) {
-                        edit(row.staged ? 'u' : 's', section);
-                    }
-                    ImGui::EndDisabled();
+                    ImGui::PushFont(nullptr, 10.0f);
+                    draw->AddText(ImVec2(start.x + 8, mid - ImGui::GetTextLineHeight() / 2), ImGui::GetColorU32(colors.overlay1),
+                                  open ? ICON_FA_CHEVRON_DOWN : ICON_FA_CHEVRON_RIGHT);
+                    ImGui::PopFont();
+                    draw->AddText(ImVec2(start.x + 26, mid - ImGui::GetTextLineHeight() / 2), ImGui::GetColorU32(colors.subtext0),
+                                  sectionNames[row.section]);
+                    // the count in a small tag
+                    const std::string count = std::to_string(section.size());
+                    const ImVec2 countSize = ImGui::CalcTextSize(count.c_str());
+                    const float tagRight = box.x - 8;
+                    draw->AddRectFilled(ImVec2(tagRight - countSize.x - 12, mid - 9), ImVec2(tagRight, mid + 9), ImGui::GetColorU32(colors.surface0), 5);
+                    draw->AddText(ImVec2(tagRight - countSize.x - 6, mid - countSize.y / 2), ImGui::GetColorU32(colors.subtext0), count.c_str());
+                    checkbox(draw, box, row.section == 0, onBox && idle);
                     ImGui::PopID();
                 }
+                if (working && c.folded[row.section]) {
+                    continue;
+                }
                 ImGui::PushID(i);
-                if (rowButton("##file", i == c.selected, ImGui::GetTextLineHeight() + 10)) {
+                if (rowButton("##file", i == c.selected, rowH)) {
                     select(i);
                 }
                 const ImVec2 end = ImGui::GetItemRectMax(), start = ImGui::GetItemRectMin();
@@ -270,12 +353,45 @@ void App::changesDraw() {
                                                              ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows));
                 ImDrawList* draw = ImGui::GetWindowDrawList();
                 const char state = !working ? change.kind : row.staged ? change.index : change.work;
-                const ImVec4 tone = state == '?' || state == 'A' ? colors.green : state == 'D' ? colors.red : colors.yellow;
-                const char letter[2] = {state == '?' ? 'U' : state, 0};
-                const float y = start.y + (end.y - start.y - ImGui::GetTextLineHeight()) / 2;
-                draw->AddText(ImVec2(start.x + 8, y), ImGui::GetColorU32(tone), letter);
-                // the name, then its folder dimmed, cut to the row (and short of the buttons)
-                const float buttons = working && over && idle ? (row.staged ? 26.0f : 54.0f) : 0.0f; // the room they take
+                const float mid = (start.y + end.y) / 2;
+                const float y = mid - ImGui::GetTextLineHeight() / 2;
+                mark(draw, ImVec2(start.x + 8, mid - 7), state);
+                // the right side: the staged box (working view), the counts, and on hover the discard button
+                float right = listRight - 8;
+                if (working) {
+                    const ImVec2 box(right - 16, mid - 8);
+                    const bool onBox = ImGui::IsMouseHoveringRect(box, ImVec2(box.x + 16, box.y + 16));
+                    checkbox(draw, box, row.staged, onBox && idle);
+                    if (onBox && idle) {
+                        ImGui::SetTooltip("%s", row.staged ? "Unstage" : "Stage");
+                        if (ImGui::IsMouseClicked(0)) {
+                            edit(row.staged ? 'u' : 's', {change});
+                        }
+                    }
+                    right = box.x - 8;
+                    if (over && idle && !row.staged) { // a staged file is only unstaged here
+                        const ImVec2 lo(right - 26, start.y + 2), hi(right, end.y - 2);
+                        const bool hot = ImGui::IsMouseHoveringRect(lo, hi);
+                        if (hot) {
+                            draw->AddRectFilled(lo, hi, ImGui::GetColorU32(colors.surface1), Round::Row);
+                            ImGui::SetTooltip("%s", change.work == '?' ? "Delete the file" : "Discard the changes");
+                            if (ImGui::IsMouseClicked(0)) {
+                                c.asking = {change};
+                                c.askWant = true;
+                            }
+                        }
+                        const ImVec2 size = ImGui::CalcTextSize(ICON_FA_ROTATE_LEFT);
+                        draw->AddText(ImVec2(lo.x + (26 - size.x) / 2, mid - size.y / 2), ImGui::GetColorU32(colors.text), ICON_FA_ROTATE_LEFT);
+                        right = lo.x - 4;
+                    }
+                }
+                if (change.added >= 0) {
+                    const std::string plus = "+" + std::to_string(change.added), minus = "-" + std::to_string(change.removed);
+                    const float width = ImGui::CalcTextSize(plus.c_str()).x + 6 + ImGui::CalcTextSize(minus.c_str()).x;
+                    draw->AddText(ImVec2(right - width, y), ImGui::GetColorU32(colors.green), plus.c_str());
+                    draw->AddText(ImVec2(right - ImGui::CalcTextSize(minus.c_str()).x, y), ImGui::GetColorU32(colors.red), minus.c_str());
+                    right -= width + 8;
+                }
                 // the name, and only the folder it is in (not the whole path); none for a file at the top
                 std::string shown = change.path;
                 const bool dir = shown.ends_with('/'); // a folder not tracked yet
@@ -286,42 +402,12 @@ void App::changesDraw() {
                 const std::string name = shown.substr(slash == std::string::npos ? 0 : slash + 1) + (dir ? "/" : "");
                 std::string folder = slash == std::string::npos ? "" : shown.substr(0, slash);
                 folder.erase(0, folder.rfind('/') == std::string::npos ? 0 : folder.rfind('/') + 1);
-                draw->PushClipRect(start, ImVec2(end.x - 4 - buttons, end.y), true);
-                draw->AddText(ImVec2(start.x + 26, y), ImGui::GetColorU32(colors.text), name.c_str());
-                draw->AddText(ImVec2(start.x + 34 + ImGui::CalcTextSize(name.c_str()).x, y),
-                              ImGui::GetColorU32(colors.overlay0), folder.c_str());
+                draw->PushClipRect(start, ImVec2(right, end.y), true);
+                draw->AddText(ImVec2(start.x + 30, y), ImGui::GetColorU32(colors.text), name.c_str());
+                draw->AddText(ImVec2(start.x + 38 + ImGui::CalcTextSize(name.c_str()).x, y), ImGui::GetColorU32(colors.overlay0),
+                              folder.c_str());
                 draw->PopClipRect();
-                if (buttons > 0) {
-                    // drawn and hit-tested by hand: items here would change the row's height, and the list would jump
-                    struct Action {
-                        const char* icon;
-                        const char* tip;
-                        char what;
-                    };
-                    const Action actions[] = {{ICON_FA_ROTATE_LEFT, change.work == '?' ? "Delete the file" : "Discard the changes", 'd'},
-                                              {row.staged ? ICON_FA_MINUS : ICON_FA_PLUS, row.staged ? "Unstage" : "Stage", row.staged ? 'u' : 's'}};
-                    const int first = row.staged ? 1 : 0; // a staged file is only unstaged here
-                    float x = end.x - buttons - 12;
-                    for (int a = first; a < 2; ++a, x += 28) {
-                        const ImVec2 lo(x, start.y + 2), hi(x + 26, end.y - 2);
-                        const bool hot = ImGui::IsMouseHoveringRect(lo, hi);
-                        if (hot) {
-                            draw->AddRectFilled(lo, hi, ImGui::GetColorU32(colors.surface1), Round::Row);
-                            ImGui::SetTooltip("%s", actions[a].tip);
-                            if (ImGui::IsMouseClicked(0)) {
-                                if (actions[a].what == 'd') {
-                                    c.asking = {change};
-                                    c.askWant = true;
-                                } else {
-                                    edit(actions[a].what, {change});
-                                }
-                            }
-                        }
-                        const ImVec2 size = ImGui::CalcTextSize(actions[a].icon);
-                        draw->AddText(ImVec2(x + (26 - size.x) / 2, start.y + (end.y - start.y - size.y) / 2),
-                                      ImGui::GetColorU32(colors.text), actions[a].icon);
-                    }
-                } else if (ImGui::IsItemHovered()) {
+                if (ImGui::IsItemHovered() && !over) {
                     ImGui::SetTooltip("%s", change.path.c_str());
                 }
                 ImGui::PopID();

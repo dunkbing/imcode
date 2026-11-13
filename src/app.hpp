@@ -201,6 +201,7 @@ struct App : imshell::Delegate {
         std::vector<Git::Change> list;
         int selected = 0;
         float listWidth = 280;
+        bool folded[3] = {};  // the list sections folded away: staged, tracked, not tracked
         std::string diffFor; // the file `lines` is (being) read for
         std::vector<Diff::Line> lines;
         AcpHost::AsyncOp<std::vector<Git::Change>> listOp;
