@@ -205,6 +205,12 @@ namespace {
                 if (row(path, ICON_FA_FILE, entry.name, depth, path == f.doc.path)) {
                     opened = path;
                 }
+                if (ImGui::BeginPopupContextItem(("##menu" + path).c_str())) {
+                    if (ImGui::MenuItem(ICON_FA_CLOCK_ROTATE_LEFT "  History of this file")) {
+                        f.historyOf = path;
+                    }
+                    ImGui::EndPopup();
+                }
                 continue;
             }
             const bool expanded = f.expanded.contains(path);
@@ -461,6 +467,12 @@ bool App::filesPanel(Thread& t, bool beside) {
     ImGui::EndChild();
     if (!opened.empty()) {
         showFile(opened);
+    }
+    if (!files.historyOf.empty()) {
+        if (current >= 0) {
+            graphOpen(*data.threads[current], files.historyOf);
+        }
+        files.historyOf.clear();
     }
     return released;
 }

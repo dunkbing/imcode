@@ -177,6 +177,13 @@ static int run() {
         std::printf("FAILED: log %zu vs %zu, refs %d\n", history.size(), viaCli.size(), refsShown);
         ok = false;
     }
+    // one file's history: only the commits that touched it
+    const auto ofA = Git::log("", repo.string(), 50, 0, "a.txt");
+    if (ofA.empty() || ofA[0].subject != "more" || ofA.size() >= history.size() + 1 ||
+        !Git::log("", repo.string(), 50, 0, "no-such-file.txt").empty()) {
+        std::printf("FAILED: file history %zu of %zu\n", ofA.size(), history.size());
+        ok = false;
+    }
     // a commit's files: against its first parent, and the first commit against the empty tree
     const auto commitA = std::ranges::find(history, std::string("a"), &Git::LogEntry::subject);
     const auto first = std::ranges::find(history, std::string("first"), &Git::LogEntry::subject);

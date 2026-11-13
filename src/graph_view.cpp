@@ -4,6 +4,7 @@
 
 #include "imshell/button.hpp"
 #include "imshell/components.hpp"
+#include "imshell/shortcut_key.hpp"
 #include "colors.hpp"
 
 #include <algorithm>
@@ -27,12 +28,14 @@ namespace {
     }
 } // namespace
 
-void App::graphOpen(Thread& t) {
+void App::graphOpen(Thread& t, const std::string& path) {
     graph.want = true;
     graph.reload = true;
     graph.done = false;
     graph.host = t.host;
     graph.cwd = t.cwd;
+    graph.path = path;
+    graph.search[0] = 0;
     graph.commits.clear();
     graph.rows.clear();
     graph.lanes = 1;
@@ -44,7 +47,7 @@ void App::graphOpen(Thread& t) {
 void App::graphDraw() {
     Graph& g = graph;
     const Colors colors = themeColors();
-    const std::string key = g.host + "\n" + g.cwd;
+    const std::string key = g.host + "\n" + g.cwd + "\n" + g.path;
     // a page of history, read off the ui thread (a remote is slow); the next one when the end is near
     g.op.check([&](Graph::Page page) {
         if (page.key != key || page.skip != g.commits.size()) {
@@ -52,7 +55,14 @@ void App::graphDraw() {
         }
         g.done = page.got.size() < pageSize;
         g.commits.insert(g.commits.end(), std::make_move_iterator(page.got.begin()), std::make_move_iterator(page.got.end()));
-        g.rows = Git::layoutGraph(g.commits);
+        // one file's history skips commits, so its parents are not in the list: no lines, one lane
+        auto shown = g.commits;
+        if (!g.path.empty()) {
+            for (auto& c : shown) {
+                c.parents.clear();
+            }
+        }
+        g.rows = Git::layoutGraph(shown);
         g.lanes = 1;
         for (const auto& row : g.rows) {
             g.lanes = std::max(g.lanes, row.width);
@@ -60,8 +70,8 @@ void App::graphDraw() {
     });
     const auto more = [&] {
         if (!g.op.isRunning()) {
-            g.op.start([host = g.host, cwd = g.cwd, key, skip = g.commits.size()] {
-                return Graph::Page{key, skip, Git::log(host, cwd, pageSize, skip)};
+            g.op.start([host = g.host, cwd = g.cwd, path = g.path, key, skip = g.commits.size()] {
+                return Graph::Page{key, skip, Git::log(host, cwd, pageSize, skip, path)};
             });
         }
     };
@@ -98,6 +108,59 @@ void App::graphDraw() {
     if (!g.commits.empty()) {
         ImGui::TextColored(colors.overlay1, "%zu%s commits", g.commits.size(), g.done ? "" : "+");
     }
+    if (!g.path.empty()) {
+        ImGui::SameLine();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(colors.blue, "%s", g.path.c_str());
+    }
+    // search: message, author, hash or ref. the matches stay lit; enter jumps to the next one
+    const int count = static_cast<int>(g.commits.size());
+    std::vector<char> hit;
+    int hits = 0;
+    const auto lower = [](std::string s) {
+        std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return s;
+    };
+    const std::string query = lower(g.search);
+    if (!query.empty()) {
+        hit.resize(static_cast<size_t>(count));
+        for (int i = 0; i < count; ++i) {
+            const Git::LogEntry& e = g.commits[static_cast<size_t>(i)];
+            bool found = lower(e.subject).find(query) != std::string::npos || lower(e.author).find(query) != std::string::npos || e.hash.starts_with(query);
+            for (size_t r = 0; !found && r < e.refs.size(); ++r) {
+                found = lower(e.refs[r]).find(query) != std::string::npos;
+            }
+            hit[static_cast<size_t>(i)] = found;
+            hits += found;
+        }
+    }
+    const float searchWidth = 220;
+    ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 2 * button - 6 - searchWidth - 8);
+    if (std::exchange(g.focusSearch, false) ||
+        (imshell::ShortcutKeyDown() && ImGui::IsKeyPressed(ImGuiKey_F, false))) {
+        ImGui::SetKeyboardFocusHere();
+    }
+    const bool none = !query.empty() && hits == 0 && g.done; // nothing in the whole history
+    ImGui::PushStyleColor(ImGuiCol_Text, none ? colors.red : colors.text);
+    ImGui::SetNextItemWidth(searchWidth);
+    const bool jump = ImGui::InputTextWithHint("##find", "Search", g.search, sizeof g.search,
+                                               ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::PopStyleColor();
+    const bool typing = ImGui::IsItemActive() || jump;
+    if (jump) {
+        ImGui::SetKeyboardFocusHere(-1); // stay in the field for the next enter
+        for (int n = 1; n <= count && hits > 0; ++n) {
+            const int i = ((g.selected + (ImGui::GetIO().KeyShift ? -n : n)) % count + count) % count;
+            if (hit[static_cast<size_t>(i)]) {
+                g.selected = i;
+                g.reveal = true;
+                break;
+            }
+        }
+    }
+    if (!query.empty() && !g.done) {
+        more(); // look through the whole history, a page at a time
+    }
     ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 2 * button - 6);
     if (imshell::IconButton(ICON_FA_ROTATE, imshell::ButtonVariant::Secondary, ImVec2(button, button))) {
         g.commits.clear();
@@ -112,7 +175,6 @@ void App::graphDraw() {
     bool close = imshell::IconButton(ICON_FA_XMARK, imshell::ButtonVariant::Secondary, ImVec2(button, button));
     ImGui::Spacing();
 
-    const int count = static_cast<int>(g.commits.size());
     bool open = false;
     if (count == 0) {
         if (g.op.isRunning() || g.reload) {
@@ -125,8 +187,8 @@ void App::graphDraw() {
         const int step = focused ? (ImGui::IsKeyPressed(ImGuiKey_DownArrow) ? 1 : 0) - (ImGui::IsKeyPressed(ImGuiKey_UpArrow) ? 1 : 0) : 0;
         const bool moved = step != 0;
         g.selected = std::clamp(g.selected + step, 0, count - 1);
-        open = focused && (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter));
-        if (focused && ImGui::IsKeyPressed(ImGuiKey_Space, false)) {
+        open = focused && !typing && (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter));
+        if (focused && !typing && ImGui::IsKeyPressed(ImGuiKey_Space, false)) {
             g.expanded = !g.expanded;
         }
         // the selected commit, opened out under its row. details are read ahead for the rows in view
@@ -261,6 +323,11 @@ void App::graphDraw() {
             firstShown = firstShown < 0 ? i : firstShown;
             const Git::LogEntry& e = g.commits[static_cast<size_t>(i)];
             const Git::GraphRow& row = g.rows[static_cast<size_t>(i)];
+            const float fade = !hit.empty() && !hit[static_cast<size_t>(i)] ? 0.3f : 1.0f; // not a match of the search
+            const auto faded = [&](ImVec4 c) {
+                c.w *= fade;
+                return ImGui::GetColorU32(c);
+            };
             ImGui::PushID(i);
             ImGui::SetCursorPosY(top + y);
             if (rowButton("##commit", i == g.selected, rowHeight)) {
@@ -303,17 +370,17 @@ void App::graphDraw() {
                 }
                 ImVec4 fill = tone;
                 fill.w = 0.18f;
-                draw->AddRectFilled(ImVec2(at, start.y + 4), ImVec2(at + width, end.y - 4), ImGui::GetColorU32(fill), Round::Row);
-                draw->AddText(ImVec2(at + 6, textY), ImGui::GetColorU32(tone), label.c_str());
+                draw->AddRectFilled(ImVec2(at, start.y + 4), ImVec2(at + width, end.y - 4), faded(fill), Round::Row);
+                draw->AddText(ImVec2(at + 6, textY), faded(tone), label.c_str());
                 at += width + 6;
             }
             draw->PushClipRect(ImVec2(start.x, start.y), ImVec2(right, end.y), true);
-            draw->AddText(ImVec2(at, textY), ImGui::GetColorU32(colors.text), e.subject.c_str());
+            draw->AddText(ImVec2(at, textY), faded(colors.text), e.subject.c_str());
             draw->PopClipRect();
             draw->PushClipRect(ImVec2(end.x - 190, start.y), ImVec2(end.x - 54, end.y), true);
-            draw->AddText(ImVec2(end.x - 190, textY), ImGui::GetColorU32(colors.overlay1), e.author.c_str());
+            draw->AddText(ImVec2(end.x - 190, textY), faded(colors.overlay1), e.author.c_str());
             draw->PopClipRect();
-            draw->AddText(ImVec2(end.x - 46, textY), ImGui::GetColorU32(colors.overlay0), ago(e.time).c_str());
+            draw->AddText(ImVec2(end.x - 46, textY), faded(colors.overlay0), ago(e.time).c_str());
             draw->PopClipRect();
             if (ImGui::IsItemHovered() && !g.expanded) {
                 ImGui::SetTooltip("%s  %s", e.hash.substr(0, 10).c_str(), e.subject.c_str());
@@ -354,7 +421,11 @@ void App::graphDraw() {
                       e.hash.substr(0, 7) + "  " + e.subject.substr(0, e.subject.find('\n')));
         close = true;
     }
-    close |= ImGui::IsKeyPressed(ImGuiKey_Escape);
+    if (typing && ImGui::IsKeyPressed(ImGuiKey_Escape) && g.search[0]) {
+        g.search[0] = 0; // the first escape clears the search
+    } else {
+        close |= ImGui::IsKeyPressed(ImGuiKey_Escape);
+    }
     close |= ImGui::IsMouseClicked(0) &&
              !ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
     if (close) {

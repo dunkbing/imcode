@@ -95,7 +95,9 @@ namespace Git {
     std::vector<LogEntry> parseLog(std::string_view text);
     // the history of every branch and tag, newest first with parents after children; `limit`
     // entries from `skip`. here or on an ssh host; blocks
-    std::vector<LogEntry> log(const std::string& host, const std::string& cwd, size_t limit, size_t skip);
+    // with a path: the commits that changed that file (renames followed), of the current branch, by the git command
+    std::vector<LogEntry> log(const std::string& host, const std::string& cwd, size_t limit, size_t skip,
+                              const std::string& path = {});
 
     // one commit in full: who, when, the whole message and the files it changed
     struct CommitDetail {

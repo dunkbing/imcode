@@ -299,7 +299,13 @@ namespace Git {
         return out;
     }
 
-    std::vector<LogEntry> log(const std::string& host, const std::string& cwd, size_t limit, size_t skip) {
+    std::vector<LogEntry> log(const std::string& host, const std::string& cwd, size_t limit, size_t skip,
+                              const std::string& path) {
+        if (!path.empty()) {
+            return parseLog(run(host, "cd " + quote(cwd) + " && git log --follow --skip=" + std::to_string(skip) + " -n " +
+                                          std::to_string(limit) + " --format='%H%x1f%P%x1f%an%x1f%at%x1f%D%x1f%s%x1e' -- " +
+                                          quote(path) + " 2>/dev/null"));
+        }
         if (host.empty()) {
             return Local::log(cwd, limit, skip).value_or(std::vector<LogEntry>{});
         }

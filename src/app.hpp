@@ -120,6 +120,7 @@ struct App : imshell::Delegate {
         bool indexed = false;
         Doc doc;
         std::string want; // the file to read next
+        std::string historyOf; // a file the tree menu asked the history of
         AcpHost::AsyncOp<Listing> listOp, indexOp;
         AcpHost::AsyncOp<Doc> readOp;
     } files;
@@ -225,7 +226,9 @@ struct App : imshell::Delegate {
     // the history of the open thread's repository, as a graph in a dialog
     struct Graph {
         bool want = false, reload = false, done = false;
-        std::string host, cwd;
+        std::string host, cwd, path; // path: only the commits that changed this file
+        char search[128] = {};       // matches stay lit, the rest dim; Enter jumps to the next
+        bool focusSearch = false;
         std::vector<Git::LogEntry> commits;
         std::vector<Git::GraphRow> rows;
         int lanes = 1; // the widest row
@@ -241,7 +244,7 @@ struct App : imshell::Delegate {
         std::map<std::string, Git::CommitDetail> cache; // commits read in full, by hash
         AcpHost::AsyncOp<std::pair<std::string, Git::CommitDetail>> detailOp;
     } graph;
-    void graphOpen(Thread& t);
+    void graphOpen(Thread& t, const std::string& path = {});
     void graphDraw();
     // the agent log of the open thread: every line in and out
     struct Log {
