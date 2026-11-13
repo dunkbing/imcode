@@ -43,8 +43,6 @@ endif()
 
 # dear imgui and imgui_rich_md are imshell's submodules (git submodule update --init
 # --recursive). imgui's core is compiled here, once; imshell only adds the backends it uses
-# emoji past U+FFFF in the ui: imgui with 32-bit characters (imshell passes it to everything)
-set(IMSHELL_WCHAR32 ON CACHE BOOL "" FORCE)
 if(WIN32) # windows.h without its min/max macros, for every target here
     add_compile_definitions(NOMINMAX)
     list(APPEND IMCODE_SSH ws2_32)
