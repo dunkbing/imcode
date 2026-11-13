@@ -214,7 +214,10 @@ void Thread::open() {
     // model picker, a slash command): no process for a thread never used
     if (!acp_ && !watching_ && items.empty() && !sessionId.empty()) {
         const std::string path = host.empty() ? History::transcript(agentId, cwd, sessionId) : "";
-        if (!(!path.empty() && History::quietFor(path) < quietSeconds && watch())) {
+        // written in the last minutes by this app (a run before a restart) is not a terminal's
+        const long long wrote = std::time(nullptr) - History::quietFor(path);
+        const bool ours = ownWriteAt > 0 && wrote <= ownWriteAt + 30;
+        if (!(!path.empty() && !ours && History::quietFor(path) < quietSeconds && watch())) {
             ensureStarted();
         }
     }
@@ -315,7 +318,7 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
     if (title.empty()) {
         title = text.empty() ? "Attachment" : text.substr(0, text.find('\n'));
     }
-    updatedAt = std::time(nullptr);
+    updatedAt = ownWriteAt = std::time(nullptr);
     changed_ = true;
     if (!ensureStarted()) {
         if (connectOp_.isRunning()) {
@@ -724,7 +727,7 @@ void Thread::poll() {
         case AcpEvent::Type::TurnEnded:
             idleSize_ = 0;
             idleSinceMs_ = nowMs();
-            updatedAt = std::time(nullptr);
+            updatedAt = ownWriteAt = std::time(nullptr);
             changed_ = true;
             // a stop keeps the queue for the user to decide, unless it was made for "send now"
             next = ev.text != "cancelled" || sendNow_;

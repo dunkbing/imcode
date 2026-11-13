@@ -64,6 +64,7 @@ public:
     bool wantWorktree = false; // the first message makes a worktree and works there
     std::string sessionId; // the agent's id for this conversation: what a restart resumes
     long long updatedAt = 0; // unix seconds of the last prompt or reply
+    long long ownWriteAt = 0; // the same, for this app only: the agent's transcript was last written by it, not by a terminal
     const std::string agentId;
     const std::string host;
     std::vector<Item> items;
