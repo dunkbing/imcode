@@ -632,6 +632,16 @@ void Thread::poll() {
         return;
     }
     acp_->tick(); // sign-in restarts happen here, on the ui thread
+    // its agent appends to the transcript when it loads and when it exits, not only on a prompt:
+    // while it runs, any write there is its own. saved every 15 s, so a quit is within the 30 s slack
+    {
+        const long long now = std::time(nullptr);
+        ownWriteAt = now;
+        if (now - ownSavedAt_ >= 15) {
+            ownSavedAt_ = now;
+            changed_ = true;
+        }
+    }
     bool gone = false;
     bool followAfter = false;
     bool next = false; // a turn ended: the queue moves on

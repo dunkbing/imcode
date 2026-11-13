@@ -151,6 +151,7 @@ private:
     std::unique_ptr<AcpClient> acp_;
     std::string heldUser_; // sent while history replays: shown after it, where it belongs
     bool replaying_ = false;
+    long long ownSavedAt_ = 0;
     bool queued_ = false; // a prompt waits for the session
     // a remote host is reached off the ui thread: the result is the error, empty when
     // connected. what was sent meanwhile waits in heldPrompt_
