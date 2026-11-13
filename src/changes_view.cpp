@@ -99,6 +99,19 @@ void App::changesDraw() {
             return error;
         });
     };
+    // one hunk of the picked file: its lines as shown, then the change itself off the ui thread
+    const auto editHunk = [&](char what, const Git::Change& file, int n, std::vector<Diff::Line> seen) {
+        if (c.opOp.isRunning()) {
+            return;
+        }
+        c.said.clear();
+        c.opOp.start([host = c.host, cwd = c.cwd, what, file, n, seen = std::move(seen)] {
+            std::string error;
+            Git::applyHunk(host, cwd, file, what == 's' ? Git::HunkAction::Stage : what == 'u' ? Git::HunkAction::Unstage : Git::HunkAction::Discard, n,
+                           seen, error);
+            return error;
+        });
+    };
     // the rows: the staged files, then the rest (a partly staged file is in both); a turn's are one list
     std::vector<ChangeRow> rows;
     for (int pass = 0; pass < (working ? 2 : 1); ++pass) {
@@ -317,11 +330,34 @@ void App::changesDraw() {
         if (imshell::ResizablePanel({.min = 300})) {
             if (c.selected >= 0 && c.selected < static_cast<int>(rows.size())) {
                 const Git::Change& change = c.list[static_cast<size_t>(rows[static_cast<size_t>(c.selected)].index)];
+                const std::function<void(int, char)> hunkAction = [&](int n, char what) {
+                    std::vector<Diff::Line> seen;
+                    int at = 0;
+                    for (const Diff::Line& l : c.lines) {
+                        if (l.kind == '~') {
+                            ++at;
+                        } else if (at == n) {
+                            seen.push_back(l);
+                        }
+                    }
+                    if (what == 'd') { // no way back: asked first
+                        c.hunkFile = change;
+                        c.hunkIndex = n;
+                        c.hunkLines = std::move(seen);
+                        c.askWant = true;
+                    } else {
+                        editHunk(what, change, n, std::move(seen));
+                    }
+                };
                 if (c.diffOp.isRunning() && c.lines.empty()) {
                     ui::Progress(-1, "Reading the diff");
                 } else if (c.lines.empty()) {
                     ImGui::TextColored(colors.overlay1, change.kind == 'D' ? "Deleted." : "No text to show (a binary file?).");
-                } else if (diffBlock(change.path, change.added, change.removed, c.lines, 0) && change.kind != 'D') {
+                } else if (diffBlock(change.path, change.added, change.removed, c.lines, 0,
+                                     // a text file the index knows: not a new one, a delete or a rename
+                                     working && (change.kind == 'M' || change.kind == 'A') && change.work != '?' ? hunkAction : nullptr,
+                                     rows[static_cast<size_t>(c.selected)].staged) &&
+                           change.kind != 'D') {
                     showFile(change.path); // in the files panel, beside the chat
                     close = true;
                 }
@@ -345,7 +381,10 @@ void App::changesDraw() {
     ImGui::PopStyleColor(2);
     if (asked) {
         const size_t fresh = static_cast<size_t>(std::ranges::count(c.asking, '?', &Git::Change::work));
-        if (c.asking.size() == 1) {
+        if (c.asking.empty()) { // one hunk
+            ImGui::TextUnformatted("Discard this change?");
+            ImGui::TextColored(colors.overlay1, "%s", c.hunkFile.path.c_str());
+        } else if (c.asking.size() == 1) {
             ImGui::TextUnformatted(fresh ? "Delete this file?" : "Discard the changes in this file?");
             ImGui::TextColored(colors.overlay1, "%s", c.asking[0].path.c_str());
         } else {
@@ -358,10 +397,14 @@ void App::changesDraw() {
         ImGui::Spacing();
         if (imshell::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
             c.asking.clear();
+            c.hunkIndex = -1;
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
         if (imshell::Button(c.asking.size() == 1 && fresh ? "Delete" : "Discard", imshell::ButtonVariant::Primary)) {
+            if (c.asking.empty() && c.hunkIndex >= 0) {
+                editHunk('d', c.hunkFile, std::exchange(c.hunkIndex, -1), std::move(c.hunkLines));
+            }
             edit('d', std::exchange(c.asking, {}));
             ImGui::CloseCurrentPopup();
         }

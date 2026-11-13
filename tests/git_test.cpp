@@ -184,6 +184,53 @@ static int run() {
         std::printf("FAILED: file history %zu of %zu\n", ofA.size(), history.size());
         ok = false;
     }
+    // hunks: stage one, unstage it, throw the other away
+    {
+        std::ofstream(repo / "h.txt") << "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\nl12\nl13\nl14\nl15\nl16\nl17\nl18\nl19\nl20\nl21\nl22\nl23\nl24\nl25\nl26\nl27\nl28\nl29\nl30\n";
+        shell("git -C " + q(repo) + " add h.txt && git -C " + q(repo) + " commit -q -m hfile");
+        std::ofstream(repo / "h.txt") << "l1\nX2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\nl12\nl13\nl14\nl15\nl16\nl17\nl18\nl19\nl20\nl21\nl22\nl23\nl24\nl25\nl26\nl27\nX28\nl29\nl30\n";
+        const auto list = Git::changes("", repo.string());
+        const auto file = std::ranges::find(list, std::string("h.txt"), &Git::Change::path);
+        const auto hunkOf = [](const std::vector<Diff::Line>& lines, int n) {
+            std::vector<Diff::Line> out;
+            int at = 0;
+            for (const auto& l : lines) {
+                if (l.kind == '~') {
+                    ++at;
+                } else if (at == n) {
+                    out.push_back(l);
+                }
+            }
+            return out;
+        };
+        const auto grep = [&](const char* what, const char* text) {
+            return shell("git -C " + q(repo) + " " + what + " | grep -q " + text) == 0;
+        };
+        bool hunksOk = file != list.end();
+        std::string error;
+        if (hunksOk) {
+            const auto lines = Git::fileDiff("", repo.string(), *file, Git::Side::Unstaged);
+            hunksOk = std::ranges::count(lines, '~', &Diff::Line::kind) == 1; // two hunks
+            hunksOk = hunksOk && Git::applyHunk("", repo.string(), *file, Git::HunkAction::Stage, 0, hunkOf(lines, 0), error);
+            hunksOk = hunksOk && grep("diff --cached", "X2") && !grep("diff --cached", "X28");
+            const auto staged = Git::fileDiff("", repo.string(), *file, Git::Side::Staged);
+            hunksOk = hunksOk && Git::applyHunk("", repo.string(), *file, Git::HunkAction::Unstage, 0, hunkOf(staged, 0), error);
+            hunksOk = hunksOk && shell("git -C " + q(repo) + " diff --cached --quiet") == 0;
+            // a stale view is refused
+            auto stale = hunkOf(lines, 1);
+            stale[0].text += "?";
+            hunksOk = hunksOk && !Git::applyHunk("", repo.string(), *file, Git::HunkAction::Discard, 1, stale, error);
+            hunksOk = hunksOk && Git::applyHunk("", repo.string(), *file, Git::HunkAction::Discard, 1, hunkOf(lines, 1), error);
+            std::ifstream in(repo / "h.txt");
+            const std::string text((std::istreambuf_iterator<char>(in)), {});
+            hunksOk = hunksOk && text.find("X2\n") != std::string::npos && text.find("X28") == std::string::npos;
+        }
+        if (!hunksOk) {
+            std::printf("FAILED: hunks: %s\n", error.c_str());
+            ok = false;
+        }
+        shell("git -C " + q(repo) + " checkout -q -- h.txt");
+    }
     // a commit's files: against its first parent, and the first commit against the empty tree
     const auto commitA = std::ranges::find(history, std::string("a"), &Git::LogEntry::subject);
     const auto first = std::ranges::find(history, std::string("first"), &Git::LogEntry::subject);

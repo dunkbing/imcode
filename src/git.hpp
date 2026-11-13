@@ -74,6 +74,15 @@ namespace Git {
     std::string stageScript(const std::vector<Change>& files);
     std::string unstageScript(const std::vector<Change>& files);
     std::string discardScript(const std::vector<Change>& files);
+    // one hunk of a file's diff, staged, unstaged or thrown away: the patch of just that hunk
+    // goes to `git apply`. `seen` is the hunk's lines as the user was shown them: a file that
+    // changed since is refused instead of patching the wrong place. blocks
+    enum class HunkAction { Stage, Unstage, Discard };
+    bool applyHunk(const std::string& host, const std::string& cwd, const Change& change, HunkAction action, int hunk,
+                   const std::vector<Diff::Line>& seen, std::string& error);
+    // the patch for hunk n of a unified diff, with the file's headers; empty when there is no such
+    // hunk or its lines are not `seen`
+    std::string hunkPatch(std::string_view unified, int n, const std::vector<Diff::Line>& seen);
 
     // the staged changes committed with `message` (staged_only), else every change; the git
     // command runs, so the repository's hooks and signing do. then, with push, the branch pushed (its upstream

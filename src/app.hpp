@@ -208,6 +208,9 @@ struct App : imshell::Delegate {
         std::string selKey;                        // the picked row (path, side), kept across reloads
         AcpHost::AsyncOp<std::string> opOp;        // stage, unstage or discard: the error, empty when done
         std::vector<Git::Change> asking;           // files to discard, until the user says yes
+        Git::Change hunkFile;                      // a hunk to discard, until the user says yes
+        int hunkIndex = -1;
+        std::vector<Diff::Line> hunkLines;
         bool askWant = false;
         // the commit bar: a message, then commit (and push), then a pull request
         char message[2048] = "";
@@ -298,7 +301,9 @@ struct App : imshell::Delegate {
     void threadView(Thread& t);
     void threadBody(Thread& t);
     void transcriptItem(Thread& t, Item& item, int index, float width);
-    bool diffBlock(const std::string& path, int added, int removed, const std::vector<Diff::Line>& lines, float maxHeight);
+    // onHunk (changes dialog): a button per hunk, called with its number and 's'tage, 'u'nstage or 'd'iscard
+    bool diffBlock(const std::string& path, int added, int removed, const std::vector<Diff::Line>& lines, float maxHeight,
+                   const std::function<void(int, char)>& onHunk = nullptr, bool staged = false);
     bool toolGroupRow(Thread& t, size_t from, size_t to, float width, bool shown);
     void composer(Thread& t, float width);
 

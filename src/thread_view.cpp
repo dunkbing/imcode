@@ -157,7 +157,8 @@ bool App::toolGroupRow(Thread& t, size_t from, size_t to, float width, bool show
 
 // a file's diff in a dark box: its name (true when clicked), +added -removed, then the lines
 // tinted. at most maxHeight tall (0: fills the room), scrolling inside
-bool App::diffBlock(const std::string& path, int added, int removed, const std::vector<Diff::Line>& lines, float maxHeight) {
+bool App::diffBlock(const std::string& path, int added, int removed, const std::vector<Diff::Line>& lines, float maxHeight,
+                   const std::function<void(int, char)>& onHunk, bool staged) {
     const Colors colors = themeColors();
     bool clicked = false;
     ImGui::PushStyleColor(ImGuiCol_ChildBg, colors.crust);
@@ -187,6 +188,15 @@ bool App::diffBlock(const std::string& path, int added, int removed, const std::
     ImGui::Dummy(ImVec2(0, 4));
     ImDrawList* draw = ImGui::GetWindowDrawList();
     const float width = std::max(ImGui::GetContentRegionAvail().x, 2000.0f);
+    // which hunk each line is in: the '~' lines divide them
+    std::vector<int> hunkNo;
+    if (onHunk) {
+        int n = 0;
+        for (const Diff::Line& l : lines) {
+            n += l.kind == '~';
+            hunkNo.push_back(n);
+        }
+    }
     // only the lines in view are drawn: a long diff stays cheap
     ImGuiListClipper clipper;
     clipper.Begin(static_cast<int>(lines.size()), lineHeight);
@@ -205,6 +215,28 @@ bool App::diffBlock(const std::string& path, int added, int removed, const std::
             } else {
                 ImGui::TextColored(line.kind == '+' ? colors.green : line.kind == '-' ? colors.red : colors.subtext0,
                                    "%c %s", line.kind, line.text.c_str());
+            }
+            // the first line of a hunk: stage or unstage it, or throw it away
+            if (onHunk && line.kind != '~' && (k == 0 || lines[static_cast<size_t>(k) - 1].kind == '~')) {
+                using Action = std::pair<const char*, char>;
+                const std::vector<Action> actions = staged ? std::vector<Action>{{"Unstage", 'u'}} : std::vector<Action>{{"Stage", 's'}, {"Discard", 'd'}};
+                float x = ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - 14;
+                ImGui::PushID(k);
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface1);
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, colors.surface2);
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+                for (auto action = actions.rbegin(); action != actions.rend(); ++action) { // right to left
+                    x -= ImGui::CalcTextSize(action->first).x + 2 * ImGui::GetStyle().FramePadding.x;
+                    ImGui::SetCursorScreenPos(ImVec2(x, at.y - 1));
+                    if (ImGui::SmallButton(action->first)) {
+                        onHunk(hunkNo[static_cast<size_t>(k)], action->second);
+                    }
+                    x -= 4;
+                }
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor(3);
+                ImGui::PopID();
             }
             ImGui::SetCursorScreenPos(ImVec2(at.x, at.y + lineHeight));
             ImGui::Dummy(ImVec2(0, 0)); // imgui wants an item after a cursor move

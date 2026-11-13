@@ -477,6 +477,66 @@ namespace Git {
         return operate(host, cwd, files, error, discardScript(files), Local::discard);
     }
 
+    std::string hunkPatch(std::string_view unified, int n, const std::vector<Diff::Line>& seen) {
+        std::string header;
+        std::vector<std::string> hunks;
+        for (size_t at = 0; at < unified.size();) {
+            const size_t end = std::min(unified.find('\n', at), unified.size());
+            const std::string line(unified.substr(at, end - at));
+            at = end + 1;
+            if (line.starts_with("@@")) {
+                hunks.push_back(line + "\n");
+            } else if (hunks.empty()) {
+                header += line + "\n";
+            } else {
+                hunks.back() += line + "\n";
+            }
+        }
+        if (n < 0 || n >= static_cast<int>(hunks.size())) {
+            return "";
+        }
+        // the hunk's lines against what was shown ("\ No newline" notes are not lines)
+        std::vector<Diff::Line> now = parseDiff(header + hunks[static_cast<size_t>(n)]);
+        if (now.size() != seen.size()) {
+            return "";
+        }
+        for (size_t i = 0; i < now.size(); ++i) {
+            if (now[i].kind != seen[i].kind || now[i].text != seen[i].text) {
+                return "";
+            }
+        }
+        return header + hunks[static_cast<size_t>(n)];
+    }
+
+    bool applyHunk(const std::string& host, const std::string& cwd, const Change& change, HunkAction action, int hunk,
+                   const std::vector<Diff::Line>& seen, std::string& error) {
+        const bool fromIndex = action == HunkAction::Unstage; // the staged diff; else the folder's against the index
+        std::string unified;
+        if (host.empty()) {
+            unified = Local::fileDiff(cwd, change, fromIndex ? Side::Staged : Side::Unstaged).value_or("");
+        } else {
+            unified = run(host, "cd " + quote(cwd) + " && git diff " + (fromIndex ? "--cached " : "") + "-- " + pathspec(change.path));
+        }
+        const std::string patch = hunkPatch(unified, hunk, seen);
+        if (patch.empty()) {
+            error = "The file changed since it was shown: read the diff again.";
+            return false;
+        }
+        // staging and unstaging touch the index; discarding takes the hunk out of the folder
+        const std::string flags = action == HunkAction::Stage ? "--cached" : action == HunkAction::Unstage ? "--cached -R" : "-R";
+        constexpr std::string_view ok = "__imcode_ok__";
+        std::string out = run(host, "cd " + quote(cwd) + " && git apply " + flags + " - 2>&1 <<'IMCODE_PATCH' && echo " + std::string(ok) +
+                                        "\n" + patch + "IMCODE_PATCH\n");
+        while (!out.empty() && out.back() == '\n') {
+            out.pop_back();
+        }
+        if (out.ends_with(ok)) {
+            return true;
+        }
+        error = out.empty() ? "git did not answer" : out;
+        return false;
+    }
+
     bool commit(const std::string& host, const std::string& cwd, const std::string& message, bool push,
                 std::string& output, bool stagedOnly) {
         // the git command commits, so the repository's hooks and signing run (libgit2 runs neither)
