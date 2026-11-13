@@ -170,6 +170,10 @@ void App::setup() {
             std::ranges::none_of(agentsOn(), [&](const AcpAgentDef* d) { return d->id == agent; })) {
             agent = ""; // newThread picks the first agent that is on
         }
+        // the working machine, when it has a project: new threads start there
+        if (const int on = projectOn(data.machine); on >= 0 && data.projects[where].host != data.machine) {
+            where = on;
+        }
         newThread(where, agent);
     }
     // ui checks: IMCODE_DEV_SEND=<text> starts a thread in the first project before any frame
@@ -397,6 +401,15 @@ void App::newThread(int projectIndex, std::string agentId) {
         agentId = current >= 0 ? data.threads[current]->agentId : on.front()->id;
     }
     const Store::Project p = data.projects[projectIndex];
+    if (p.host != data.machine) { // the thread's machine becomes the working one, so it shows in the list
+        data.machine = p.host;
+        if (filterProject >= 0 && filterProject < static_cast<int>(data.projects.size()) &&
+            data.projects[filterProject].host != p.host) {
+            filterProject = -1;
+            data.filter = {};
+        }
+        save();
+    }
     dropDraft();
     data.threads.push_back(std::make_unique<Thread>(p.cwd, agentId, p.host));
     data.threads.back()->wanted = data.defaults[agentId];

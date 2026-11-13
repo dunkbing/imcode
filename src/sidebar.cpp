@@ -152,9 +152,9 @@ void App::sidebar() {
             return std::tolower(static_cast<unsigned char>(a)) ==
                    std::tolower(static_cast<unsigned char>(b));
         });
-        const bool listed = filterProject < 0 || filterProject >= static_cast<int>(data.projects.size()) ||
+        const bool listed = t.host == data.machine && (filterProject < 0 || filterProject >= static_cast<int>(data.projects.size()) ||
                             (t.host == data.projects[filterProject].host &&
-                             t.projectDir() == data.projects[filterProject].cwd);
+                             t.projectDir() == data.projects[filterProject].cwd));
         archivedCount += !t.title.empty() && listed && t.archived;
         if (!t.title.empty() && listed && t.archived == showArchived && (query.empty() || !found.empty())) {
             order.push_back(i);
@@ -310,6 +310,95 @@ void App::sidebar() {
         ImGui::SetTooltip("Settings");
     }
 
+    // the working machine: the list shows its threads, new threads start there
+    ImGui::SameLine();
+    pickOp.check([&](MachineTry r) {
+        if (r.host != data.machine) {
+            return; // another one was picked meanwhile
+        }
+        pickError = r.ok ? "" : r.error.message;
+        if (r.error.needsSecret) { // the add dialog asks for it
+            settingsWant = machineAdding = machineFocus = machineAskSecret = true;
+            settingsTab = 2;
+            machineError = r.error.message;
+            machineSecret.clear();
+            std::snprintf(machineInput, sizeof(machineInput), "%s", r.host.c_str());
+        }
+    });
+    const bool away = !data.machine.empty();
+    const std::string machineLabel =
+        std::string(away ? ICON_FA_SERVER : ICON_FA_LAPTOP) + "  " + (away ? cut(data.machine, 18) : std::string("This computer"));
+    if (imshell::Button(machineLabel.c_str(), imshell::ButtonVariant::Secondary, ImVec2(0, button))) {
+        ImGui::OpenPopup("machines");
+    }
+    const ImVec2 machineMin = ImGui::GetItemRectMin();
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(pickOp.isRunning() ? "Connecting..." : "Working machine");
+    }
+    ImGui::SetNextWindowPos(ImVec2(machineMin.x, machineMin.y - 6), ImGuiCond_Always, ImVec2(0, 1));
+    ImGui::SetNextWindowSize(ImVec2(260, 0));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Round::Dialog);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
+    const bool choosing = ImGui::BeginPopup("machines");
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor();
+    if (choosing) {
+        const float line = ImGui::GetTextLineHeight();
+        // one row: a server icon, the name, a dot while connected, a check on the working one
+        auto row = [&](const std::string& id, const char* icon, const std::string& name, bool chosen, int dot) {
+            const ImVec2 at = ImGui::GetCursorPos();
+            const float width = ImGui::GetContentRegionAvail().x;
+            const bool clicked = rowButton(("##m" + id).c_str(), chosen, line + 12);
+            const ImVec2 next = ImGui::GetCursorPos();
+            ImGui::SetCursorPos(ImVec2(at.x + 10, at.y + 6));
+            ImGui::TextColored(colors.subtext0, "%s", icon);
+            ImGui::SameLine(at.x + 38);
+            ImGui::TextUnformatted(name.c_str());
+            if (dot >= 0) {
+                const ImVec2 end = ImGui::GetItemRectMax();
+                ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(end.x + 10, end.y - line * 0.5f), 3,
+                                                            ImGui::GetColorU32(dot ? colors.green : colors.surface2));
+            }
+            if (chosen) {
+                ImGui::SetCursorPos(ImVec2(at.x + width - 24, at.y + 6));
+                ImGui::TextColored(colors.blue, ICON_FA_CHECK);
+            }
+            ImGui::SetCursorPos(ImVec2(next.x, next.y - ImGui::GetStyle().ItemSpacing.y + 2));
+            ImGui::Dummy(ImVec2(0, 0)); // imgui wants an item after a cursor move
+            return clicked;
+        };
+        if (row("local", ICON_FA_LAPTOP, "This computer", !away, -1)) {
+            selectMachine("");
+            ImGui::CloseCurrentPopup();
+        }
+        for (const auto& host : machineHosts()) {
+            if (row("h" + host, ICON_FA_SERVER, host, host == data.machine, Ssh::connected(host))) {
+                selectMachine(host);
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::Separator();
+        if (row("add", ICON_FA_PLUS, "Add a machine...", false, -1)) {
+            settingsWant = machineAdding = machineFocus = true; // its dialog opens over the settings
+            settingsTab = 2;
+            machineError.clear();
+            machineAskSecret = false;
+            machineSecret.clear();
+            machineTrying.clear();
+            machineInput[0] = 0;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+    if (!pickError.empty()) {
+        ImGui::SameLine();
+        ImGui::TextColored(colors.red, ICON_FA_TRIANGLE_EXCLAMATION);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("%s", pickError.c_str());
+        }
+    }
+
     if (remove >= 0) {
         const bool wasCurrent = remove == current;
         terminals.erase(data.threads[remove].get());
@@ -318,5 +407,39 @@ void App::sidebar() {
         save();
     } else if (open >= 0) {
         select(open);
+    }
+}
+
+std::vector<std::string> App::machineHosts() const {
+    std::vector<std::string> hosts = data.machines;
+    for (const auto& project : data.projects) {
+        if (!project.host.empty() && std::ranges::find(hosts, project.host) == hosts.end()) {
+            hosts.push_back(project.host);
+        }
+    }
+    return hosts;
+}
+
+int App::projectOn(const std::string& host) const {
+    const auto at = std::ranges::find(data.projects, host, &Store::Project::host);
+    return at == data.projects.end() ? -1 : static_cast<int>(at - data.projects.begin());
+}
+
+void App::selectMachine(const std::string& host) {
+    pickError.clear();
+    data.machine = host;
+    const bool filtered = filterProject >= 0 && filterProject < static_cast<int>(data.projects.size());
+    if (filtered && data.projects[filterProject].host != host) {
+        filterProject = -1; // that project is on another machine
+        data.filter = {};
+    }
+    project = filterProject >= 0 ? filterProject : projectOn(host); // -1: new threads ask for a folder there
+    save();
+    if (!host.empty() && !Ssh::connected(host) && !pickOp.isRunning()) {
+        pickOp.start([host] {
+            MachineTry out{.host = host};
+            out.ok = Ssh::session(host, "", out.error) != nullptr;
+            return out;
+        });
     }
 }

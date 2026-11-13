@@ -93,7 +93,20 @@ struct App : imshell::Delegate {
     bool machineAdding = false;     // the field for a new machine is open
     bool machineFocus = false;
     char machineInput[256] = "";
-    std::string machineError;
+    std::string machineError, machineSecret; // the add dialog: what failed, and a password it may ask for
+    bool machineAskSecret = false;
+    std::string pickError; // the machine picked in the sidebar could not be reached
+    // connecting to a host, off the ui thread: the add dialog tries the typed one, the sidebar the one picked
+    struct MachineTry {
+        std::string typed, host;
+        bool ok = false;
+        Ssh::Error error;
+    };
+    AcpHost::AsyncOp<MachineTry> machineOp, pickOp;
+    std::string machineTrying; // the host the add dialog waits for
+    void selectMachine(const std::string& host); // the working machine: "" = this computer
+    std::vector<std::string> machineHosts() const; // the ones added, then those a project is on
+    int projectOn(const std::string& host) const; // the first project there, or -1
     int switchProjectTo = -1; // picked in the projects popup: applied after the frame's ui
     bool sidebarOpen = false; // narrow windows (phones): the thread list covers the thread
     bool devOpenModels = false; // ui checks: open the model popup once

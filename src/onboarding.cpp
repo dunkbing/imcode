@@ -288,12 +288,7 @@ void App::settingsDraw() {
             return forget;
         };
         machine(computerName(), "ImCode " IMCODE_VERSION, true, false);
-        std::vector<std::string> hosts = data.machines;
-        for (const auto& project : data.projects) {
-            if (!project.host.empty() && std::ranges::find(hosts, project.host) == hosts.end()) {
-                hosts.push_back(project.host);
-            }
-        }
+        const std::vector<std::string> hosts = machineHosts();
         if (hosts.empty()) {
             ImGui::TextColored(colors.overlay1, "No other machines yet.");
         }
@@ -315,6 +310,9 @@ void App::settingsDraw() {
             machineAdding = true; // its dialog opens below, over the settings
             machineFocus = true;
             machineError.clear();
+            machineAskSecret = false;
+            machineSecret.clear();
+            machineTrying.clear();
             machineInput[0] = 0;
         }
         break;
@@ -361,12 +359,34 @@ void App::settingsDraw() {
     }
     // adding a machine: a dialog over the settings. its own escape and outside click close it, not these
     bool nested = false;
+    bool done = false; // the machine answered: the dialog closes
     static std::vector<SSHHostEntry> configured; // ~/.ssh/config, read when the dialog opens
     if (std::exchange(machineAdding, false)) {
         const char* config = std::getenv("IMCODE_SSH_CONFIG");
         configured = parseSSHConfig(config ? config : "");
         ImGui::OpenPopup("##addMachine");
     }
+    // a machine is saved only once ssh reached it; an answer for a dialog closed meanwhile is dropped
+    machineOp.check([&](MachineTry r) {
+        if (r.host != machineTrying) {
+            return;
+        }
+        if (r.ok) {
+            if (std::ranges::find(data.machines, r.host) == data.machines.end()) {
+                data.machines.push_back(r.host);
+            }
+            save();
+            machineTrying.clear();
+            done = true;
+        } else {
+            machineError = r.error.message;
+            machineAskSecret = r.error.needsSecret;
+            if (machineAskSecret) {
+                machineSecret.clear();
+                machineFocus = true;
+            }
+        }
+    });
     ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(std::min(520.0f, vp->WorkSize.x - 32), 0));
     ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
@@ -385,22 +405,28 @@ void App::settingsDraw() {
             return std::ranges::find(data.machines, host) != data.machines.end() ||
                    std::ranges::any_of(data.projects, [&](const Store::Project& p) { return p.host == host; });
         };
-        // true: added, and the dialog is done
+        const bool connecting = machineOp.isRunning();
+        // connects first; the answer is handled above, next frame
         const auto add = [&](const std::string& typed, const std::string& host) {
             // words are only for a pasted ssh command: anything else with a space is not a target
             const bool spaced = typed.find_first_of(" \t") != std::string::npos;
+            if (connecting) {
+                return;
+            }
             if (host.empty() || (spaced && !typed.starts_with("ssh "))) {
                 machineError = "bad ssh target \"" + typed + "\"";
-            } else if (known(host)) {
+            } else if (known(host) && !machineAskSecret) {
                 machineError = host + " is already there";
             } else {
-                data.machines.push_back(host);
-                save();
-                return true;
+                machineError.clear();
+                machineTrying = host;
+                machineOp.start([host, secret = machineSecret] {
+                    MachineTry out{.host = host};
+                    out.ok = Ssh::session(host, secret, out.error) != nullptr;
+                    return out;
+                });
             }
-            return false;
         };
-        bool done = false;
         ImGui::PushFont(nullptr, 18.0f);
         ImGui::TextUnformatted("Add a machine");
         ImGui::PopFont();
@@ -434,7 +460,8 @@ void App::settingsDraw() {
             }
             ImGui::SameLine(ImGui::GetContentRegionMax().x - addWidth);
             if (imshell::Button("Add", imshell::ButtonVariant::Secondary, ImVec2(addWidth, 0))) {
-                done = add(entry.alias, entry.alias);
+                std::snprintf(machineInput, sizeof(machineInput), "%s", entry.alias.c_str());
+                add(entry.alias, entry.alias);
             }
             ImGui::PopID();
         }
@@ -451,16 +478,33 @@ void App::settingsDraw() {
                                               ImGuiInputTextFlags_EnterReturnsTrue);
         ImGui::SameLine(0, 8);
         enter |= imshell::Button("Add##typed", imshell::ButtonVariant::Primary, ImVec2(addWidth, 0));
-        if (enter) {
-            done = add(machineInput, Ssh::destination(machineInput));
-        }
-        if (!machineError.empty()) {
+        if (machineAskSecret) {
             ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
-            ImGui::TextColored(colors.red, "%s", machineError.c_str());
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - addWidth - 8);
+            if (std::exchange(machineFocus, false)) {
+                ImGui::SetKeyboardFocusHere();
+            }
+            enter |= ui::TextField("Password or key passphrase", machineSecret,
+                                   {.password = true, .flags = ImGuiInputTextFlags_EnterReturnsTrue});
+        }
+        if (enter) {
+            add(machineInput, Ssh::destination(machineInput));
+        }
+        if (connecting) {
+            ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
+            ui::Progress(-1, "Connecting");
+        } else if (!machineError.empty()) {
+            ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
+            ImGui::PushStyleColor(ImGuiCol_Text, machineAskSecret ? colors.yellow : colors.red);
+            ImGui::TextWrapped("%s", machineError.c_str());
+            ImGui::PopStyleColor();
         }
         if (done || ImGui::IsKeyPressed(ImGuiKey_Escape) ||
             (ImGui::IsMouseClicked(0) && !ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows |
                                                                  ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))) {
+            if (!done) {
+                machineTrying.clear(); // abandoned: a late answer is dropped
+            }
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
