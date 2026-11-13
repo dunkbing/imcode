@@ -328,7 +328,7 @@ void App::sidebar() {
         }
     });
     const bool away = !data.machine.empty();
-    const std::string machineLabel =
+    const std::string machineLabel = pickOp.isRunning() ? std::string(ICON_FA_SERVER "  Connecting...") :
         std::string(away ? ICON_FA_SERVER : ICON_FA_LAPTOP) + "  " + (away ? cut(data.machine, 18) : std::string("This computer"));
     if (imshell::Button(machineLabel.c_str(), imshell::ButtonVariant::Secondary, ImVec2(0, button))) {
         ImGui::OpenPopup("machines");

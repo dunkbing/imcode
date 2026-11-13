@@ -269,7 +269,8 @@ namespace History {
             Ssh::Error error;
             const auto session = Ssh::session(host, "", error);
             std::string failed, out;
-            auto lines = session ? session->exec(script, nullptr, failed) : nullptr;
+            // sh -c: the host's login shell may be zsh, which fails a whole command on an unmatched glob
+            auto lines = session ? session->exec("sh -c " + quoted(script), nullptr, failed) : nullptr;
             for (std::string line; lines && lines->readLine(line);) {
                 out += line + "\n";
             }
@@ -318,9 +319,9 @@ namespace History {
         // the newest session files, each with its first lines (long lines cut: a picture in one)
         const std::string list =
             "ls -t \"$HOME\"/.claude/projects/*/*.jsonl \"$HOME\"/.codex/sessions/*/*/*/rollout-*.jsonl 2>/dev/null"
-            " | head -150 | while IFS= read -r f; do"
+            " | head -100 | while IFS= read -r f; do"
             " t=$(stat -c %Y \"$f\" 2>/dev/null || stat -f %m \"$f\" 2>/dev/null);"
-            " printf '@@imcode\\t%s\\t%s\\n' \"$t\" \"$f\"; head -n 200 \"$f\" | cut -c1-3000; done";
+            " printf '@@imcode\\t%s\\t%s\\n' \"$t\" \"$f\"; head -n 80 \"$f\" | cut -c1-1500; done";
         auto found = parseRemote(runOn(host, list), perFolder);
         // only folders that are still there
         std::string check = "for d in";

@@ -659,9 +659,9 @@ void App::importDialog() {
     ImGui::PopFont();
     ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
     ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
-    ImGui::TextWrapped("Your Claude Code and Codex history on this machine has %zu projects with %zu threads. "
+    ImGui::TextWrapped("Your Claude Code and Codex history on this machine has %zu project%s with %zu thread%s. "
                        "Import them to pick up where you left off.",
-                       folders.size(), in.found.size());
+                       folders.size(), folders.size() == 1 ? "" : "s", in.found.size(), in.found.size() == 1 ? "" : "s");
     ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0, Theme::Spacing::L));
     const float width = 96;

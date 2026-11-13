@@ -821,10 +821,12 @@ namespace Ssh {
         }
         auto made = connect(host, useSecret, error);
         if (made) {
-            std::lock_guard lock(cacheMutex);
-            cache[host] = made;
-            secrets[host] = useSecret;
-            if (!secret.empty()) { // typed and it worked: kept for the next launch
+            {
+                std::lock_guard lock(cacheMutex);
+                cache[host] = made;
+                secrets[host] = useSecret;
+            }
+            if (!secret.empty()) { // typed and it worked: kept for the next launch. outside the lock: the keychain can wait on a prompt, and the ui polls connected()
                 Keychain::write(keychain, host, secret);
             }
         } else if (fromKeychain && error.needsSecret) {

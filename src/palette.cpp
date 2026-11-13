@@ -46,6 +46,12 @@ namespace {
 void App::paletteOpen(bool actions) {
     palette.wantOpen = true;
     palette.step = actions ? Palette::Step::Actions : Palette::Step::Sources;
+    // a folder is added on the working machine: skip the choice of source and browse there
+    if (!actions && !data.machine.empty() && !palette.op.isRunning()) {
+        palette.step = Palette::Step::Host;
+        palette.host = data.machine;
+        paletteGo(data.machine, "");
+    }
 }
 
 // list a folder of the host ("" = its home folder); a remote host is connected first
