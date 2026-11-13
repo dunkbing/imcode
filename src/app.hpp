@@ -121,6 +121,7 @@ struct App : imshell::Delegate {
         Doc doc;
         std::string want; // the file to read next
         std::string historyOf; // a file the tree menu asked the history of
+        int tab = 0;           // the right panel shows: 0 the files, 1 the changes
         AcpHost::AsyncOp<Listing> listOp, indexOp;
         AcpHost::AsyncOp<Doc> readOp;
     } files;
@@ -200,7 +201,8 @@ struct App : imshell::Delegate {
         std::string title;    // what the dialog says it shows; empty: by from
         std::vector<Git::Change> list;
         int selected = 0;
-        float listWidth = 280;
+        float listWidth = 280, listHeight = 200; // the files beside the diff (dialog), above it (docked)
+        double readAt = 0;                         // docked: when the list was last read
         bool folded[3] = {};  // the list sections folded away: staged, tracked, not tracked
         std::string diffFor; // the file `lines` is (being) read for
         std::vector<Diff::Line> lines;
@@ -222,11 +224,13 @@ struct App : imshell::Delegate {
             std::string output, url;
         };
         AcpHost::AsyncOp<Done> commitOp;
-    } changes;
+    };
+    Changes changes, dock; // the dialog (what a turn or a commit changed) and the right panel's tab (the folder's)
     void changesOpen(Thread& t, const std::string& from = "", const std::string& to = "");
     void changesOpenAt(const std::string& host, const std::string& cwd, const std::string& from, const std::string& to,
                        const std::string& title);
-    void changesDraw();
+    void changesDraw(Changes& c, bool docked); // docked: in the right panel, not the dialog
+    void dockOpen(Thread& t);                  // the folder's changes, in the right panel
     // the history of the open thread's repository, as a graph in a dialog
     struct Graph {
         bool want = false, reload = false, done = false;

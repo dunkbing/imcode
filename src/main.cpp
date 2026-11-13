@@ -815,7 +815,7 @@ void App::frame() {
             logOpen(*data.threads[current]);
         }
         if (frames == 40 && all.find(";changes;") != std::string::npos && current >= 0) {
-            changesOpen(*data.threads[current]);
+            dockOpen(*data.threads[current]);
         }
         if (frames == 40 && all.find(";hosts;") != std::string::npos) {
             paletteOpen();
@@ -900,7 +900,7 @@ void App::frame() {
     settingsDraw();
     graphDraw();
     logDraw();
-    changesDraw();
+    changesDraw(changes, false);
     if (switchProjectTo >= 0) {
         newThread(std::exchange(switchProjectTo, -1));
     }

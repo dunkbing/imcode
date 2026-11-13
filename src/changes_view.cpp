@@ -58,9 +58,20 @@ void App::changesOpenAt(const std::string& host, const std::string& cwd, const s
     changes.reload = true;
 }
 
-void App::changesDraw() {
-    Changes& c = changes;
+void App::dockOpen(Thread& t) {
+    files.open = true;
+    files.tab = 1;
+    dock.reload = true;
+    dock.host = t.host;
+    dock.cwd = t.cwd;
+    dock.selected = -1;
+}
+
+void App::changesDraw(Changes& c, bool docked) {
     const Colors colors = themeColors();
+    if (docked && !c.listOp.isRunning() && !c.reload && ImGui::GetTime() - c.readAt > 3) {
+        c.reload = true; // the folder changes under the panel: agents, editors, the user
+    }
     // the list, then the picked file's diff, each off the ui thread (a remote is slow). on this
     // machine a read is held for a moment right after it starts: most finish in that time, so
     // the dialog never shows a loader for them; a big one falls back to it
@@ -68,8 +79,15 @@ void App::changesDraw() {
     const auto quickList = std::chrono::milliseconds(c.host.empty() ? 250 : 0); // a big repository takes ~150 ms
     const bool working = c.from.empty(); // the folder against the last commit: staged files and the rest
     const auto gotList = [&](std::vector<Git::Change> got) {
+        // the diff is read again only when a file changed: a list read every few seconds must not blink it
+        const auto same = [](const Git::Change& a, const Git::Change& b) {
+            return a.path == b.path && a.kind == b.kind && a.index == b.index && a.work == b.work && a.added == b.added &&
+                   a.removed == b.removed;
+        };
+        if (!std::ranges::equal(c.list, got, same)) {
+            c.diffFor.clear();
+        }
         c.list = std::move(got);
-        c.diffFor.clear();
     };
     const auto gotDiff = [&](std::pair<std::string, std::vector<Diff::Line>> got) {
         if (got.first == c.diffFor) {
@@ -78,6 +96,7 @@ void App::changesDraw() {
     };
     c.listOp.check(gotList);
     if (std::exchange(c.reload, false) && !c.listOp.isRunning()) {
+        c.readAt = ImGui::GetTime();
         c.listOp.start([host = c.host, cwd = c.cwd, from = c.from, to = c.to] { return Git::changes(host, cwd, from, to); });
         c.listOp.check(gotList, quickList);
     }
@@ -168,55 +187,58 @@ void App::changesDraw() {
         c.reload = true;
         gitAt = 0; // the line under the composer counts again
     });
-    if (std::exchange(c.want, false)) {
-        ImGui::OpenPopup("##changes");
-    }
-    const ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(std::min(1100.0f, vp->WorkSize.x - 32), std::min(720.0f, vp->WorkSize.y - 32)));
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
-    ImGui::PushStyleColor(ImGuiCol_Border, colors.overlay0);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Round::Dialog);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, 14));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1);
-    const bool shown = ImGui::BeginPopupModal("##changes", nullptr,
-                                              ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-                                                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-                                                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    ImGui::PopStyleVar(3);
-    ImGui::PopStyleColor(2);
-    if (!shown) {
-        return;
-    }
-    const float button = ImGui::GetFrameHeight();
-    ImGui::AlignTextToFramePadding();
-    ImGui::PushFont(nullptr, 18.0f);
-    ImGui::TextUnformatted(!c.title.empty() ? c.title.c_str() : c.from.empty() ? "Changes" : "Changes in this turn");
-    ImGui::PopFont();
-    ImGui::SameLine();
-    ImGui::AlignTextToFramePadding();
     int added = 0, removed = 0;
     for (const auto& change : c.list) {
         added += std::max(0, change.added);
         removed += std::max(0, change.removed);
     }
-    if (!c.list.empty()) {
-        ImGui::TextColored(colors.overlay1, "%zu %s", c.list.size(), c.list.size() == 1 ? "file" : "files");
+    const float button = ImGui::GetFrameHeight();
+    bool close = false;
+    if (!docked) { // the dialog has a header; in the panel the list's top line says it
+        if (std::exchange(c.want, false)) {
+            ImGui::OpenPopup("##changes");
+        }
+        const ImGuiViewport* vp = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(std::min(1100.0f, vp->WorkSize.x - 32), std::min(720.0f, vp->WorkSize.y - 32)));
+        ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
+        ImGui::PushStyleColor(ImGuiCol_Border, colors.overlay0);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Round::Dialog);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16, 14));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1);
+        const bool shown = ImGui::BeginPopupModal("##changes", nullptr,
+                                                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                                                      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                                                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(2);
+        if (!shown) {
+            return;
+        }
+        ImGui::AlignTextToFramePadding();
+        ImGui::PushFont(nullptr, 18.0f);
+        ImGui::TextUnformatted(!c.title.empty() ? c.title.c_str() : c.from.empty() ? "Changes" : "Changes in this turn");
+        ImGui::PopFont();
         ImGui::SameLine();
-        ImGui::TextColored(colors.green, "+%d", added);
-        ImGui::SameLine();
-        ImGui::TextColored(colors.red, "-%d", removed);
+        ImGui::AlignTextToFramePadding();
+        if (!c.list.empty()) {
+            ImGui::TextColored(colors.overlay1, "%zu %s", c.list.size(), c.list.size() == 1 ? "file" : "files");
+            ImGui::SameLine();
+            ImGui::TextColored(colors.green, "+%d", added);
+            ImGui::SameLine();
+            ImGui::TextColored(colors.red, "-%d", removed);
+        }
+        ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 2 * button - 6);
+        if (imshell::IconButton(ICON_FA_ROTATE, imshell::ButtonVariant::Secondary, ImVec2(button, button))) {
+            c.reload = true;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Check again");
+        }
+        ImGui::SameLine(0, 6);
+        close = imshell::IconButton(ICON_FA_XMARK, imshell::ButtonVariant::Secondary, ImVec2(button, button));
+        ImGui::Spacing();
     }
-    ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 2 * button - 6);
-    if (imshell::IconButton(ICON_FA_ROTATE, imshell::ButtonVariant::Secondary, ImVec2(button, button))) {
-        c.reload = true;
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Check again");
-    }
-    ImGui::SameLine(0, 6);
-    bool close = imshell::IconButton(ICON_FA_XMARK, imshell::ButtonVariant::Secondary, ImVec2(button, button));
-    ImGui::Spacing();
 
     // the commit message and its buttons, at the foot of the file list; committing is for the
     // folder, not a turn. after a push with nothing left: the pull request alone
@@ -295,13 +317,14 @@ void App::changesDraw() {
     } else if (c.list.empty()) {
         ImGui::TextColored(colors.overlay1, c.from.empty() ? "Nothing has changed since the last commit." : "Nothing changed.");
         commitBlock();
-    } else if (imshell::BeginResizable("changes", {.size = ImVec2(0, 0),
+    } else if (imshell::BeginResizable("changes", {.axis = docked ? imshell::Axis::Vertical : imshell::Axis::Horizontal,
+                                                   .size = ImVec2(0, docked ? -(barH > 0 ? barH + ImGui::GetStyle().ItemSpacing.y : 0) : 0),
                                                    .line = ImGui::GetColorU32(colors.surface1),
                                                    .lit = ImGui::GetColorU32(colors.blue)})) {
         // the files at the left; up and down move through them. in the folder's own view they are
         // two sections, the staged ones and the others, with a button to move each file between
-        if (imshell::ResizablePanel({.size = &c.listWidth, .min = 160, .fixed = true})) {
-            if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && c.asking.empty()) {
+        if (imshell::ResizablePanel({.size = docked ? &c.listHeight : &c.listWidth, .min = docked ? 80.0f : 160.0f, .fixed = true})) {
+            if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && c.asking.empty() && !ImGui::GetIO().WantTextInput) {
                 const int step = (ImGui::IsKeyPressed(ImGuiKey_DownArrow) ? 1 : 0) - (ImGui::IsKeyPressed(ImGuiKey_UpArrow) ? 1 : 0);
                 if (step != 0) {
                     int to = c.selected + step; // past the rows of a folded section
@@ -314,7 +337,7 @@ void App::changesDraw() {
                 }
             }
             // the files scroll above the commit message
-            ImGui::BeginChild("##list", ImVec2(0, -(barH > 0 ? barH + ImGui::GetStyle().ItemSpacing.y : 0)));
+            ImGui::BeginChild("##list", ImVec2(0, docked ? 0.0f : -(barH > 0 ? barH + ImGui::GetStyle().ItemSpacing.y : 0)));
             const bool idle = !c.opOp.isRunning();
             const auto filesOf = [&](bool staged) {
                 std::vector<Git::Change> out;
@@ -365,6 +388,11 @@ void App::changesDraw() {
             // the top of the list: what the files add up to, and every change staged at once
             if (working) {
                 ImGui::AlignTextToFramePadding();
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8);
+                if (docked) {
+                    ImGui::TextColored(colors.overlay1, "%zu %s", c.list.size(), c.list.size() == 1 ? "file" : "files");
+                    ImGui::SameLine(0, 6);
+                }
                 ImGui::TextColored(colors.green, "+%d", added);
                 ImGui::SameLine(0, 6);
                 ImGui::TextColored(colors.red, "-%d", removed);
@@ -488,9 +516,11 @@ void App::changesDraw() {
                 ImGui::PopID();
             }
             ImGui::EndChild();
-            commitBlock();
+            if (!docked) {
+                commitBlock();
+            }
         }
-        if (imshell::ResizablePanel({.min = 300})) {
+        if (imshell::ResizablePanel({.min = docked ? 120.0f : 300.0f})) {
             if (c.selected >= 0 && c.selected < static_cast<int>(rows.size())) {
                 const Git::Change& change = c.list[static_cast<size_t>(rows[static_cast<size_t>(c.selected)].index)];
                 const std::function<void(int, char)> hunkAction = [&](int n, char what) {
@@ -528,6 +558,9 @@ void App::changesDraw() {
         }
         if (imshell::EndResizable()) {
             save();
+        }
+        if (docked) {
+            commitBlock();
         }
     }
     // throwing changes away has no way back: asked first
@@ -572,6 +605,9 @@ void App::changesDraw() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
+    }
+    if (docked) {
+        return;
     }
     close |= ImGui::IsKeyPressed(ImGuiKey_Escape);
     close |= ImGui::IsMouseClicked(0) &&

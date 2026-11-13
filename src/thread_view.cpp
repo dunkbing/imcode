@@ -1105,7 +1105,7 @@ void App::statusLine(Thread& t, float left) {
             ImGui::SameLine(0, 4);
             ImGui::PushStyleColor(ImGuiCol_Text, colors.yellow);
             if (ImGui::Button(std::format("{} changed##changes", git.changed).c_str())) {
-                changesOpen(t);
+                dockOpen(t);
             }
             ImGui::PopStyleColor();
             if (ImGui::IsItemHovered()) {
