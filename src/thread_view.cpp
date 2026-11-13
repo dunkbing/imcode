@@ -17,6 +17,7 @@
 #include "imshell/components.hpp"
 #include "colors.hpp"
 #include <algorithm>
+#include <map>
 #include <set>
 #include <cstdlib>
 #include <format>
@@ -1322,19 +1323,27 @@ void App::threadBody(Thread& t) {
     }
     ImGui::PopTextWrapPos();
     ImGui::Unindent(left);
-    // a scroll up while history is still arriving stops the pull to the end
+    // a scroll up while history is still arriving stops the pull to the end. over a code block (a
+    // child window) or with the composer focused a plain hover test fails, and the view would be
+    // pulled back every frame; a view clearly above where the pull put it counts too (scrollbar, keys)
     static std::set<const Thread*> scrolledAway;
-    if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel > 0) {
+    static std::map<const Thread*, float> pulledTo;
+    constexpr auto overView = ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem;
+    const auto pulled = pulledTo.find(&t);
+    const bool moved = t.replaying() && pulled != pulledTo.end() && ImGui::GetScrollY() < pulled->second - 24;
+    if ((ImGui::IsWindowHovered(overView) && ImGui::GetIO().MouseWheel > 0) || moved) {
         scrolledAway.insert(&t);
         shownRevision = std::max(shownRevision, 0);
     }
     if (!t.replaying()) {
         scrolledAway.erase(&t);
+        pulledTo.erase(&t);
     }
     if (shownRevision < 0 || (t.replaying() && !scrolledAway.contains(&t))) {
         ImGui::SetScrollHereY(1.0f);
         // a few frames: what was just added is laid out by then; history still arriving restarts it
         shownRevision = t.replaying() ? -3 : shownRevision + 1;
+        pulledTo[&t] = ImGui::GetScrollMaxY();
     } else if (find.jump && find.at < static_cast<int>(find.hits.size()) && find.itemY[find.hits[find.at]] >= 0) {
         ImGui::SetScrollY(std::max(0.0f, find.itemY[find.hits[find.at]] - 60));
         find.jump = false;
