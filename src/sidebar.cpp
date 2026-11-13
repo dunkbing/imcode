@@ -11,6 +11,18 @@
 using Theme = imshell::Theme;
 namespace ui = imshell::ui;
 
+// a search field with the glass drawn inside, the text starting clear of it
+static void searchField(const char* id, const char* hint, char* buffer, size_t size, float width) {
+    const float icon = ImGui::GetFontSize() + 10;
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x + icon, ImGui::GetStyle().FramePadding.y));
+    ImGui::SetNextItemWidth(width);
+    ImGui::InputTextWithHint(id, hint, buffer, size);
+    ImGui::PopStyleVar();
+    const ImVec2 min = ImGui::GetItemRectMin();
+    ImGui::GetWindowDrawList()->AddText(ImVec2(min.x + ImGui::GetStyle().FramePadding.x, min.y + ImGui::GetStyle().FramePadding.y),
+                                        ImGui::GetColorU32(themeColors().subtext0), ICON_FA_MAGNIFYING_GLASS);
+}
+
 void App::sidebar() {
     const Colors colors = themeColors();
     const float button = ImGui::GetFrameHeight();
@@ -18,8 +30,7 @@ void App::sidebar() {
 
     // search, add project, new thread
     // three buttons after it, the last clear of the divider beside the list
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 3 * (button + spacing) - 6);
-    ImGui::InputTextWithHint("##search", ICON_FA_MAGNIFYING_GLASS "  Search", search, sizeof(search));
+    searchField("##search", "Search", search, sizeof(search), ImGui::GetContentRegionAvail().x - 3 * (button + spacing) - 6);
     ImGui::SameLine();
     // which project's threads are listed; picking one also makes it where new threads go
     // lit while one project is picked
@@ -47,9 +58,7 @@ void App::sidebar() {
         if (ImGui::IsWindowAppearing()) {
             ImGui::SetKeyboardFocusHere();
         }
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::InputTextWithHint("##projects", ICON_FA_MAGNIFYING_GLASS "  Search projects...", projectSearch,
-                                 sizeof(projectSearch));
+        searchField("##projects", "Search projects...", projectSearch, sizeof(projectSearch), -FLT_MIN);
         ImGui::Spacing();
         const float line = ImGui::GetTextLineHeight();
         // one row: its mark, its name, a check when it is the one listed
