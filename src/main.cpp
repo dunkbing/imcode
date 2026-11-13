@@ -355,7 +355,24 @@ void App::dropDraft() {
 
 void App::select(int index) {
     if (index != current && current >= 0 && current < static_cast<int>(data.threads.size())) {
-        data.threads[current]->release(); // left: free for the agent's cli, fresh when opened again
+        data.threads[current]->leftAt = ++leaveCount_;
+        // the last few idle agents stay running: opening one again is instant, not a new process
+        // replaying the whole conversation. older ones are freed (a process each, and the
+        // conversation is then free for the agent's cli)
+        constexpr size_t warm = 3; // shortcut: a fixed count, not memory-aware; make it a setting if hosts run out
+        std::vector<Thread*> idle;
+        for (const auto& t : data.threads) {
+            if (t->hasAgent() && t.get() != (index >= 0 ? data.threads[index].get() : nullptr)) {
+                idle.push_back(t.get());
+            }
+        }
+        std::ranges::sort(idle, std::greater{}, &Thread::leftAt);
+        for (size_t i = warm; i < idle.size(); ++i) {
+            idle[i]->release();
+        }
+        if (!data.threads[current]->hasAgent()) {
+            data.threads[current]->release(); // a followed transcript is dropped as before
+        }
     }
     if (index != current) {
         const Thread* keep = index >= 0 ? data.threads[index].get() : nullptr;

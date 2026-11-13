@@ -72,6 +72,7 @@ struct App : imshell::Delegate {
     Store::Data data;
     std::filesystem::path dataFile;
     int current = -1; // index into data.threads
+    long long leaveCount_ = 0; // counts selections, to order idle threads by when they were left
     int project = -1; // the folder new threads go to
     int filterProject = -1; // the sidebar lists this project's threads; -1 = all projects
     char projectSearch[64] = {};

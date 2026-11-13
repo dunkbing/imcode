@@ -97,9 +97,13 @@ public:
     // after a failed resume: the same session again, or a new one in its place
     void retryResume();
     void startOver();
-    // left for another thread: an idle agent is stopped and its history dropped, so the
+    // an idle agent is stopped and its history dropped, so the
     // conversation is free for the agent's cli and comes back fresh when opened again
     void release();
+    long long leftAt = 0; // when it was last left, to keep the latest idle agents running
+    [[nodiscard]] bool hasAgent() const {
+        return acp_ != nullptr;
+    }
     // another client (the agent's cli) is writing this conversation on this machine: shown
     // live from its transcript, read only, until it has been quiet for a while
     // read only while the other client wrote recently; followed (not read only) while it is
