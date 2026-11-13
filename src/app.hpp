@@ -279,7 +279,8 @@ struct App : imshell::Delegate {
     // under the composer: the project (click to pick another) and its branch
     void statusLine(Thread& t, float left);
     void attachedRows(float left);
-    static constexpr float kAttachedStrip = 64;
+    static bool imageFile(const std::string& path);
+    float attachedStrip() const; // what the attachment tiles take above the composer: 0 for none
     struct Thumb {
         ImTextureID tex{};
         int w = 0, h = 0;

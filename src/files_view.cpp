@@ -7,7 +7,7 @@
 #include "acp_host/agents.hpp"
 #include "acp_host/process_runner.hpp"
 #include "imshell/button.hpp"
-#include "imshell/themes.hpp"
+#include "colors.hpp"
 #include "code_colors.hpp"
 #include <algorithm>
 #include <chrono>
@@ -16,7 +16,7 @@
 #include <fstream>
 #include <optional>
 
-namespace Theme = imshell::Theme;
+using Theme = imshell::Theme;
 namespace fs = std::filesystem;
 using Files = App::Files;
 
@@ -171,7 +171,7 @@ namespace {
     // one row of the tree; true when clicked
     bool row(const std::string& path, const char* icon, const std::string& name, int depth, bool selected,
              const char* dimTail = nullptr) {
-        const auto& colors = Theme::Current()->colors;
+        const Colors colors = themeColors();
         const bool dim = name.starts_with(".");
         const float x = 8 + static_cast<float>(depth) * 14;
         const bool clicked = ImGui::Selectable(("##" + path).c_str(), selected);
@@ -188,7 +188,7 @@ namespace {
 
     // the loaded part of the tree under dir; opened: the file that was clicked
     void tree(Files& f, const std::string& dir, int depth, std::string& opened) {
-        const auto& colors = Theme::Current()->colors;
+        const Colors colors = themeColors();
         const auto it = f.dirs.find(dir);
         const float x = 8 + static_cast<float>(depth) * 14 + 22;
         if (it == f.dirs.end() || !it->second.error.empty()) {
@@ -222,7 +222,7 @@ namespace {
 
     // the files whose path has the filter in it, as a flat list
     void matches(Files& f, std::string& opened) {
-        const auto& colors = Theme::Current()->colors;
+        const Colors colors = themeColors();
         if (!f.indexed) {
             ImGui::SetCursorPosX(8);
             ImGui::TextColored(colors.overlay0, "Looking...");
@@ -361,7 +361,7 @@ void App::filesPoll() {
 bool App::filesPanel(Thread& t, bool beside) {
     Files& f = files;
     bool released = false;
-    const auto& colors = Theme::Current()->colors;
+    const Colors colors = themeColors();
     ImGui::BeginChild("files");
     // no room for the file beside its tree: one at a time, as when the panel has the window
     const bool alone = !beside || ImGui::GetContentRegionAvail().x < 400;

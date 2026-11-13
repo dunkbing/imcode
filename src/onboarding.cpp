@@ -2,7 +2,7 @@
 
 #include "imshell/button.hpp"
 #include "imshell/components.hpp"
-#include "imshell/themes.hpp"
+#include "colors.hpp"
 #include "imshell/updater.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -14,7 +14,7 @@
 #include <unistd.h>
 #endif
 
-namespace Theme = imshell::Theme;
+using Theme = imshell::Theme;
 namespace ui = imshell::ui;
 
 namespace {
@@ -23,7 +23,7 @@ namespace {
     void beginSection(const char* name, bool narrow) {
         ImGui::Separator();
         ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
-        ImGui::TextColored(Theme::Current()->colors.subtext0, "%s", name);
+        ImGui::TextColored(themeColors().subtext0, "%s", name);
         if (!narrow) {
             ImGui::SameLine(140);
         }
@@ -89,7 +89,7 @@ void App::pollInstall() {
 
 // each agent: its mark and name, then ready / turn on or off / install
 void App::agentRows(bool narrow) {
-    const auto& colors = Theme::Current()->colors;
+    const Colors colors = themeColors();
     if (!scanned) {
         ui::Progress(-1, "Looking for agents");
     }
@@ -137,7 +137,7 @@ void App::agentRows(bool narrow) {
 
 // agents and setup, over the app: closed by its x, escape, or a click outside
 void App::settingsDraw() {
-    const auto& colors = Theme::Current()->colors;
+    const Colors colors = themeColors();
     if (std::exchange(settingsWant, false)) {
         ImGui::OpenPopup("##settings");
     }
@@ -172,8 +172,8 @@ void App::settingsDraw() {
     ImGui::TextColored(colors.subtext0, "Theme");
     ImGui::SameLine(narrow ? 90.0f : 140.0f);
     ImGui::SetNextItemWidth(220);
-    if (ImGui::BeginCombo("##theme", Theme::Current()->name)) {
-        for (const auto& theme : Theme::THEMES) {
+    if (ImGui::BeginCombo("##theme", imshell::CurrentTheme().name)) {
+        for (const auto& theme : imshell::Themes()) {
             if (ImGui::Selectable(theme.name, theme.id == data.theme)) {
                 applyTheme(theme.id);
                 save();
@@ -207,7 +207,7 @@ void App::settingsDraw() {
 }
 
 void App::onboarding() {
-    const auto& colors = Theme::Current()->colors;
+    const Colors colors = themeColors();
     const bool narrow = ImGui::GetContentRegionAvail().x < 560;
     const float width = std::min(720.0f, ImGui::GetContentRegionAvail().x - 2 * Theme::Spacing::XL);
     ImGui::SetCursorPos(ImVec2((ImGui::GetWindowWidth() - width) * 0.5f, narrow ? 24 : 72));

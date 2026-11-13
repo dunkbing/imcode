@@ -4,14 +4,14 @@
 
 #include "imshell/button.hpp"
 #include "imshell/components.hpp"
-#include "imshell/themes.hpp"
+#include "colors.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <ctime>
 #include <utility>
 
-namespace Theme = imshell::Theme;
+using Theme = imshell::Theme;
 namespace ui = imshell::ui;
 
 namespace {
@@ -21,8 +21,8 @@ namespace {
     constexpr const char* emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"; // shortcut: sha-1 repositories only
 
     ImU32 laneColor(int lane) {
-        const auto& c = Theme::Current()->colors;
-        const ImVec4 tones[] = {c.blue, c.green, c.peach, c.purple, c.teal, c.yellow, c.rose, c.sapphire};
+        const Colors c = themeColors();
+        const ImVec4 tones[] = {c.blue, c.green, c.peach, c.purple, c.teal, c.yellow, c.rose, c.sky};
         return ImGui::GetColorU32(tones[lane % 8]);
     }
 } // namespace
@@ -43,7 +43,7 @@ void App::graphOpen(Thread& t) {
 
 void App::graphDraw() {
     Graph& g = graph;
-    const auto& colors = Theme::Current()->colors;
+    const Colors colors = themeColors();
     const std::string key = g.host + "\n" + g.cwd;
     // a page of history, read off the ui thread (a remote is slow); the next one when the end is near
     g.op.check([&](Graph::Page page) {

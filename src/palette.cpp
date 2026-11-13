@@ -4,12 +4,12 @@
 
 #include "imshell/button.hpp"
 #include "imshell/components.hpp"
-#include "imshell/themes.hpp"
+#include "colors.hpp"
 #include <algorithm>
 #include <climits>
 #include <cstdlib>
 
-namespace Theme = imshell::Theme;
+using Theme = imshell::Theme;
 namespace ui = imshell::ui;
 namespace fs = std::filesystem;
 
@@ -94,7 +94,7 @@ void App::paletteGo(const std::string& host, std::string path) {
 
 void App::paletteDraw() {
     Palette& p = palette;
-    const auto& colors = Theme::Current()->colors;
+    const Colors colors = themeColors();
     if (std::exchange(p.wantOpen, false)) {
         p.query.clear();
         p.error.clear();

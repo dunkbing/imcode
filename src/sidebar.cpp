@@ -4,15 +4,15 @@
 
 #include "imshell/button.hpp"
 #include "imshell/components.hpp"
-#include "imshell/themes.hpp"
+#include "colors.hpp"
 #include <algorithm>
 #include <format>
 
-namespace Theme = imshell::Theme;
+using Theme = imshell::Theme;
 namespace ui = imshell::ui;
 
 void App::sidebar() {
-    const auto& colors = Theme::Current()->colors;
+    const Colors colors = themeColors();
     const float button = ImGui::GetFrameHeight();
     const float spacing = ImGui::GetStyle().ItemSpacing.x;
 

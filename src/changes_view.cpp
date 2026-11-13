@@ -5,7 +5,7 @@
 #include "imshell/button.hpp"
 #include "imshell/components.hpp"
 #include "imshell/resizable.hpp"
-#include "imshell/themes.hpp"
+#include "colors.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -16,7 +16,7 @@
 #include <shellapi.h>
 #endif
 
-namespace Theme = imshell::Theme;
+using Theme = imshell::Theme;
 namespace ui = imshell::ui;
 
 namespace {
@@ -59,7 +59,7 @@ void App::changesOpenAt(const std::string& host, const std::string& cwd, const s
 
 void App::changesDraw() {
     Changes& c = changes;
-    const auto& colors = Theme::Current()->colors;
+    const Colors colors = themeColors();
     // the list, then the picked file's diff, each off the ui thread (a remote is slow). on this
     // machine a read is held for a moment right after it starts: most finish in that time, so
     // the dialog never shows a loader for them; a big one falls back to it

@@ -13,7 +13,7 @@
 #include "imshell/image.hpp"
 #include "imshell/resizable.hpp"
 #include "imshell/frames.hpp"
-#include "imshell/themes.hpp"
+#include "colors.hpp"
 #include "imshell/title_bar.hpp"
 #include "imshell/notifications.hpp"
 #include "imshell/updater.hpp"
@@ -31,7 +31,7 @@
 #include <iomanip>
 #include <sstream>
 
-namespace Theme = imshell::Theme;
+using Theme = imshell::Theme;
 namespace ui = imshell::ui;
 
 constexpr float barHeight = 40; // taller than the os default: air above and below its row
@@ -39,7 +39,7 @@ constexpr float barHeight = 40; // taller than the os default: air above and bel
 int runHeadless(App& app, const char* out, int width, int height, int frames); // headless.cpp
 
 bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags, float rounding) {
-    const auto& colors = Theme::Current()->colors;
+    const Colors colors = themeColors();
     const ImVec2 min = ImGui::GetCursorScreenPos();
     const float width = ImGui::GetContentRegionAvail().x;
     // the selectable only takes the click: its own square highlight is not drawn
@@ -58,7 +58,7 @@ bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags f
 }
 
 void projectBadge(const std::string& name, float size) {
-    const auto& colors = Theme::Current()->colors;
+    const Colors colors = themeColors();
     const ImVec4 tints[] = {colors.blue, colors.peach, colors.green, colors.purple, colors.teal, colors.rose};
     size_t hash = 0;
     for (const char c : name) {
@@ -210,7 +210,7 @@ void App::agentIconAt(const std::string& agentId, ImVec2 min, float size) {
 }
 
 void App::projectPopup() {
-    const auto& colors = Theme::Current()->colors;
+    const Colors colors = themeColors();
     ImGui::SetNextWindowSize(ImVec2(380, 0));
     ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
     ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Round::Dialog);
@@ -258,12 +258,13 @@ void App::projectPopup() {
 }
 
 void App::applyTheme(const std::string& id) {
-    Theme::Current() = &Theme::themeById(id);
-    Theme::ApplyTheme(Theme::Current()->colors);
+    const auto themes = imshell::Themes();
+    const auto at = std::ranges::find(themes, id, &imshell::Theme::id);
+    imshell::SetTheme(at != themes.end() ? *at : themes[0]);
     ImGui::GetStyle().ScrollbarSize = 8; // thin: the lists are narrow and many
     ImGui::GetStyle().FrameRounding = Round::Row; // buttons, inputs, hover fills: one radius
     ImGui::GetStyle().GrabRounding = Round::Row;
-    data.theme = Theme::Current()->id;
+    data.theme = imshell::CurrentTheme().id;
 }
 
 void App::startScan() {
@@ -553,7 +554,7 @@ void App::frame() {
     pollInstall();
     filesPoll();
 
-    const auto& colors = Theme::Current()->colors;
+    const Colors colors = themeColors();
     // without a window the bar is a plain strip, with room where the os buttons would be
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     const imshell::Rect content =
@@ -646,8 +647,8 @@ void App::frame() {
     } else {
         const bool list = !narrow || sidebarOpen || current < 0;
         bool resized = false; // a panel was dragged to a new size: saved when let go
-        const imshell::ResizableOptions lines{.line = ImGui::GetColorU32(Theme::Current()->colors.surface1),
-                                              .lit = ImGui::GetColorU32(Theme::Current()->colors.blue)};
+        const imshell::ResizableOptions lines{.line = ImGui::GetColorU32(themeColors().surface1),
+                                              .lit = ImGui::GetColorU32(themeColors().blue)};
         // the thread: the chat (the terminal under it) and the files beside it, or the files
         // alone where there is no room for both
         const auto threadArea = [&] {
@@ -668,7 +669,7 @@ void App::frame() {
                     const float width = ImGui::GetContentRegionAvail().x;
                     for (const auto& hint : hints) {
                         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (width - ImGui::CalcTextSize(hint.c_str()).x) / 2));
-                        ImGui::TextColored(Theme::Current()->colors.overlay1, "%s", hint.c_str());
+                        ImGui::TextColored(themeColors().overlay1, "%s", hint.c_str());
                     }
                 }
                 return;

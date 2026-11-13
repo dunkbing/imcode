@@ -2,10 +2,10 @@
 
 #include "imgui_internal.h"
 #include "imshell/frames.hpp"
-#include "imshell/themes.hpp"
+#include "colors.hpp"
 #include <algorithm>
 
-namespace Theme = imshell::Theme;
+using Theme = imshell::Theme;
 
 namespace {
     // what is typed goes to the shell: text as it is, the rest through the key encoder
@@ -76,7 +76,7 @@ void App::toggleTerminal() {
 // the thread's terminal, filling what is left of the window below the chat
 // shortcut: no selection or copy; libghostty has selection gestures and a formatter for it
 void App::terminalPanel(Thread& t) {
-    const auto& colors = Theme::Current()->colors;
+    const Colors colors = themeColors();
     ImGui::PushStyleColor(ImGuiCol_ChildBg, colors.crust);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 6));
     // no nav: tab and the arrows are the shell's

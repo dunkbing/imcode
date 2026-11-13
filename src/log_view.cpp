@@ -3,14 +3,14 @@
 #include "app.hpp"
 
 #include "imshell/button.hpp"
-#include "imshell/themes.hpp"
+#include "colors.hpp"
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <ctime>
 
-namespace Theme = imshell::Theme;
+using Theme = imshell::Theme;
 
 void App::logOpen(Thread& t) {
     log.want = true;
@@ -19,7 +19,7 @@ void App::logOpen(Thread& t) {
 }
 
 void App::logDraw() {
-    const auto& colors = Theme::Current()->colors;
+    const Colors colors = themeColors();
     if (std::exchange(log.want, false)) {
         ImGui::OpenPopup("##log");
     }
