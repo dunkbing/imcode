@@ -218,11 +218,84 @@ void App::changesDraw() {
     bool close = imshell::IconButton(ICON_FA_XMARK, imshell::ButtonVariant::Secondary, ImVec2(button, button));
     ImGui::Spacing();
 
+    // the commit message and its buttons, at the foot of the file list; committing is for the
+    // folder, not a turn. after a push with nothing left: the pull request alone
+    const bool busy = c.commitOp.isRunning();
+    const int stagedCount = static_cast<int>(std::ranges::count_if(c.list, [](const Git::Change& ch) { return ch.staged(); }));
+    const bool bar = c.from.empty() && (!c.list.empty() || c.pushed);
+    const bool prOnly = c.pushed && c.list.empty();
+    const float messageH = ImGui::GetTextLineHeight() * 3 + 16;
+    const float barH = !bar ? 0.0f
+                       : prOnly ? ImGui::GetFrameHeight()
+                                : messageH + ImGui::GetFrameHeight() + 2 * ImGui::GetStyle().ItemSpacing.y +
+                                      ((c.said.empty() && !busy) ? 0.0f : 2 * ImGui::GetTextLineHeightWithSpacing());
+    const auto commitBlock = [&] {
+        if (!bar) {
+            return;
+        }
+        const bool canCommit = !busy && !c.list.empty() && c.message[0] != 0;
+        const auto start = [&](bool push) {
+            c.said.clear();
+            c.commitOp.start([host = c.host, cwd = c.cwd, message = std::string(c.message), push, stagedOnly = stagedCount > 0] {
+                Changes::Done done{.push = push};
+                done.ok = Git::commit(host, cwd, message, push, done.output, stagedOnly);
+                return done;
+            });
+        };
+        ImGui::Indent(8);
+        const float width = ImGui::GetContentRegionAvail().x - 8;
+        if (prOnly) {
+            ImGui::BeginDisabled(busy);
+            if (imshell::Button(ICON_FA_CODE_PULL_REQUEST "  Open a pull request", imshell::ButtonVariant::Primary, ImVec2(width, 0))) {
+                c.said.clear();
+                c.commitOp.start([host = c.host, cwd = c.cwd] {
+                    Changes::Done done{.pull = true};
+                    done.url = Git::pullRequest(host, cwd, done.output);
+                    done.ok = !done.url.empty();
+                    return done;
+                });
+            }
+            ImGui::EndDisabled();
+        } else {
+            // enter commits; ctrl or cmd with it starts a new line
+            ImGui::BeginDisabled(busy);
+            const bool enter = ImGui::InputTextMultiline("##message", c.message, sizeof(c.message), ImVec2(width, messageH),
+                                                         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CtrlEnterForNewLine);
+            // the field is a child window drawn over this one's list: the hint goes on the foreground
+            if (!c.message[0] && !ImGui::IsItemActive() && !ImGui::IsPopupOpen("##discard")) {
+                const ImVec2 at = ImGui::GetItemRectMin();
+                ImGui::GetForegroundDrawList()->AddText(ImVec2(at.x + ImGui::GetStyle().FramePadding.x, at.y + ImGui::GetStyle().FramePadding.y),
+                                                    ImGui::GetColorU32(colors.overlay1),
+                                                    stagedCount > 0 ? "Commit message (the staged files)" : "Commit message (all the changes)");
+            }
+            ImGui::EndDisabled();
+            ImGui::BeginDisabled(!canCommit);
+            const float commitWidth = 84;
+            if (imshell::Button("Commit", imshell::ButtonVariant::Secondary, ImVec2(commitWidth, 0)) || (enter && canCommit)) {
+                start(false);
+            }
+            ImGui::SameLine(0, 6);
+            if (imshell::Button(ICON_FA_ARROW_UP "  Commit & push", imshell::ButtonVariant::Primary, ImVec2(width - commitWidth - 6, 0))) {
+                start(true);
+            }
+            ImGui::EndDisabled();
+        }
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+        if (busy) {
+            ImGui::TextColored(colors.overlay1, "Working...");
+        } else if (!c.said.empty()) {
+            ImGui::TextColored(colors.red, "%s", c.said.c_str());
+        }
+        ImGui::PopTextWrapPos();
+        ImGui::Unindent(8);
+    };
+
     if (c.listOp.isRunning() && c.list.empty()) {
         ui::Progress(-1, "Reading the changes");
     } else if (c.list.empty()) {
         ImGui::TextColored(colors.overlay1, c.from.empty() ? "Nothing has changed since the last commit." : "Nothing changed.");
-    } else if (imshell::BeginResizable("changes", {.size = ImVec2(0, -(ImGui::GetFrameHeightWithSpacing() + 10)),
+        commitBlock();
+    } else if (imshell::BeginResizable("changes", {.size = ImVec2(0, 0),
                                                    .line = ImGui::GetColorU32(colors.surface1),
                                                    .lit = ImGui::GetColorU32(colors.blue)})) {
         // the files at the left; up and down move through them. in the folder's own view they are
@@ -240,6 +313,8 @@ void App::changesDraw() {
                     }
                 }
             }
+            // the files scroll above the commit message
+            ImGui::BeginChild("##list", ImVec2(0, -(barH > 0 ? barH + ImGui::GetStyle().ItemSpacing.y : 0)));
             const bool idle = !c.opOp.isRunning();
             const auto filesOf = [&](bool staged) {
                 std::vector<Git::Change> out;
@@ -412,6 +487,8 @@ void App::changesDraw() {
                 }
                 ImGui::PopID();
             }
+            ImGui::EndChild();
+            commitBlock();
         }
         if (imshell::ResizablePanel({.min = 300})) {
             if (c.selected >= 0 && c.selected < static_cast<int>(rows.size())) {
@@ -495,65 +572,6 @@ void App::changesDraw() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
-    }
-    // the commit bar
-    const bool busy = c.commitOp.isRunning();
-    const int stagedCount = static_cast<int>(std::ranges::count_if(c.list, [](const Git::Change& ch) { return ch.staged(); }));
-    if (c.from.empty() && (!c.list.empty() || c.pushed)) { // committing is for the folder, not a turn
-        ImGui::Dummy(ImVec2(0, 4));
-        // after a push with nothing left: the pull request alone
-        bool enter = false;
-        if (c.pushed && c.list.empty()) {
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(colors.green, ICON_FA_CHECK "  Pushed");
-        } else {
-            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 250 - 8);
-            ImGui::BeginDisabled(busy);
-            enter = ImGui::InputTextWithHint("##message", stagedCount > 0 ? "Commit message (the staged files)" : "Commit message (all the changes)", c.message, sizeof(c.message),
-                                             ImGuiInputTextFlags_EnterReturnsTrue);
-            ImGui::EndDisabled();
-        }
-        const bool canCommit = !busy && !c.list.empty() && c.message[0] != 0;
-        const auto start = [&](bool push) {
-            c.said.clear();
-            c.commitOp.start([host = c.host, cwd = c.cwd, message = std::string(c.message), push, stagedOnly = stagedCount > 0] {
-                Changes::Done done{.push = push};
-                done.ok = Git::commit(host, cwd, message, push, done.output, stagedOnly);
-                return done;
-            });
-        };
-        ImGui::SameLine(0, 8);
-        if (c.pushed && c.list.empty()) {
-            ImGui::BeginDisabled(busy);
-            if (imshell::Button(ICON_FA_CODE_PULL_REQUEST "  Open a pull request", imshell::ButtonVariant::Primary)) {
-                c.said.clear();
-                c.commitOp.start([host = c.host, cwd = c.cwd] {
-                    Changes::Done done{.pull = true};
-                    done.url = Git::pullRequest(host, cwd, done.output);
-                    done.ok = !done.url.empty();
-                    return done;
-                });
-            }
-            ImGui::EndDisabled();
-        } else {
-            ImGui::BeginDisabled(!canCommit);
-            if (imshell::Button("Commit") || (enter && canCommit)) {
-                start(false);
-            }
-            ImGui::SameLine(0, 6);
-            if (imshell::Button(ICON_FA_ARROW_UP "  Commit and push", imshell::ButtonVariant::Primary)) {
-                start(true);
-            }
-            ImGui::EndDisabled();
-        }
-        if (busy) {
-            ImGui::SameLine();
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(colors.overlay1, "Working...");
-        }
-        if (!c.said.empty()) {
-            ImGui::TextColored(colors.red, "%s", c.said.c_str());
-        }
     }
     close |= ImGui::IsKeyPressed(ImGuiKey_Escape);
     close |= ImGui::IsMouseClicked(0) &&
