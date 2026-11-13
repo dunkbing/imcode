@@ -144,6 +144,10 @@ void App::setup() {
     terminalHeight = data.terminalHeight;
     applyTheme(data.theme);
     project = data.projects.empty() ? -1 : 0;
+    if (const auto at = std::ranges::find(data.projects, data.filter); at != data.projects.end()) {
+        filterProject = static_cast<int>(at - data.projects.begin());
+        project = filterProject; // new threads go where the list is filtered
+    }
     startScan();
     // a new thread at launch, in the project (and with the agent) of the thread that was open
     // last; the old threads stay in the list, opened when picked

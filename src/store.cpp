@@ -22,6 +22,7 @@ namespace Store {
         out.onboarded = root.value("onboarded", false);
         out.agents = root.value("agents", std::vector<std::string>{});
         out.lastSession = root.value("last", "");
+        out.filter = {root.value("filterHost", ""), root.value("filterCwd", "")};
         out.theme = root.value("theme", out.theme);
         out.defaults = root.value("defaults", out.defaults);
         if (const auto layout = root.value("layout", std::vector<float>{}); layout.size() == 4) {
@@ -70,6 +71,8 @@ namespace Store {
         std::ofstream(tmp) << json{{"onboarded", data.onboarded},
                                    {"agents", data.agents},
                                    {"last", data.lastSession},
+                                   {"filterHost", data.filter.host},
+                                   {"filterCwd", data.filter.cwd},
                                    {"theme", data.theme},
                                    {"defaults", data.defaults},
                                    {"layout", {data.sidebarWidth, data.filesWidth, data.treeWidth, data.terminalHeight}},

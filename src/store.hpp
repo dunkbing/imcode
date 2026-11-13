@@ -24,6 +24,7 @@ namespace Store {
         // pixels; 0: not sized yet (the panels share the room)
         float sidebarWidth = 264, filesWidth = 0, treeWidth = 220, terminalHeight = 240;
         std::string lastSession;         // the thread that was open: opened again at launch
+        Project filter; // the project the sidebar lists; empty cwd: all of them
         // per agent, the model, mode, ... last picked: what its next new thread starts with
         std::map<std::string, std::map<std::string, std::string>> defaults;
         std::vector<Project> projects;

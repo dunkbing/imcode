@@ -43,7 +43,9 @@ void App::sidebar() {
         ImGui::OpenPopup("filter");
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Projects");
+        ImGui::SetTooltip("%s", filterProject >= 0 && filterProject < static_cast<int>(data.projects.size())
+                                    ? std::filesystem::path(data.projects[filterProject].cwd).filename().string().c_str()
+                                    : "All projects");
     }
     // under its button, left edges aligned
     ImGui::SetNextWindowPos(ImVec2(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y + 6));
@@ -92,12 +94,16 @@ void App::sidebar() {
         };
         if (matches("All projects") && row(-1, "All projects")) {
             filterProject = -1;
+            data.filter = {};
+            save();
             ImGui::CloseCurrentPopup();
         }
         for (int i = 0; i < static_cast<int>(data.projects.size()); ++i) {
             const std::string name = std::filesystem::path(data.projects[i].cwd).filename().string();
             if (matches(name) && row(i, name)) {
                 filterProject = i;
+                data.filter = data.projects[i];
+                save();
                 // new threads go there; a thread not yet started moves with it
                 if (current < 0 || data.threads[current]->title.empty()) {
                     switchProjectTo = i;
