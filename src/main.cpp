@@ -605,14 +605,14 @@ void App::frame() {
         ImGui::TextColored(colors.overlay0, "/");
         ImGui::SameLine();
         // as much of the title as fits before the buttons at the right
-        const float room = bar.pos.x + bar.size.x - bar.rightInset - 76 - 12 - ImGui::GetCursorScreenPos().x;
+        const float room = bar.pos.x + bar.size.x - bar.rightInset - 112 - 12 - ImGui::GetCursorScreenPos().x;
         const size_t fits = static_cast<size_t>(std::max(0.0f, room / ImGui::CalcTextSize("0").x));
         const std::string title = t.title.empty() ? "New thread" : t.title;
         ImGui::TextUnformatted(title.size() > fits ? (cut(title, fits > 2 ? fits - 2 : 0) + "..").c_str()
                                                    : title.c_str());
         // at the right end, before the os's own buttons
         ImGui::SameLine();
-        ImGui::SetCursorScreenPos(ImVec2(bar.pos.x + bar.size.x - bar.rightInset - 76,
+        ImGui::SetCursorScreenPos(ImVec2(bar.pos.x + bar.size.x - bar.rightInset - 112,
                                          ImGui::GetCursorScreenPos().y));
         // flat, with room around the icon; filled while its panel is open
         auto barButton = [&](const char* icon, bool on) {
@@ -633,12 +633,23 @@ void App::frame() {
             ImGui::SetTooltip("Terminal (Ctrl+`)");
         }
         ImGui::SameLine(0, 6);
-        if (barButton(ICON_FA_FOLDER_TREE, files.open)) {
-            files.open = !files.open;
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Files (Ctrl+B)");
-        }
+        // files and changes share the right panel: a button opens its tab, or closes the panel when it is the one showing
+        const auto panelButton = [&](const char* icon, int tab, const char* tip) {
+            if (barButton(icon, files.open && files.tab == tab)) {
+                if (files.open && files.tab == tab) {
+                    files.open = false;
+                } else {
+                    files.open = true;
+                    files.tab = tab;
+                }
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", tip);
+            }
+        };
+        panelButton(ICON_FA_FOLDER_TREE, 0, "Files (Ctrl+B)");
+        ImGui::SameLine(0, 6);
+        panelButton(ICON_FA_CODE_BRANCH, 1, "Changes");
     } else {
         ImGui::TextColored(colors.subtext0, "ImCode");
     }

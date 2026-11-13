@@ -370,27 +370,6 @@ bool App::filesPanel(Thread& t, bool beside) {
     bool released = false;
     const Colors colors = themeColors();
     ImGui::BeginChild("files");
-    // Files and Changes: what the panel shows
-    {
-        const auto tab = [&](const std::string& label, int which) {
-            const bool on = f.tab == which;
-            ImGui::PushStyleColor(ImGuiCol_Button, on ? colors.surface0 : ImVec4(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, colors.surface1);
-            ImGui::PushStyleColor(ImGuiCol_Text, on ? colors.text : colors.subtext0);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Round::Row);
-            if (ImGui::Button((label + "###tab" + std::to_string(which)).c_str())) {
-                f.tab = which;
-            }
-            ImGui::PopStyleVar(2);
-            ImGui::PopStyleColor(4);
-        };
-        tab(ICON_FA_FOLDER_TREE "  Files", 0);
-        ImGui::SameLine(0, 4);
-        tab(std::string(ICON_FA_CODE_BRANCH "  Changes") + (dock.list.empty() ? "" : "  " + std::to_string(dock.list.size())), 1);
-        ImGui::Spacing();
-    }
     if (f.tab == 1) {
         // the open thread's folder, read again when it is another one
         if (dock.host != t.host || dock.cwd != t.cwd) {
