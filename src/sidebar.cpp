@@ -41,7 +41,7 @@ void App::sidebar() {
         imshell::IconButton(ICON_FA_BARS_STAGGERED, imshell::ButtonVariant::Secondary, ImVec2(button, button));
     ImGui::PopStyleColor();
     if (picked) {
-        const float mark = 22;
+        const float mark = 14;
         const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
         drawProjectBadge(ImGui::GetWindowDrawList(),
                          ImVec2(std::floor((min.x + max.x - mark - 4) * 0.5f), std::floor((min.y + max.y - mark) * 0.5f)),
