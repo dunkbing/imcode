@@ -36,6 +36,7 @@ struct Item {
     std::string choice;
     bool terminalSignIn = false; // a terminal sign-in is open: offer Continue
     bool resumeChoice = false;   // Error: the session could not be resumed; offer to try again or start over
+    bool loadEarlier = false;    // Info: a button reads more of the transcript
     // TurnChanges: the folder before and after a turn (git trees), and what differs
     std::string treeFrom, treeTo;
     int filesChanged = 0, linesAdded = 0, linesRemoved = 0;
@@ -176,9 +177,19 @@ private:
     std::string turnBefore_; // the folder as the running turn found it (a git tree); empty: not a repository
     bool watching_ = false; // following the transcript
     bool live_ = false;     // and it was written recently
+    size_t tailBytes_ = 512 * 1024; // how much of the end of a transcript is read at first; "load earlier" grows it
+    bool earlierWanted_ = false;
     bool keepHistory_ = false; // the transcript is on screen: the agent's replay of it is dropped
     [[nodiscard]] bool writtenElsewhere() const; // the transcript was written lately, and not by this app
     void leaveWatch();                           // carry on here: the agent starts, the transcript stays
+public:
+    [[nodiscard]] bool following() const { // the transcript is on screen, no agent yet
+        return watching_;
+    }
+    void loadEarlier() { // from the view: done in poll(), not while the items are drawn
+        earlierWanted_ = true;
+    }
+private:
     std::string watchPath_; // the transcript followed
     size_t watchOffset_ = 0;
     bool catchingUp_ = false; // the last read was a full one: there is more

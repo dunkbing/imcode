@@ -246,10 +246,10 @@ bool Thread::watch() {
     // fails to parse). the rest is in the agent's own history
     std::error_code ec;
     const size_t size = static_cast<size_t>(std::filesystem::file_size(watchPath_, ec));
-    constexpr size_t tail = 4 * 1024 * 1024;
+    const size_t tail = tailBytes_;
     if (!ec && size > tail) {
         watchOffset_ = size - tail;
-        add({.kind = Item::Kind::Info, .text = "A long conversation: its earlier messages are not shown here."});
+        add({.kind = Item::Kind::Info, .text = "Earlier messages are not shown.", .loadEarlier = true});
     }
     watchCheckMs_ = 0;
     watching_ = true;
@@ -570,6 +570,10 @@ void Thread::continueAfterTerminalSignIn(Item& item) {
 }
 
 void Thread::follow() {
+    if (std::exchange(earlierWanted_, false) && watching_ && watchOffset_ > 0) {
+        tailBytes_ *= 4; // shortcut: reads it all again and the view jumps to the end; prepending would keep the place
+        watch();
+    }
     // following another client's transcript: what it wrote since, twice a second
     if (watching_ && (nowMs() - watchCheckMs_ > 500 || catchingUp_)) {
         watchCheckMs_ = nowMs();

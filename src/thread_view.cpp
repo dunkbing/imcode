@@ -438,6 +438,12 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
         ImGui::TextWrapped("%s", it.text.c_str());
         ImGui::PopStyleColor();
+        if (it.loadEarlier && t.following()) {
+            ImGui::SameLine();
+            if (imshell::Button("Load earlier")) {
+                t.loadEarlier();
+            }
+        }
         break;
     case Item::Kind::Error:
         ui::Callout("Error", it.text.c_str(), ui::Tone::Danger);
@@ -1165,8 +1171,8 @@ void App::threadBody(Thread& t) {
     const float left = (avail.x - width) * 0.5f;
     const float composerHeight = composerInputHeight(input, width) + ImGui::GetFrameHeight() + 34;
 
-    if (t.items.empty() && !t.busy()) {
-        // nothing said yet: the question and the composer in the middle
+    if (t.items.empty() && !t.busy() && t.sessionId.empty()) {
+        // nothing said yet (a saved thread is on its way: its composer stays at the bottom): the question and the composer in the middle
         const std::string name = std::filesystem::path(t.cwd).filename().string();
         const std::string ask = "What should we build in " + name + "?";
         const float room = attachedStrip(); // the strip goes in above the composer, which stays (asked before the big font: it sets the frame height)
