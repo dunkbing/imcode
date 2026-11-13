@@ -8,7 +8,7 @@ Needs CMake and [vcpkg](https://vcpkg.io). On Linux and Windows also [zig](https
 
 ```sh
 git submodule update --init --recursive
-cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
+cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake  # optimized (RelWithDebInfo) unless you pass -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j 4
 ./build/imcode
 ```

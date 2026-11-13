@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.23)
+
+# optimized unless asked otherwise: an unoptimized build (and vcpkg's debug libraries) makes git and
+# the diff about 3x slower. before project(), which picks the vcpkg libraries
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_GENERATOR MATCHES "Xcode|Multi-Config|Visual Studio")
+    set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
+endif()
 project(imcode VERSION 0.0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
