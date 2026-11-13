@@ -27,6 +27,7 @@ namespace Store {
         out.notifyAnswer = root.value("notifyAnswer", true);
         out.notifyFinished = root.value("notifyFinished", true);
         out.notifyOthers = root.value("notifyOthers", true);
+        out.machines = root.value("machines", std::vector<std::string>{});
         out.defaults = root.value("defaults", out.defaults);
         if (const auto layout = root.value("layout", std::vector<float>{}); layout.size() == 4) {
             out.sidebarWidth = layout[0];
@@ -80,6 +81,7 @@ namespace Store {
                                    {"notifyAnswer", data.notifyAnswer},
                                    {"notifyFinished", data.notifyFinished},
                                    {"notifyOthers", data.notifyOthers},
+                                   {"machines", data.machines},
                                    {"defaults", data.defaults},
                                    {"layout", {data.sidebarWidth, data.filesWidth, data.treeWidth, data.terminalHeight}},
                                    {"projects", projects},

@@ -158,7 +158,7 @@ void App::paletteDraw() {
             }
         };
         offer({ICON_FA_FOLDER_PLUS, "Add project", "A folder here or on another machine"}, -1);
-        offer({ICON_FA_GEAR, "Settings", "Agents: turn on, turn off, install"}, settingsRow);
+        offer({ICON_FA_GEAR, "Settings", "Look, agents, machines, alerts"}, settingsRow);
         if (current >= 0) {
             offer({ICON_FA_TERMINAL, "Toggle terminal", "A shell in this thread's folder"}, terminalRow);
             offer({ICON_FA_LIST, "Agent log", "Every line sent to and from the agent"}, logRow);
@@ -189,7 +189,7 @@ void App::paletteDraw() {
     } else if (p.step == Palette::Step::Host) {
         hint = "user@host, or a name from ~/.ssh/config";
         heading = "Hosts";
-        std::vector<std::string> known;
+        std::vector<std::string> known = data.machines; // added in Settings first
         for (const auto& project : data.projects) {
             if (!project.host.empty() && std::ranges::find(known, project.host) == known.end()) {
                 known.push_back(project.host);

@@ -135,16 +135,34 @@ void App::agentRows(bool narrow) {
     }
 }
 
-// agents and setup, over the app: closed by its x, escape, or a click outside
+namespace {
+    // this computer's name, as the network knows it
+    std::string computerName() {
+        char name[256] = "this machine";
+#ifdef _WIN32
+        if (const char* env = std::getenv("COMPUTERNAME")) {
+            std::snprintf(name, sizeof(name), "%s", env);
+        }
+#else
+        gethostname(name, sizeof(name));
+#endif
+        if (char* dot = std::strchr(name, '.')) {
+            *dot = 0; // "name.local"
+        }
+        return name;
+    }
+} // namespace
+
+// the settings, over the app, one page at a time: closed by its x, escape, or a click outside
 void App::settingsDraw() {
     const Colors colors = themeColors();
     if (std::exchange(settingsWant, false)) {
         ImGui::OpenPopup("##settings");
     }
     const ImGuiViewport* vp = ImGui::GetMainViewport();
-    const bool narrow = vp->WorkSize.x < 560;
+    const bool narrow = vp->WorkSize.x < 640;
     ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(std::min(640.0f, vp->WorkSize.x - 32), 0));
+    ImGui::SetNextWindowSize(ImVec2(std::min(760.0f, vp->WorkSize.x - 32), std::min(440.0f, vp->WorkSize.y - 32)));
     ImGui::PushStyleColor(ImGuiCol_PopupBg, colors.mantle);
     ImGui::PushStyleColor(ImGuiCol_Border, colors.overlay0);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Round::Dialog);
@@ -153,7 +171,7 @@ void App::settingsDraw() {
     const bool shown = ImGui::BeginPopupModal(
         "##settings", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-            ImGuiWindowFlags_NoSavedSettings);
+            ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(2);
     if (!shown) {
@@ -167,45 +185,192 @@ void App::settingsDraw() {
     ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - button);
     bool close = imshell::IconButton(ICON_FA_XMARK, imshell::ButtonVariant::Secondary, ImVec2(button, button));
     ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
-    // the look: one of imshell's themes
-    ImGui::AlignTextToFramePadding(); // level with the list beside it
-    ImGui::TextColored(colors.subtext0, "Theme");
-    ImGui::SameLine(narrow ? 90.0f : 140.0f);
-    ImGui::SetNextItemWidth(220);
-    if (ImGui::BeginCombo("##theme", imshell::CurrentTheme().name)) {
-        for (const auto& theme : imshell::Themes()) {
-            if (ImGui::Selectable(theme.name, theme.id == data.theme)) {
-                applyTheme(theme.id);
-                save();
+
+    // the pages: a list at the left, a row of them when the window is narrow
+    struct Page {
+        const char* icon;
+        const char* name;
+    };
+    static constexpr Page pages[] = {{ICON_FA_PALETTE, "Appearance"}, {ICON_FA_ROBOT, "Agents"}, {ICON_FA_SERVER, "Machines"},
+                                     {ICON_FA_BELL, "Alerts"},        {ICON_FA_CIRCLE_INFO, "About"}};
+    if (narrow) {
+        for (int i = 0; i < 5; ++i) {
+            if (i > 0) {
+                ImGui::SameLine();
+            }
+            if (ImGui::Selectable((std::string(pages[i].icon) + "##page" + std::to_string(i)).c_str(), settingsTab == i, 0, ImVec2(34, 0))) {
+                settingsTab = i;
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", pages[i].name);
             }
         }
-        ImGui::EndCombo();
+    } else {
+        ImGui::BeginChild("##pages", ImVec2(160, 0));
+        for (int i = 0; i < 5; ++i) {
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            if (ImGui::Selectable(("##page" + std::to_string(i)).c_str(), settingsTab == i, 0, ImVec2(0, 30))) {
+                settingsTab = i;
+            }
+            // the icon and the name each at their own column: the glyphs differ in width
+            const float textY = at.y + (30 - ImGui::GetTextLineHeight()) / 2;
+            const ImU32 ink = ImGui::GetColorU32(settingsTab == i ? colors.text : colors.subtext0);
+            ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + 10, textY), ink, pages[i].icon);
+            ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + 38, textY), ink, pages[i].name);
+        }
+        ImGui::EndChild();
+        ImGui::SameLine();
     }
-    ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
-    ImGui::TextColored(colors.subtext0, "Notify when");
-    ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
-    bool changed = ImGui::Checkbox("A thread needs your answer", &data.notifyAnswer);
-    changed |= ImGui::Checkbox("A thread finishes", &data.notifyFinished);
-    changed |= ImGui::Checkbox("Also for threads in the background while the window is open", &data.notifyOthers);
-    if (changed) {
-        save();
+    ImGui::BeginChild("##page", ImVec2(0, 0), ImGuiChildFlags_AlwaysUseWindowPadding);
+    const auto heading = [&](const char* title, const char* about) {
+        ImGui::TextColored(colors.overlay1, "%s", title);
+        if (about) {
+            ImGui::PushStyleColor(ImGuiCol_Text, colors.overlay0);
+            ImGui::TextWrapped("%s", about);
+            ImGui::PopStyleColor();
+        }
+        ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
+    };
+    bool escapeUsed = false;
+    switch (settingsTab) {
+    case 0: { // the look: one of imshell's themes
+        heading("APPEARANCE", nullptr);
+        ImGui::AlignTextToFramePadding(); // level with the list beside it
+        ImGui::TextColored(colors.subtext0, "Theme");
+        ImGui::SameLine(110);
+        ImGui::SetNextItemWidth(220);
+        if (ImGui::BeginCombo("##theme", imshell::CurrentTheme().name)) {
+            for (const auto& theme : imshell::Themes()) {
+                if (ImGui::Selectable(theme.name, theme.id == data.theme)) {
+                    applyTheme(theme.id);
+                    save();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        break;
     }
-    ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
-    ImGui::TextColored(colors.subtext0, "Agents");
-    ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
-    agentRows(narrow);
-    ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
-    // which build this is: what to quote when something is off
-    ImGui::TextColored(colors.overlay0, "ImCode " IMCODE_VERSION "  " IMCODE_COMMIT);
+    case 1:
+        heading("AGENTS", "Turn on the ones you use, and install what is missing.");
+        agentRows(true);
+        break;
+    case 2: { // the computers reached over ssh, and this one
+        heading("MACHINES", "Your computers, reached over ssh. Their agents and terminals keep running when you disconnect.");
+        // a row: the name and what is known of it, a dot at the right (green: connected), and an x
+        // where the machine can be forgotten
+        const auto machine = [&](const std::string& name, const std::string& detail, bool live, bool removable) {
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            const float right = at.x + ImGui::GetContentRegionAvail().x;
+            const float line = ImGui::GetTextLineHeight();
+            const float rowH = line * 2 + 14;
+            ImGui::TextUnformatted(name.c_str());
+            ImGui::SetCursorScreenPos(ImVec2(at.x, at.y + line + 3));
+            ImGui::TextColored(colors.overlay1, "%s", detail.c_str());
+            ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(right - 8, at.y + rowH / 2 - 4), 4,
+                                                        ImGui::GetColorU32(live ? colors.green : colors.surface2));
+            bool forget = false;
+            if (removable) {
+                ImGui::SetCursorScreenPos(ImVec2(right - 8 - 8 - 26, at.y + 2));
+                ImGui::PushID(name.c_str());
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                ImGui::PushStyleColor(ImGuiCol_Text, colors.overlay1);
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+                forget = ImGui::SmallButton(ICON_FA_XMARK);
+                ImGui::PopStyleColor(2);
+                ImGui::PopStyleVar();
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Forget this machine");
+                }
+                ImGui::PopID();
+            }
+            ImGui::SetCursorScreenPos(ImVec2(at.x, at.y + rowH));
+            ImGui::Separator();
+            ImGui::Dummy(ImVec2(0, 2));
+            return forget;
+        };
+        machine(computerName(), "ImCode " IMCODE_VERSION, true, false);
+        std::vector<std::string> hosts = data.machines;
+        for (const auto& project : data.projects) {
+            if (!project.host.empty() && std::ranges::find(hosts, project.host) == hosts.end()) {
+                hosts.push_back(project.host);
+            }
+        }
+        if (hosts.empty()) {
+            ImGui::TextColored(colors.overlay1, "No other machines yet.");
+        }
+        for (const auto& host : hosts) {
+            const auto there = std::ranges::count(data.projects, host, &Store::Project::host);
+            const bool live = Ssh::connected(host);
+            std::string detail = live ? "Connected" : "Not connected";
+            if (there > 0) {
+                detail += "  ·  " + std::to_string(there) + (there == 1 ? " project" : " projects");
+            }
+            if (machine(host, detail, live, there == 0)) {
+                std::erase(data.machines, host);
+                save();
+                break; // the list changed under the loop
+            }
+        }
+        ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
+        if (!machineAdding) {
+            if (imshell::Button("Add a machine", imshell::ButtonVariant::Secondary)) {
+                machineAdding = true;
+                machineFocus = true;
+            }
+        } else {
+            if (std::exchange(machineFocus, false)) {
+                ImGui::SetKeyboardFocusHere();
+            }
+            ImGui::SetNextItemWidth(std::max(160.0f, ImGui::GetContentRegionAvail().x - 150));
+            bool add = ImGui::InputTextWithHint("##machine", "user@host, or a name from ~/.ssh/config", machineInput,
+                                                sizeof(machineInput), ImGuiInputTextFlags_EnterReturnsTrue);
+            ImGui::SameLine();
+            add |= imshell::Button("Add", imshell::ButtonVariant::Primary);
+            ImGui::SameLine();
+            if (imshell::Button("Cancel", imshell::ButtonVariant::Secondary) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+                machineAdding = false;
+                machineInput[0] = 0;
+                escapeUsed = true;
+            }
+            if (add) {
+                const std::string host = Ssh::destination(machineInput);
+                if (!host.empty() && std::ranges::find(hosts, host) == hosts.end()) {
+                    data.machines.push_back(host);
+                    save();
+                }
+                machineAdding = false;
+                machineInput[0] = 0;
+            }
+        }
+        break;
+    }
+    case 3: { // what the system tells the user
+        heading("ALERTS", "Notify when");
+        bool changed = ImGui::Checkbox("A thread needs your answer", &data.notifyAnswer);
+        changed |= ImGui::Checkbox("A thread finishes", &data.notifyFinished);
+        changed |= ImGui::Checkbox("Also for threads in the background while the window is open", &data.notifyOthers);
+        if (changed) {
+            save();
+        }
+        break;
+    }
+    default: // which build this is: what to quote when something is off
+        heading("ABOUT", nullptr);
+        ImGui::TextColored(colors.subtext0, "ImCode " IMCODE_VERSION "  " IMCODE_COMMIT);
 #ifdef IMCODE_UPDATER
-    ImGui::SameLine();
-    const bool available = imshell::updater::Available();
-    if (imshell::Button(available ? ("Update to " + imshell::updater::LatestVersion()).c_str() : "Check for Updates",
-                        available ? imshell::ButtonVariant::Primary : imshell::ButtonVariant::Secondary)) {
-        imshell::updater::Check();
-    }
+        ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
+        const bool available = imshell::updater::Available();
+        if (imshell::Button(available ? ("Update to " + imshell::updater::LatestVersion()).c_str() : "Check for Updates",
+                            available ? imshell::ButtonVariant::Primary : imshell::ButtonVariant::Secondary)) {
+            imshell::updater::Check();
+        }
 #endif
-    close |= ImGui::IsKeyPressed(ImGuiKey_Escape);
+        break;
+    }
+    ImGui::EndChild();
+    if (!escapeUsed) {
+        close |= ImGui::IsKeyPressed(ImGuiKey_Escape);
+    }
     close |= ImGui::IsMouseClicked(0) &&
              !ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows |
                                      ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
@@ -222,21 +387,11 @@ void App::onboarding() {
     ImGui::SetCursorPos(ImVec2((ImGui::GetWindowWidth() - width) * 0.5f, narrow ? 24 : 72));
     ImGui::BeginChild("onboarding", ImVec2(width, 0));
 
-    char hostName[256] = "this machine";
-#ifdef _WIN32
-    if (const char* name = std::getenv("COMPUTERNAME")) {
-        std::snprintf(hostName, sizeof(hostName), "%s", name);
-    }
-#else
-    gethostname(hostName, sizeof(hostName));
-#endif
-    if (char* dot = std::strchr(hostName, '.')) {
-        *dot = 0; // "name.local"
-    }
+    const std::string hostName = computerName();
     ImGui::PushFont(nullptr, 24.0f);
     ImGui::TextUnformatted("Welcome to ImCode");
     ImGui::PopFont();
-    ImGui::TextColored(colors.subtext0, "Setting up %s.", hostName);
+    ImGui::TextColored(colors.subtext0, "Setting up %s.", hostName.c_str());
     ImGui::Dummy(ImVec2(0, Theme::Spacing::XL));
 
     beginSection("Agents", narrow);

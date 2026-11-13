@@ -88,6 +88,10 @@ struct App : imshell::Delegate {
     std::string openFolder; // `imcode <folder>`: opened as a project with a new thread
     int recall = -1; // the sent prompt shown by up/down, counted back from the newest; -1 = none
     bool settingsWant = false;
+    int settingsTab = 0;            // the page of the settings dialog
+    bool machineAdding = false;     // the field for a new machine is open
+    bool machineFocus = false;
+    char machineInput[256] = "";
     int switchProjectTo = -1; // picked in the projects popup: applied after the frame's ui
     bool sidebarOpen = false; // narrow windows (phones): the thread list covers the thread
     bool devOpenModels = false; // ui checks: open the model popup once

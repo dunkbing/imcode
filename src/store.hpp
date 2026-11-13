@@ -30,6 +30,7 @@ namespace Store {
         Project filter; // the project the sidebar lists; empty cwd: all of them
         // per agent, the model, mode, ... last picked: what its next new thread starts with
         std::map<std::string, std::map<std::string, std::string>> defaults;
+        std::vector<std::string> machines; // ssh hosts added in Settings, besides those a project is on
         std::vector<Project> projects;
         std::vector<std::unique_ptr<Thread>> threads;
     };
