@@ -176,6 +176,9 @@ private:
     std::string turnBefore_; // the folder as the running turn found it (a git tree); empty: not a repository
     bool watching_ = false; // following the transcript
     bool live_ = false;     // and it was written recently
+    bool keepHistory_ = false; // the transcript is on screen: the agent's replay of it is dropped
+    [[nodiscard]] bool writtenElsewhere() const; // the transcript was written lately, and not by this app
+    void leaveWatch();                           // carry on here: the agent starts, the transcript stays
     std::string watchPath_; // the transcript followed
     size_t watchOffset_ = 0;
     bool catchingUp_ = false; // the last read was a full one: there is more

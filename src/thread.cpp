@@ -170,7 +170,7 @@ bool Thread::ensureStarted() {
     }
     // the agent replays the conversation it kept: ours would only double it
     replaying_ = !sessionId.empty();
-    if (replaying_) {
+    if (replaying_ && !keepHistory_) {
         items.clear();
         ++revision_;
     }
@@ -209,17 +209,28 @@ namespace {
 }
 
 void Thread::open() {
-    // a saved thread: its agent replays the history, unless another client is writing it
-    // right now (then it is followed). a new one waits until it is needed (a message, the
-    // model picker, a slash command): no process for a thread never used
-    if (!acp_ && !watching_ && items.empty() && !sessionId.empty()) {
-        const std::string path = host.empty() ? History::transcript(agentId, cwd, sessionId) : "";
-        // written in the last minutes by this app (a run before a restart) is not a terminal's
-        const long long wrote = std::time(nullptr) - History::quietFor(path);
-        const bool ours = ownWriteAt > 0 && wrote <= ownWriteAt + 30;
-        if (!(!path.empty() && !ours && History::quietFor(path) < quietSeconds && watch())) {
-            ensureStarted();
-        }
+    // a saved thread on this machine is shown from its transcript at once, like the agent's own cli;
+    // the agent starts when it is needed (a message, the model picker, a slash command). others (a
+    // remote host, an agent without a readable transcript): the agent replays the history
+    if (!acp_ && !watching_ && items.empty() && !sessionId.empty() && !(host.empty() && watch())) {
+        ensureStarted();
+    }
+}
+
+bool Thread::writtenElsewhere() const {
+    if (watchPath_.empty() || History::quietFor(watchPath_) >= quietSeconds) {
+        return false;
+    }
+    // written lately by this app's own agent (a run before a restart) is not a terminal's
+    const long long wrote = std::time(nullptr) - History::quietFor(watchPath_);
+    return !(ownWriteAt > 0 && wrote <= ownWriteAt + 30);
+}
+
+void Thread::leaveWatch() {
+    if (watching_) {
+        watching_ = false;
+        keepHistory_ = true;
+        ++revision_;
     }
 }
 
@@ -242,7 +253,7 @@ bool Thread::watch() {
     }
     watchCheckMs_ = 0;
     watching_ = true;
-    live_ = true;
+    live_ = writtenElsewhere();
     ++revision_;
     return true;
 }
@@ -260,24 +271,31 @@ void Thread::release() {
     acp_.reset();
     items.clear();
     replaying_ = false;
+    keepHistory_ = false;
     ++revision_;
 }
 
 void Thread::retryResume() {
     acp_.reset();
     replaying_ = false;
+    keepHistory_ = false;
     ensureStarted();
 }
 
 void Thread::startOver() {
     acp_.reset();
     replaying_ = false;
+    keepHistory_ = false;
     sessionId.clear(); // the old one stays the agent's; this thread goes on in a new one
     changed_ = true;
     ensureStarted();
 }
 
 void Thread::wake() {
+    if (watching_ && live_) {
+        return; // another client is writing it: no agent of ours beside it
+    }
+    leaveWatch();
     if (!acp_ && !connectOp_.isRunning()) {
         ensureStarted();
     }
@@ -287,12 +305,9 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
     if ((text.empty() && files.empty()) || (watching_ && live_)) { // another client is writing it
         return;
     }
-    if (watching_) {
-        // quiet there: carry on here, in the same conversation. the agent replays its history
-        watching_ = false;
-        items.clear();
-        ++revision_;
-    }
+    // quiet there: carry on here, in the same conversation. the transcript stays on screen and the
+    // agent's replay of it is dropped
+    leaveWatch();
     if (busy()) {
         queue.push_back({text, files}); // a turn is running: this one goes after it
         ++revision_;
@@ -567,7 +582,7 @@ void Thread::follow() {
                  .toolTitle = e.kind == History::Entry::Kind::Tool ? e.text : "",
                  .toolStatus = "completed"});
         }
-        const bool live = History::quietFor(watchPath_) < quietSeconds;
+        const bool live = writtenElsewhere();
         catchingUp_ = watchOffset_ - before >= History::maxRead / 2; // more waiting: read again next poll
         // quiet there: the composer opens; written there again: read only again
         if (live != live_) {
@@ -597,6 +612,7 @@ void Thread::noticeElsewhere() {
     if (size > idleSize_) { // written, and not by this app: follow it there, read only
         acp_.reset();
         replaying_ = false;
+        keepHistory_ = false;
         idleSize_ = 0;
         watch();
     }
@@ -653,11 +669,18 @@ void Thread::poll() {
         ++revision_;
     };
     for (auto& ev : acp_->drainEvents()) {
+        if (keepHistory_ && replaying_ &&
+            (ev.type == AcpEvent::Type::MessageDelta || ev.type == AcpEvent::Type::UserMessageDelta ||
+             ev.type == AcpEvent::Type::ThoughtDelta || ev.type == AcpEvent::Type::ToolCall ||
+             ev.type == AcpEvent::Type::ToolCallUpdate || ev.type == AcpEvent::Type::Plan)) {
+            continue; // the history is on screen already, from the transcript
+        }
         switch (ev.type) {
         case AcpEvent::Type::SessionReady:
             idleSize_ = 0; // measured again once it has been idle a moment
             idleSinceMs_ = nowMs();
             replaying_ = false;
+            keepHistory_ = false;
             queued_ = false;
             if (const std::string id = acp_->sessionId(); id != sessionId) {
                 sessionId = id;
@@ -824,6 +847,7 @@ void Thread::poll() {
     if (gone) {
         acp_.reset();
         replaying_ = false;
+        keepHistory_ = false;
         queued_ = false;
         heldUser_.clear();
     }
