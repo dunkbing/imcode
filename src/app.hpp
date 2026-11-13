@@ -8,6 +8,7 @@
 #include "history.hpp"
 #include "imshell/app.hpp"
 #include "imshell/editor.hpp"
+#include "imshell/frames.hpp"
 #include "ssh.hpp"
 #include "store.hpp"
 #include "terminal.hpp"
@@ -23,6 +24,36 @@
 #include <set>
 #include <string>
 #include <vector>
+
+// a group of resizable panels shows a half-laid-out frame when it first appears. that frame is
+// laid out as usual and covered with the window's own colour, and the next one asked for
+struct Settle {
+    int drawnAt = -10; // the frame it was last drawn on
+    // true on the first frame of a run of frames; `enable` false: not drawn now (a later run starts anew)
+    bool first(bool enable = true) {
+        if (!enable) {
+            return false;
+        }
+        const int frame = ImGui::GetFrameCount();
+        const bool starts = drawnAt < frame - 1;
+        drawnAt = frame;
+        return starts;
+    }
+};
+struct CoverFirstFrame {
+    ImVec2 min, max;
+    bool on;
+    CoverFirstFrame(bool first, ImVec2 size) : min(ImGui::GetCursorScreenPos()), max(min.x + size.x, min.y + size.y), on(first) {
+        if (on) {
+            imshell::requestFrames();
+        }
+    }
+    ~CoverFirstFrame() {
+        if (on) {
+            ImGui::GetForegroundDrawList()->AddRectFilled(min, max, ImGui::GetColorU32(ImGuiCol_WindowBg));
+        }
+    }
+};
 
 // the window: onboarding, then a sidebar of threads and the open thread. one file per
 // screen part (onboarding.cpp, palette.cpp, sidebar.cpp, thread_view.cpp, terminal_view.cpp,
@@ -111,6 +142,7 @@ struct App : imshell::Delegate {
         bool toTop = false;   // a new file: scroll back
         float width = 0;      // pixels beside the chat; 0: not sized yet
         float treeWidth = 220;
+        Settle settle;
         int epoch = 0;        // bumps with the folder: what was loading for the old one is dropped
         std::string host, cwd;
         std::map<std::string, Listing> dirs; // by path under cwd, "" = cwd itself
@@ -203,6 +235,7 @@ struct App : imshell::Delegate {
         int selected = 0;
         float listWidth = 280, listHeight = 200; // the files beside the diff (dialog), above it (docked)
         double readAt = 0;                         // docked: when the list was last read
+        Settle settle;
         bool folded[3] = {};  // the list sections folded away: staged, tracked, not tracked
         std::string diffFor; // the file `lines` is (being) read for
         std::vector<Diff::Line> lines;

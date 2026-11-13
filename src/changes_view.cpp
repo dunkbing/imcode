@@ -3,6 +3,7 @@
 
 #include "acp_host/process_runner.hpp"
 #include "imshell/button.hpp"
+#include "imshell/frames.hpp"
 #include "imshell/components.hpp"
 #include "imshell/resizable.hpp"
 #include "colors.hpp"
@@ -68,6 +69,8 @@ void App::dockOpen(Thread& t) {
 }
 
 void App::changesDraw(Changes& c, bool docked) {
+    // the list and its diff are laid out on the frame the list first arrives (read off the ui thread)
+    const CoverFirstFrame cover(docked && c.settle.first(!c.list.empty()), ImGui::GetContentRegionAvail());
     const Colors colors = themeColors();
     if (docked && !ImGui::GetIO().AppFocusLost && !c.listOp.isRunning() && !c.reload && ImGui::GetTime() - c.readAt > 3) {
         c.reload = true; // the folder changes under the panel: agents, editors, the user

@@ -7,6 +7,7 @@
 #include "acp_host/agents.hpp"
 #include "acp_host/process_runner.hpp"
 #include "imshell/button.hpp"
+#include "imshell/frames.hpp"
 #include "colors.hpp"
 #include "code_colors.hpp"
 #include <algorithm>
@@ -369,6 +370,7 @@ bool App::filesPanel(Thread& t, bool beside) {
     Files& f = files;
     bool released = false;
     const Colors colors = themeColors();
+    const CoverFirstFrame cover(f.settle.first(), ImGui::GetContentRegionAvail()); // the panels are laid out as it opens
     ImGui::BeginChild("files");
     if (f.tab == 1) {
         // the open thread's folder, read again when it is another one
