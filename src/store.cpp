@@ -24,6 +24,9 @@ namespace Store {
         out.lastSession = root.value("last", "");
         out.filter = {root.value("filterHost", ""), root.value("filterCwd", "")};
         out.theme = root.value("theme", out.theme);
+        out.notifyAnswer = root.value("notifyAnswer", true);
+        out.notifyFinished = root.value("notifyFinished", true);
+        out.notifyOthers = root.value("notifyOthers", true);
         out.defaults = root.value("defaults", out.defaults);
         if (const auto layout = root.value("layout", std::vector<float>{}); layout.size() == 4) {
             out.sidebarWidth = layout[0];
@@ -74,6 +77,9 @@ namespace Store {
                                    {"filterHost", data.filter.host},
                                    {"filterCwd", data.filter.cwd},
                                    {"theme", data.theme},
+                                   {"notifyAnswer", data.notifyAnswer},
+                                   {"notifyFinished", data.notifyFinished},
+                                   {"notifyOthers", data.notifyOthers},
                                    {"defaults", data.defaults},
                                    {"layout", {data.sidebarWidth, data.filesWidth, data.treeWidth, data.terminalHeight}},
                                    {"projects", projects},

@@ -182,6 +182,15 @@ void App::settingsDraw() {
         ImGui::EndCombo();
     }
     ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
+    ImGui::TextColored(colors.subtext0, "Notify when");
+    ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
+    bool changed = ImGui::Checkbox("A thread needs your answer", &data.notifyAnswer);
+    changed |= ImGui::Checkbox("A thread finishes", &data.notifyFinished);
+    changed |= ImGui::Checkbox("Also for threads in the background while the window is open", &data.notifyOthers);
+    if (changed) {
+        save();
+    }
+    ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
     ImGui::TextColored(colors.subtext0, "Agents");
     ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
     agentRows(narrow);

@@ -19,6 +19,9 @@ namespace Store {
         bool onboarded = false;
         std::vector<std::string> agents; // ids turned on: what the pickers offer
         std::string theme = "tokyo-night"; // an imshell theme id
+        // what the system tells the user: a thread needs an answer, a turn finished, and whether it
+        // also does so for a thread that is not the open one while the window is in front
+        bool notifyAnswer = true, notifyFinished = true, notifyOthers = true;
         // panel sizes as the user dragged them: the list's width, the chat's share beside the
         // files, the file tree's width, the chat's share above the terminal
         // pixels; 0: not sized yet (the panels share the room)

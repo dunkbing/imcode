@@ -440,11 +440,13 @@ void App::hostLoop() {
             }
             const Seen state{t->busy(), t->needsAnswer()};
             const auto before = seen.find(t.get());
-            // tell the user what they did not see happen
-            if (!watched && before != seen.end() && !t->title.empty()) {
-                if (state.needsAnswer && !before->second.needsAnswer) {
+            // tell the user what they did not see happen: the window in the background, or another
+            // thread than the open one
+            const bool open = current >= 0 && current < static_cast<int>(data.threads.size()) && data.threads[current] == t;
+            if ((!watched || (data.notifyOthers && !open)) && before != seen.end() && !t->title.empty()) {
+                if (data.notifyAnswer && state.needsAnswer && !before->second.needsAnswer) {
                     notify(t->sessionId, "Needs your answer", t->title);
-                } else if (before->second.busy && !state.busy && !state.needsAnswer) {
+                } else if (data.notifyFinished && before->second.busy && !state.busy && !state.needsAnswer) {
                     notify(t->sessionId, "Finished", t->title);
                 }
             }
