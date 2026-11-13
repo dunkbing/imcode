@@ -221,6 +221,7 @@ struct App : imshell::Delegate {
         int selected = 0;
         bool askSecret = false;
         std::string host; // empty = this machine
+        bool direct = false; // opened on the working machine: it is browsed at once, with no step to go back to
         std::string home, dir;
         std::vector<std::string> dirs;
         AcpHost::AsyncOp<Listing> op;

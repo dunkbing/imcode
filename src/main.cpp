@@ -170,11 +170,14 @@ void App::setup() {
             std::ranges::none_of(agentsOn(), [&](const AcpAgentDef* d) { return d->id == agent; })) {
             agent = ""; // newThread picks the first agent that is on
         }
-        // the working machine, when it has a project: new threads start there
-        if (const int on = projectOn(data.machine); on >= 0 && data.projects[where].host != data.machine) {
-            where = on;
+        // the working machine: new threads start there. with no project on it yet, none starts
+        // (a thread elsewhere would make that machine the working one no more)
+        if (data.projects[where].host != data.machine) {
+            where = projectOn(data.machine);
         }
-        newThread(where, agent);
+        if (where >= 0) {
+            newThread(where, agent);
+        }
     }
     // ui checks: IMCODE_DEV_SEND=<text> starts a thread in the first project before any frame
     if (const char* text = std::getenv("IMCODE_DEV_SEND"); text && !data.projects.empty()) {

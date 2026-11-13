@@ -44,12 +44,18 @@ namespace {
 } // namespace
 
 void App::paletteOpen(bool actions) {
-    palette.wantOpen = true;
-    palette.step = actions ? Palette::Step::Actions : Palette::Step::Sources;
-    // a folder is added on the working machine: skip the choice of source and browse there
-    if (!actions && !data.machine.empty() && !palette.op.isRunning()) {
-        palette.step = Palette::Step::Host;
-        palette.host = data.machine;
+    Palette& p = palette;
+    p.wantOpen = true;
+    p.step = actions ? Palette::Step::Actions : Palette::Step::Sources;
+    p.direct = false;
+    // a folder is added on the working machine: browse it at once, no choice of source
+    if (!actions && !data.machine.empty() && !p.op.isRunning()) {
+        p.direct = true;
+        p.step = Palette::Step::Browse;
+        p.host = data.machine;
+        p.dir.clear();
+        p.dirs.clear();
+        p.home.clear();
         paletteGo(data.machine, "");
     }
 }
@@ -131,10 +137,14 @@ void App::paletteDraw() {
     p.op.check([&](Palette::Listing got) {
         p.error = got.error.message;
         p.askSecret = got.error.needsSecret;
+        if (!got.ok && p.direct) { // it could not be listed: the hosts step shows why, and asks for a password
+            p.direct = false;
+            p.step = Palette::Step::Host;
+        }
         if (!got.ok) {
             return;
         }
-        if (p.step == Palette::Step::Host) {
+        if (p.step == Palette::Step::Host || p.dir.empty()) {
             p.home = got.path; // the first listing of a host is its home folder
         }
         p.dir = got.path;
@@ -220,7 +230,7 @@ void App::paletteDraw() {
     } else {
         hint = "Filter, or type a path";
         heading = "Directories";
-        if (p.dir != "/" && p.query.empty()) { // while filtering, enter takes the first match
+        if (!p.dir.empty() && p.dir != "/" && p.query.empty()) { // while filtering, enter takes the first match
             rows.push_back({ICON_FA_TURN_UP, "..", ""});
         }
         for (const auto& name : p.dirs) {
@@ -234,10 +244,13 @@ void App::paletteDraw() {
 
     // header: back, where we are, the input, and Add while browsing
     const bool browsing = p.step == Palette::Step::Browse;
-    bool back = imshell::IconButton(ICON_FA_ARROW_LEFT);
+    bool back = false;
+    if (!p.direct) {
+        back = imshell::IconButton(ICON_FA_ARROW_LEFT);
+    }
     ImGui::SameLine();
     if (browsing) {
-        std::string shown = p.dir == "/" ? "/" : p.dir + "/";
+        std::string shown = p.dir.empty() ? "..." : p.dir == "/" ? "/" : p.dir + "/";
         if (!p.home.empty() && shown.starts_with(p.home)) {
             shown.replace(0, p.home.size(), "~");
         }
@@ -296,7 +309,7 @@ void App::paletteDraw() {
     if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
         --p.selected;
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Backspace) && before.empty()) {
+    if (!p.direct && ImGui::IsKeyPressed(ImGuiKey_Backspace) && before.empty()) {
         back = true;
     }
     p.selected = std::clamp(p.selected, 0, std::max(0, static_cast<int>(rows.size()) - 1));
@@ -354,7 +367,8 @@ void App::paletteDraw() {
     }
     if (vp->WorkSize.x >= 560) { // a phone has no keys to hint at
         ImGui::Separator();
-        ImGui::TextColored(colors.overlay1, "Up/Down navigate    Enter select    Backspace back    Esc close");
+        ImGui::TextColored(colors.overlay1, p.direct ? "Up/Down navigate    Enter select    Esc close"
+                                                     : "Up/Down navigate    Enter select    Backspace back    Esc close");
     }
 
     // act on what was chosen
