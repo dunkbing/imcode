@@ -1283,6 +1283,38 @@ void App::threadBody(Thread& t) {
     ImGui::Dummy(ImVec2(0, Theme::Spacing::L));
     ImGui::Indent(left);
     ImGui::PushTextWrapPos(left + width);
+    // only the rows near the view are drawn; the others are a gap of their last measured height
+    // (an estimate until drawn once). a row is an item or a fold of tool calls, keyed by its first item
+    struct RowHeights {
+        std::vector<float> h; // 0 = not measured yet
+        float width = 0;
+    };
+    static std::map<const Thread*, RowHeights> rowHeights;
+    RowHeights& rows = rowHeights[&t];
+    if (rows.width != width) { // wrapping changed: every height is stale
+        rows.h.clear();
+        rows.width = width;
+    }
+    rows.h.resize(t.items.size(), 0.0f);
+    float guess = 120.0f;
+    {
+        float sum = 0;
+        size_t known = 0;
+        for (const float v : rows.h) {
+            if (v > 0) {
+                sum += v;
+                ++known;
+            }
+        }
+        if (known) {
+            guess = sum / static_cast<float>(known);
+        }
+    }
+    const bool virtualize = !find.open; // the find bar jumps to rows that must exist
+    constexpr float overdraw = 800;
+    const float viewTop = ImGui::GetScrollY(), gapSpacing = ImGui::GetStyle().ItemSpacing.y;
+    const float drawFrom = viewTop - overdraw, drawTo = viewTop + ImGui::GetWindowHeight() + overdraw;
+    float shiftAbove = 0; // rows wholly above the view changed height: the view moves by it to stay on its text
     // by index: answering a sign-in can add an item and move the rest
     for (size_t i = 0; i < t.items.size(); ++i) {
         // finished tool calls in a row, with nothing to look at (no edits), fold into one line
@@ -1290,6 +1322,24 @@ void App::threadBody(Thread& t) {
         while (end < t.items.size() && foldable(t.items[end])) {
             ++end;
         }
+        const size_t rowEnd = end - i >= 3 ? end : i + 1;
+        const float y0 = ImGui::GetCursorPosY();
+        const float was = rows.h[i] > 0 ? rows.h[i] : guess;
+        if (virtualize && (y0 + was < drawFrom || y0 > drawTo)) {
+            for (size_t k = i; k < rowEnd; ++k) {
+                find.itemY[k] = y0;
+            }
+            ImGui::Dummy(ImVec2(0, std::max(1.0f, was - gapSpacing)));
+            i = rowEnd - 1;
+            continue;
+        }
+        const auto measured = [&] {
+            const float h = ImGui::GetCursorPosY() - y0;
+            if (y0 + was <= viewTop) {
+                shiftAbove += h - was;
+            }
+            rows.h[i] = h;
+        };
         if (end - i >= 3) {
             auto& open = openGroups[&t];
             const bool shown = open.contains(i);
@@ -1307,12 +1357,14 @@ void App::threadBody(Thread& t) {
                     transcriptItem(t, t.items[k], static_cast<int>(k), width);
                 }
             }
+            measured();
             i = end - 1;
             continue;
         }
         find.itemY[i] = ImGui::GetCursorPosY();
         mark(i);
         transcriptItem(t, t.items[i], static_cast<int>(i), width);
+        measured();
     }
     // how long the turn has run
     std::string working = "Working";
@@ -1355,6 +1407,8 @@ void App::threadBody(Thread& t) {
         find.jump = false;
     } else if (!find.open && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 2) {
         ImGui::SetScrollHereY(1.0f); // at the end: a reply that grows stays in view
+    } else if (shiftAbove != 0) {
+        ImGui::SetScrollY(std::max(0.0f, ImGui::GetScrollY() + shiftAbove)); // keep the text in view where it was
     }
     const bool away = ImGui::GetScrollY() < ImGui::GetScrollMaxY() - 80;
     const ImVec2 viewAt = ImGui::GetWindowPos(), viewSize = ImGui::GetWindowSize();
