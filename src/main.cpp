@@ -522,13 +522,6 @@ void App::hostLoop() {
             save();
             imshell::requestFrames();
         }
-        // threads in the background: an idle agent is let go after a minute
-        for (int i = 0; i < static_cast<int>(data.threads.size()); ++i) {
-            Thread& t = *data.threads[i];
-            if (i != current && std::time(nullptr) - t.updatedAt > 60) {
-                t.release();
-            }
-        }
         // what the agents' clis did meanwhile (a conversation continued, a new one), every
         // minute: the list follows. sessions of this machine's projects only
         historyOp.check([&](std::vector<History::Found> found) {
