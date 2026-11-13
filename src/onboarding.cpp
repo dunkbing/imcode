@@ -2,6 +2,7 @@
 
 #include "imshell/button.hpp"
 #include "imshell/components.hpp"
+#include "imshell/resizable.hpp"
 #include "colors.hpp"
 #include "imshell/updater.hpp"
 #include <algorithm>
@@ -205,8 +206,9 @@ void App::settingsDraw() {
                 ImGui::SetTooltip("%s", pages[i].name);
             }
         }
-    } else {
-        ImGui::BeginChild("##pages", ImVec2(160, 0));
+    }
+    // the list at the left and the page beside it, with a divider between that does not move
+    const auto navRows = [&] {
         for (int i = 0; i < 5; ++i) {
             const ImVec2 at = ImGui::GetCursorScreenPos();
             if (ImGui::Selectable(("##page" + std::to_string(i)).c_str(), settingsTab == i, 0, ImVec2(0, 30))) {
@@ -218,10 +220,9 @@ void App::settingsDraw() {
             ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + 10, textY), ink, pages[i].icon);
             ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + 38, textY), ink, pages[i].name);
         }
-        ImGui::EndChild();
-        ImGui::SameLine();
-    }
-    ImGui::BeginChild("##page", ImVec2(0, 0), ImGuiChildFlags_AlwaysUseWindowPadding);
+    };
+    bool escapeUsed = false;
+    const auto pageBody = [&] {
     const auto heading = [&](const char* title, const char* about) {
         ImGui::TextColored(colors.overlay1, "%s", title);
         if (about) {
@@ -231,7 +232,6 @@ void App::settingsDraw() {
         }
         ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
     };
-    bool escapeUsed = false;
     switch (settingsTab) {
     case 0: { // the look: one of imshell's themes
         heading("APPEARANCE", nullptr);
@@ -367,7 +367,23 @@ void App::settingsDraw() {
 #endif
         break;
     }
-    ImGui::EndChild();
+    };
+    static float navWidth = 160;
+    if (narrow) {
+        ImGui::BeginChild("##page", ImVec2(0, 0), ImGuiChildFlags_AlwaysUseWindowPadding);
+        pageBody();
+        ImGui::EndChild();
+    } else if (imshell::BeginResizable("##settingsSplit", {.disabled = true,
+                                                            .line = ImGui::GetColorU32(colors.surface1),
+                                                            .lit = ImGui::GetColorU32(colors.surface1)})) {
+        if (imshell::ResizablePanel({.size = &navWidth, .fixed = true})) {
+            navRows();
+        }
+        if (imshell::ResizablePanel({.childFlags = ImGuiChildFlags_AlwaysUseWindowPadding})) {
+            pageBody();
+        }
+        imshell::EndResizable();
+    }
     if (!escapeUsed) {
         close |= ImGui::IsKeyPressed(ImGuiKey_Escape);
     }
