@@ -108,6 +108,9 @@ void App::sidebar() {
             ImGui::CloseCurrentPopup();
         }
         for (int i = 0; i < static_cast<int>(data.projects.size()); ++i) {
+            if (data.projects[i].host != data.machine) {
+                continue; // the machine picked at the bottom has its own projects
+            }
             const std::string name = std::filesystem::path(data.projects[i].cwd).filename().string();
             if (matches(name) && row(i, name)) {
                 filterProject = i;
