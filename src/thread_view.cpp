@@ -1344,7 +1344,10 @@ void App::threadBody(Thread& t) {
     } else {
         find.hits.clear();
     }
-    ImGui::BeginChild("transcript", ImVec2(0, -(composerHeight + Theme::Spacing::L + queued +
+    // a composer taller than its one-box minimum grows over the end of the transcript rather than
+    // shrinking it, so the text above does not move while typing (shortcut: not with queued rows or files)
+    const float grown = queued > 0 ? 0.0f : composerHeight - (composerInputHeight("", width) + ImGui::GetFrameHeight() + 34);
+    ImGui::BeginChild("transcript", ImVec2(0, -(composerHeight - grown + Theme::Spacing::L + queued +
                                                 ImGui::GetFrameHeightWithSpacing())));
     find.itemY.assign(t.items.size(), -1);
     // the hit being shown: a bar at its left
@@ -1494,7 +1497,7 @@ void App::threadBody(Thread& t) {
         // its own over the transcript, so the text under it does not take the click
         const ImVec2 back = ImGui::GetCursorScreenPos();
         const float size = 30;
-        ImGui::SetCursorScreenPos(ImVec2(viewAt.x + left + (width - size) * 0.5f, viewAt.y + viewSize.y - size - 10));
+        ImGui::SetCursorScreenPos(ImVec2(viewAt.x + left + (width - size) * 0.5f, viewAt.y + viewSize.y - grown - size - 10));
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
         ImGui::BeginChild("to-newest", ImVec2(size, size), 0, ImGuiWindowFlags_NoScrollbar);
         ImGui::PushStyleColor(ImGuiCol_Button, colors.surface1);
@@ -1545,7 +1548,7 @@ void App::threadBody(Thread& t) {
         t.sendNow(static_cast<size_t>(now));
     }
     attachedRows(left);
-    ImGui::SetCursorPosX(left);
+    ImGui::SetCursorPos(ImVec2(left, ImGui::GetCursorPosY() - grown));
     composer(t, width);
     statusLine(t, left);
 }
