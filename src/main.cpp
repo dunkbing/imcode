@@ -39,15 +39,15 @@ constexpr float barHeight = 40; // taller than the os default: air above and bel
 
 int runHeadless(App& app, const char* out, int width, int height, int frames); // headless.cpp
 
-bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags, float rounding) {
+bool rowButton(const char* id, bool chosen, float height, ImGuiSelectableFlags flags, float rounding, float rightInset) {
     const Colors colors = themeColors();
     const ImVec2 min = ImGui::GetCursorScreenPos();
-    const float width = ImGui::GetContentRegionAvail().x;
+    const float width = ImGui::GetContentRegionAvail().x - rightInset;
     // the selectable only takes the click: its own square highlight is not drawn
     for (const ImGuiCol col : {ImGuiCol_Header, ImGuiCol_HeaderHovered, ImGuiCol_HeaderActive}) {
         ImGui::PushStyleColor(col, ImVec4(0, 0, 0, 0));
     }
-    const bool clicked = ImGui::Selectable(id, false, flags, ImVec2(0, height));
+    const bool clicked = ImGui::Selectable(id, false, flags, ImVec2(width, height));
     ImGui::PopStyleColor(3);
     if (chosen || ImGui::IsItemHovered()) {
         ImVec4 fill = colors.surface0;

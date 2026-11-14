@@ -180,8 +180,8 @@ void App::sidebar() {
         const Thread& t = *data.threads[i];
         ImGui::PushID(i);
         const ImVec2 at = ImGui::GetCursorPos();
-        const float width = ImGui::GetContentRegionAvail().x;
-        if (rowButton("##thread", i == current, line * 3 + 14)) {
+        const float width = ImGui::GetContentRegionAvail().x - Theme::Spacing::L; // the panel's gap on the left, mirrored on the right
+        if (rowButton("##thread", i == current, line * 3 + 14, 0, Round::Row, Theme::Spacing::L)) {
             open = i;
         }
         if (ImGui::BeginPopupContextItem("menu")) {
