@@ -99,6 +99,10 @@ int main() {
     entries = History::readFrom("codex", codexPath, codexOffset);
     ok = ok && fs::path(codexPath) == rollout && entries.size() == 3 && entries[0].text == "hi" &&
          entries[1].text == "exec ls -la" && entries[2].text == "Hello";
+    // the end of a transcript read over ssh: the cut first line is skipped, a last line without its newline is read
+    const auto tail = History::parse("claude-code", std::string(R"(sistant","content":"x"}})") + "\n" +
+                                                        R"({"type":"user","message":{"role":"user","content":"after the cut"}})");
+    ok = ok && tail.size() == 1 && tail[0].text == "after the cut";
     if (!ok) {
         std::printf("FAILED: transcripts (%zu entries) claude path '%s' codex path '%s'\n", entries.size(), path.c_str(),
                     codexPath.c_str());

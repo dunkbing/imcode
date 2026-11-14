@@ -142,6 +142,11 @@ namespace History {
             return out;
         }
         offset += end + 1;
+        return parse(agentId, chunk.substr(0, end + 1));
+    }
+
+    std::vector<Entry> parse(const std::string& agentId, const std::string& chunk) {
+        std::vector<Entry> out;
         // a slash command the user ran is stored as tags: shown the way it was typed
         const auto command = [](const std::string& text) -> std::string {
             constexpr std::string_view name = "<command-name>", nameEnd = "</command-name>", args = "<command-args>",
@@ -164,8 +169,11 @@ namespace History {
         const auto shown = [](const std::string& text) { // injected context starts with a tag or a heading
             return !text.empty() && text.front() != '<' && !text.starts_with("# AGENTS.md");
         };
-        for (size_t at = 0; at <= end;) {
-            const size_t stop = chunk.find('\n', at);
+        for (size_t at = 0; at < chunk.size();) {
+            size_t stop = chunk.find('\n', at);
+            if (stop == std::string::npos) {
+                stop = chunk.size();
+            }
             const json row = json::parse(chunk.substr(at, stop - at), nullptr, false);
             at = stop + 1;
             if (!row.is_object()) {
@@ -371,5 +379,19 @@ namespace History {
         }
         std::erase_if(found, [&](const Found& f) { return !there.contains(f.cwd); });
         return found;
+    }
+
+    std::string remoteTail(const std::string& host, const std::string& agentId, const std::string& cwd, const std::string& sessionId,
+                           size_t bytes) {
+        trace::Span traced_("history.remote-tail", host, 0);
+        std::string folder = cwd;
+        for (char& c : folder) {
+            c = std::isalnum(static_cast<unsigned char>(c)) ? c : '-';
+        }
+        const bool safe = std::ranges::all_of(sessionId, [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '-'; });
+        if (agentId != "claude-code" || sessionId.empty() || !safe) {
+            return {};
+        }
+        return runOn(host, "tail -c " + std::to_string(bytes) + " \"$HOME/.claude/projects/" + folder + "/" + sessionId + ".jsonl\" 2>/dev/null");
     }
 } // namespace History

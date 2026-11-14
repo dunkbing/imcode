@@ -216,6 +216,9 @@ bool Thread::ensureStarted() {
 }
 
 namespace {
+    constexpr size_t kRemoteTail = 512 * 1024; // how much of a remote transcript is read at first
+}
+namespace {
     long long nowMs() {
         return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
     }
@@ -231,8 +234,16 @@ void Thread::open() {
     // a saved thread on this machine is shown from its transcript at once, like the agent's own cli;
     // the agent starts when it is needed (a message, the model picker, a slash command). others (a
     // remote host, an agent without a readable transcript): the agent replays the history
-    if (!acp_ && !watching_ && items.empty() && !sessionId.empty() && !(host.empty() && watch())) {
+    if (acp_ || watching_ || !items.empty() || sessionId.empty() || tailOp_.isRunning()) {
+        return;
+    }
+    if (host.empty() ? !watch() : tailTried_ || agentId != "claude-code") {
         ensureStarted();
+    } else if (!host.empty()) {
+        // a remote thread: the end of its transcript is read over ssh and shown at once, then the agent resumes
+        // without replaying it (that takes seconds per hundred messages, over the same pipe)
+        tailTried_ = true;
+        tailOp_.start([host = host, agent = agentId, cwd = cwd, id = sessionId] { return History::remoteTail(host, agent, cwd, id, kRemoteTail); });
     }
 }
 
@@ -298,6 +309,7 @@ void Thread::release() {
     items.clear();
     replaying_ = false;
     keepHistory_ = false;
+    tailTried_ = false;
     ++revision_;
 }
 
@@ -685,6 +697,25 @@ void Thread::poll() {
         uploaded_ = std::move(got);
         send(text, files);
         uploaded_ = {};
+    });
+    tailOp_.check([this](std::string text) {
+        const auto entries = History::parse(agentId, text);
+        if (!acp_ && items.empty() && !entries.empty()) {
+            if (text.size() >= kRemoteTail) {
+                add({.kind = Item::Kind::Info, .text = "Earlier messages are not shown."});
+            }
+            for (const auto& e : entries) {
+                add({.kind = e.kind == History::Entry::Kind::User        ? Item::Kind::User
+                             : e.kind == History::Entry::Kind::Assistant ? Item::Kind::Assistant
+                                                                         : Item::Kind::Tool,
+                     .text = e.kind == History::Entry::Kind::Tool ? "" : e.text,
+                     .toolTitle = e.kind == History::Entry::Kind::Tool ? e.text : "",
+                     .toolStatus = "completed"});
+            }
+            keepHistory_ = true; // on screen: the agent resumes the session without replaying it
+            trace::event("thread.remote-tail", std::format("{} entries, {} bytes", entries.size(), text.size()));
+        }
+        ensureStarted();
     });
     connectOp_.check([this](std::string error) {
         const std::string text = std::exchange(heldPrompt_, {});

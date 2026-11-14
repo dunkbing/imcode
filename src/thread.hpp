@@ -172,6 +172,8 @@ private:
     // what a remote turn changed, measured off the ui thread
     AcpHost::AsyncOp<std::optional<Item>> changesOp_;
     AcpHost::AsyncOp<std::string> snapOp_; // the folder before a local turn, read off the ui thread
+    AcpHost::AsyncOp<std::string> tailOp_; // a remote thread's transcript end, read over ssh while the agent is not started yet
+    bool tailTried_ = false;
     std::string uploadText_;
     std::vector<std::string> uploadFiles_;
     bool uploadDropped_ = false; // stopped meanwhile: the message is not sent

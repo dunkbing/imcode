@@ -32,6 +32,12 @@ namespace History {
     std::string transcript(const std::string& agentId, const std::string& cwd, const std::string& sessionId);
     // the entries in the complete lines from `offset`, which moves past them; at most maxRead
     // bytes a call (a line longer than that is skipped)
+    // the entries in transcript text (whole lines)
+    std::vector<Entry> parse(const std::string& agentId, const std::string& lines);
+    // the last `bytes` of a session's transcript on a host, over ssh (blocks; empty when there is none).
+    // shortcut: Claude Code only, Codex rollouts sit under dated folders
+    std::string remoteTail(const std::string& host, const std::string& agentId, const std::string& cwd, const std::string& sessionId,
+                           size_t bytes);
     inline constexpr size_t maxRead = 2 * 1024 * 1024;
     std::vector<Entry> readFrom(const std::string& agentId, const std::string& path, size_t& offset);
     // seconds since the file was last written; a large number when it is not there
