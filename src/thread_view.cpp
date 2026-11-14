@@ -326,9 +326,10 @@ void App::transcriptItem(Thread& t, Item& it, int index, float width) {
         const ImVec2 textSize = ImGui::CalcTextSize(title.c_str(), nullptr, false, wrap);
         const ImVec2 top = ImGui::GetCursorScreenPos();
         const float rowHeight = textSize.y + 2 * pad;
-        if (ImGui::InvisibleButton("tool", ImVec2(arrow + textSize.x + 16, rowHeight)) && canOpen) {
+        if (ImGui::InvisibleButton("tool", ImVec2(arrow + textSize.x + 6, rowHeight)) && canOpen) {
             open = !open;
             ImGui::GetStateStorage()->SetBool(openId, open);
+            imshell::requestFrames(); // an auto-sized card settles a frame late: draw that one too
         }
         ImDrawList* draw = ImGui::GetWindowDrawList();
         if (ImGui::IsItemHovered() && canOpen) {
