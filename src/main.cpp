@@ -1009,6 +1009,9 @@ int main(int argc, char** argv) {
     config.appName = "imcode";
     config.titleBar = true;
     config.titleBarHeight = barHeight;
+    if (const EmbeddedImage* icon = findEmbeddedImage("imcode-256")) { // the Dock and window icon, also outside a bundle
+        config.icon = {icon->data, icon->size};
+    }
     // IMCODE_WINDOW=<width>x<height>: the first window size (ui checks of narrow layouts)
     if (const char* size = std::getenv("IMCODE_WINDOW")) {
         std::sscanf(size, "%dx%d", &config.width, &config.height);

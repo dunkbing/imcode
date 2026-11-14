@@ -116,7 +116,8 @@ if(IMCODE_UPDATER)
     target_compile_definitions(imcode PRIVATE IMCODE_UPDATER=1)
 endif()
 imshell_app(imcode NAME ImCode ID io.github.dunkbing.imcode VERSION ${IMCODE_VERSION}
-            APPCAST "${IMCODE_APPCAST_URL}" PUBLIC_KEY "${IMCODE_UPDATE_KEY}")
+            APPCAST "${IMCODE_APPCAST_URL}" PUBLIC_KEY "${IMCODE_UPDATE_KEY}"
+            ICON ${CMAKE_CURRENT_SOURCE_DIR}/assets/icon/imcode.icns ICON_ICO ${CMAKE_CURRENT_SOURCE_DIR}/assets/icon/imcode.ico)
 target_link_libraries(imcode PRIVATE imshell::imshell imshell::components imshell::markdown acp::host ${IMCODE_SSH} ghostty-vt-static)
 
 # ctest: configure with -DIMCODE_BUILD_TESTS=ON (turns on the echo agent it talks to)
