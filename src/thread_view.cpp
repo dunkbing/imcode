@@ -630,9 +630,11 @@ void App::composer(Thread& t, float width) {
         },
         &picker);
     // to find why enter does nothing: every press while the field is active, and what it did
-    if (ImGui::IsItemActive() && ImGui::IsKeyPressed(ImGuiKey_Enter, false)) {
-        trace::event("composer.enter", std::format("returned={} len={} watching={} busy={} agent={}", send, std::strlen(input),
-                                                    t.watching(), t.busy(), t.hasAgent()));
+    // (a press that sends deactivates the field in the same frame: active is false then)
+    if (ImGui::IsKeyPressed(ImGuiKey_Enter, false)) {
+        trace::event("composer.enter", std::format("returned={} active={} wantText={} len={} files={} watching={} busy={} agent={}", send,
+                                                    ImGui::IsItemActive(), ImGui::GetIO().WantTextInput, std::strlen(input),
+                                                    attachments.size(), t.watching(), t.busy(), t.hasAgent()));
     }
     ImGui::EndDisabled();
     if (t.watching()) {
@@ -704,6 +706,12 @@ void App::composer(Thread& t, float width) {
             });
             if (picker.filesFor != key && !picker.op.isRunning()) {
                 picker.op.start([key, host = t.host, cwd = t.cwd] { return std::pair{key, projectFiles(host, cwd)}; });
+            }
+            // a host's list takes a while: say so, rather than showing nothing
+            if (picker.filesFor != key) {
+                rows.push_back({"Looking for files...", "", text, {}});
+            } else if (picker.files.empty()) {
+                rows.push_back({"No files found in this folder", "", text, {}});
             }
             for (const auto& file : picker.filesFor == key ? picker.files : std::vector<std::string>{}) {
                 if (matches(file, text.substr(word + 1)) && rows.size() < 8) {
@@ -959,7 +967,8 @@ void App::composer(Thread& t, float width) {
     // send (or stop): a filled circle, lit when there is something to send
     const ImVec2 at = ImGui::GetCursorScreenPos();
     const bool pressed = ImGui::InvisibleButton("##send", ImVec2(button, button));
-    const bool ready = t.busy() || input[0];
+    const bool canSend = input[0] || !attachments.empty(); // text or a file: Enter and this button alike
+    const bool ready = t.busy() || canSend;
     const ImVec4 fill = t.busy() ? colors.red : ready ? colors.blue : colors.surface1;
     const ImVec2 centre(at.x + button * 0.5f, at.y + button * 0.5f);
     ImDrawList* draw = ImGui::GetWindowDrawList();
@@ -981,7 +990,7 @@ void App::composer(Thread& t, float width) {
     ImGui::EndChild();
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar();
-    if (send && (input[0] || !attachments.empty())) { // while a turn runs this queues
+    if (send && canSend) { // while a turn runs this queues
         shownRevision = -3; // what was sent comes into view
         t.send(input, std::exchange(attachments, {}));
         input[0] = 0;
