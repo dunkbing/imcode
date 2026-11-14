@@ -996,7 +996,9 @@ void App::composer(Thread& t, float width) {
     // send (or stop): a filled circle, lit when there is something to send
     const ImVec2 at = ImGui::GetCursorScreenPos();
     const bool pressed = ImGui::InvisibleButton("##send", ImVec2(button, button));
-    const bool canSend = input[0] || !attachments.empty(); // text or a file: Enter and this button alike
+    const bool uploading = attachmentsUploading();
+    // text or a file, once the files are on the host: Enter and this button alike
+    const bool canSend = (input[0] || !attachments.empty()) && !uploading;
     const bool ready = t.busy() || canSend;
     const ImVec4 fill = t.busy() ? colors.red : ready ? colors.blue : colors.surface1;
     const ImVec2 centre(at.x + button * 0.5f, at.y + button * 0.5f);
@@ -1010,7 +1012,7 @@ void App::composer(Thread& t, float width) {
     draw->AddText(ImVec2(centre.x - size.x * 0.5f, centre.y - size.y * 0.5f),
                   ImGui::GetColorU32(ready ? colors.crust : colors.overlay1), glyph);
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", t.busy() ? "Stop" : "Send (Enter)");
+        ImGui::SetTooltip("%s", t.busy() ? "Stop" : uploading ? "Waiting for the files to upload (remove one to skip it)" : "Send (Enter)");
     }
     if (pressed && t.busy()) {
         t.cancel();
@@ -1043,6 +1045,18 @@ const Thread* App::shownThread() const {
 bool App::remoteComposer() const {
     const Thread* t = shownThread();
     return t && !t->host.empty();
+}
+
+// a file just added has no entry yet: it counts as uploading. a failed one does not (its chip says why)
+bool App::attachmentsUploading() const {
+    const Thread* t = shownThread();
+    if (!t || t->host.empty()) {
+        return false;
+    }
+    return std::ranges::any_of(attachments, [&](const std::string& path) {
+        const auto it = uploads.find(t->host + "\n" + path);
+        return it == uploads.end() || it->second.state == Upload::State::Queued || it->second.state == Upload::State::Sending;
+    });
 }
 
 // attachments on a host are copied there one batch at a time, off the ui thread, from the moment
@@ -1114,6 +1128,12 @@ void App::attachPoll() {
                 upload.error = failed;
             }
             out.emplace_back(key, std::move(upload));
+        }
+        if (session) { // old uploads: the folder would only grow
+            std::string ignored;
+            auto lines = session->exec(Remote::cleanUploadsCommand(), nullptr, ignored);
+            for (std::string line; lines && lines->readLine(line);) {
+            }
         }
         return out;
     });

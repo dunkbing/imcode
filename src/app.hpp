@@ -394,6 +394,7 @@ struct App : imshell::Delegate {
     void attachPoll();
     [[nodiscard]] const Thread* shownThread() const;
     [[nodiscard]] bool remoteComposer() const; // the shown thread is on a host
+    [[nodiscard]] bool attachmentsUploading() const; // a file for the shown host is not there yet: sending waits
 
     // the agent's own mark, tinted like text; a generic one when there is none
     // rowHeight: the height of the row it sits in (a frame-height row of buttons), 0 = a text line
