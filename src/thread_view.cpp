@@ -1103,8 +1103,15 @@ void App::statusLine(Thread& t, float left) {
         gitFor = got.first;
         git = got.second;
     });
-    if (!gitOp.isRunning() && (gitFor != key || (now - gitAt > 5000 && !ImGui::GetIO().AppFocusLost))) { // not polled while in the background
+    // read again when the folder was said to change (at most twice a second), else every few seconds, not while in the background
+    const bool poll = !watching() && now - gitAt > 5000 && !ImGui::GetIO().AppFocusLost;
+    const bool changed = gitDirty && now - gitAt > 500;
+    if (gitDirty && !changed) {
+        imshell::requestFrames(); // the pause is not over yet
+    }
+    if (!gitOp.isRunning() && (gitFor != key || changed || poll)) {
         gitAt = now;
+        gitDirty = false;
         gitOp.start([key, host = t.host, cwd = t.cwd] { return std::pair{key, Git::status(host, cwd)}; });
     }
     // where it works: click to pick another project

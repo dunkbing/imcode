@@ -1,6 +1,7 @@
 #include "app.hpp"
 #include "git_local.hpp"
 #include "home.hpp"
+#include "trace.hpp"
 #include "imshell/resizable.hpp"
 
 #include "imshell/image.hpp"
@@ -378,14 +379,14 @@ namespace {
 
     // the file in imshell's editor, read-only: line numbers, selection, copy, find
     void code(Files& f) {
-        if (f.shownPath != f.doc.path || f.shownSize != f.doc.text.size()) {
+        if (f.shownPath != f.doc.path || f.shownRev != f.docRev) {
             const Syntax::Lang lang = Syntax::langOf(fs::path(f.doc.path).filename().string());
             f.editor.SetReadOnly(true);
             f.editor.SetShowLineNumbers(true);
             f.editor.SetHighlighter(codeColors(lang));
             f.editor.SetText(f.doc.text);
             f.shownPath = f.doc.path;
-            f.shownSize = f.doc.text.size();
+            f.shownRev = f.docRev;
         }
         f.editor.Render("##code", ImVec2(0, 0));
     }
@@ -430,9 +431,11 @@ void App::filesPoll() {
     });
     f.readOp.check([&](Files::Doc got) {
         if (got.epoch == f.epoch) {
+            const bool again = f.doc.path == got.path; // read again after a change: the view stays where it is
             f.doc = std::move(got);
+            ++f.docRev;
             f.picturePath.clear(); // a new read: its picture is uploaded again
-            f.toTop = true;
+            f.toTop = !again;
             // shown in the tree too
             for (size_t slash = f.doc.path.find('/'); slash != std::string::npos;
                  slash = f.doc.path.find('/', slash + 1)) {
@@ -460,18 +463,28 @@ void App::filesPoll() {
     // one at a time of each kind: a running one cannot be replaced
     if (!f.listOp.isRunning()) {
         std::optional<std::string> next;
-        if (!f.dirs.contains("")) {
+        // a listing older than the last change under it is read again; the old one stays on screen meanwhile
+        const auto gen = [&](const std::string& dir) {
+            const auto it = f.dirGen.find(dir);
+            return f.allGen + (it == f.dirGen.end() ? 0 : it->second);
+        };
+        const auto stale = [&](const std::string& dir) {
+            const auto it = f.dirs.find(dir);
+            return it == f.dirs.end() || it->second.gen != gen(dir);
+        };
+        if (stale("")) {
             next = "";
         }
         for (const auto& dir : f.expanded) {
-            if (!next && !f.dirs.contains(dir)) {
+            if (!next && stale(dir)) {
                 next = dir;
             }
         }
         if (next) {
-            f.listOp.start([host = f.host, cwd = f.cwd, dir = *next, epoch = f.epoch] {
+            f.listOp.start([host = f.host, cwd = f.cwd, dir = *next, epoch = f.epoch, gen = gen(*next)] {
                 Files::Listing out;
                 out.epoch = epoch;
+                out.gen = gen;
                 out.dir = dir;
                 out.entries = list(host, under(cwd, dir), out.error);
                 return out;
@@ -661,4 +674,43 @@ void App::transferCard() {
     draw->AddRect(at, ImVec2(at.x + size.x, at.y + size.y), ImGui::GetColorU32(colors.surface1), Theme::Radius::Lg);
     draw->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(at.x + pad, at.y + pad), ImGui::GetColorU32(colors.text),
                   files.downloading.c_str(), nullptr, width - pad * 2);
+}
+
+// the shown thread's folder is watched; what changed in it marks the tree, the open file and git stale
+void App::watchPoll() {
+    const Thread* t = current >= 0 && current < static_cast<int>(data.threads.size()) ? data.threads[current].get() : nullptr;
+    const std::string key = t ? t->host + "\n" + t->cwd : "";
+    if (key != watchKey) {
+        folderWatch.reset(); // does not wait for a host's reader
+        watchKey = key;
+        if (t) {
+            folderWatch = std::make_unique<FolderWatch>(t->host, t->cwd, [] { AcpHost::wake(); });
+        }
+    }
+    if (!folderWatch) {
+        return;
+    }
+    FolderChanges changes = folderWatch->take();
+    if (!changes.any()) {
+        return;
+    }
+    trace::event("watch.changes", std::format("dirs={} files={} git={} all={}", changes.dirs.size(), changes.files.size(), changes.git, changes.all));
+    Files& f = files;
+    if (f.host == t->host && f.cwd == t->cwd) {
+        if (changes.all) {
+            ++f.allGen;
+        }
+        for (const auto& dir : changes.dirs) {
+            ++f.dirGen[dir];
+        }
+        if (changes.all || !changes.dirs.empty()) {
+            f.indexed = false; // the filter's list of every file
+        }
+        // the open file, read again (not while one is being read)
+        if (!f.doc.path.empty() && f.want.empty() && !f.readOp.isRunning() && (changes.all || changes.files.contains(f.doc.path))) {
+            f.want = f.doc.path;
+        }
+    }
+    gitDirty = true;
+    dock.reload = true;
 }

@@ -607,6 +607,7 @@ void App::frame() {
     });
     pollInstall();
     filesPoll();
+    watchPoll();
 
     const Colors colors = themeColors();
     // without a window the bar is a plain strip, with room where the os buttons would be

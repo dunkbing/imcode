@@ -13,6 +13,7 @@
 #include "ssh_config.hpp"
 #include "store.hpp"
 #include "terminal.hpp"
+#include "watch.hpp"
 #include <atomic>
 #include <condition_variable>
 #include <filesystem>
@@ -155,6 +156,7 @@ struct App : imshell::Delegate {
         struct Listing {
             int epoch = 0;
             std::string dir, error;
+            int gen = 0; // dirGen + allGen when it was asked: older than that, it is stale
             std::vector<Ssh::Entry> entries;
         };
         struct Doc {
@@ -172,7 +174,6 @@ struct App : imshell::Delegate {
         int pictureWidth = 0, pictureHeight = 0;
         std::string picturePath;
         std::string shownPath;      // what the editor holds
-        size_t shownSize = 0;
         bool open = false;
         bool treeOver = true; // narrow windows: the tree covers the file
         bool toTop = false;   // a new file: scroll back
@@ -182,6 +183,9 @@ struct App : imshell::Delegate {
         int epoch = 0;        // bumps with the folder: what was loading for the old one is dropped
         std::string host, cwd;
         std::map<std::string, Listing> dirs; // by path under cwd, "" = cwd itself
+        std::map<std::string, int> dirGen;   // a folder's entries changed (watch): its listing is read again
+        int allGen = 0;                       // anything may have changed
+        int docRev = 0, shownRev = -1;        // the open file was read again: the editor shows the new text
         std::set<std::string> expanded;
         char filter[128] = {};
         Listing index; // every file under cwd, for the filter
@@ -361,6 +365,7 @@ struct App : imshell::Delegate {
     Git::Status git;
     std::string gitFor; // host and folder `git` describes
     long long gitAt = 0;
+    bool gitDirty = false; // the folder changed (watch): read again, at most twice a second
     AcpHost::AsyncOp<std::pair<std::string, Git::Status>> gitOp;
     // under the composer: the project (click to pick another) and its branch
     void statusLine(Thread& t, float left);
@@ -391,6 +396,14 @@ struct App : imshell::Delegate {
     void terminalPanel(Thread& t);
 
     void filesPoll(); // once per frame: results in, the next load out
+    // the folder of the shown thread is watched (here: the system tells; on a host: its helper does);
+    // what changed marks the tree, the open file and git stale. without events the polls stay
+    std::unique_ptr<FolderWatch> folderWatch;
+    std::string watchKey;
+    void watchPoll(); // once per frame
+    [[nodiscard]] bool watching() const {
+        return folderWatch && folderWatch->live();
+    }
     void showFile(const std::string& path); // under the thread's folder
     // splitWidth: the width shared with the chat on its left; 0 = the panel is alone
     // true when one of its handles was let go: its sizes want saving

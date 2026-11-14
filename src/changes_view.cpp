@@ -72,8 +72,8 @@ void App::changesDraw(Changes& c, bool docked) {
     // the list and its diff are laid out on the frame the list first arrives (read off the ui thread)
     const CoverFirstFrame cover(docked && c.settle.first(!c.list.empty()), ImGui::GetContentRegionAvail());
     const Colors colors = themeColors();
-    if (docked && !ImGui::GetIO().AppFocusLost && !c.listOp.isRunning() && !c.reload && ImGui::GetTime() - c.readAt > 3) {
-        c.reload = true; // the folder changes under the panel: agents, editors, the user
+    if (docked && !watching() && !ImGui::GetIO().AppFocusLost && !c.listOp.isRunning() && !c.reload && ImGui::GetTime() - c.readAt > 3) {
+        c.reload = true; // the folder changes under the panel (agents, editors, the user) and nothing says when
     }
     // the list, then the picked file's diff, each off the ui thread (a remote is slow). on this
     // machine a read is held for a moment right after it starts: most finish in that time, so

@@ -54,7 +54,7 @@ namespace Git {
             quoted += c == '\'' ? std::string("'\\''") : std::string(1, c);
         }
         std::string error;
-        auto lines = session ? session->exec("cd " + quoted + "' && git status --porcelain=v1 -b", nullptr, error)
+        auto lines = session ? session->exec("cd " + quoted + "' && git --no-optional-locks status --porcelain=v1 -b", nullptr, error)
                              : nullptr;
         std::string out;
         for (std::string line; lines && lines->readLine(line);) {
@@ -254,8 +254,8 @@ namespace Git {
         }
         // both in one run, split by a marker line
         const std::string range = quote(from) + " " + quote(to);
-        const std::string out = run(host, from.empty() ? "cd " + quote(cwd) + " && git status --porcelain=v1 -uall && echo __imcode__ && "
-                                                                       "git diff HEAD --numstat 2>/dev/null"
+        const std::string out = run(host, from.empty() ? "cd " + quote(cwd) + " && git --no-optional-locks status --porcelain=v1 -uall && echo __imcode__ && "
+                                                                       "git --no-optional-locks diff HEAD --numstat 2>/dev/null"
                                                      : "cd " + quote(cwd) + " && git diff --name-status " + range +
                                                            " && echo __imcode__ && git diff --numstat " + range);
         constexpr std::string_view marker = "__imcode__\n";

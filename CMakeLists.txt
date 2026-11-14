@@ -74,6 +74,23 @@ add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sideba
                src/terminal.cpp src/terminal_view.cpp src/files_view.cpp src/changes_view.cpp src/graph_view.cpp src/log_view.cpp src/syntax.cpp
                ${EMBEDDED_FONTS_FILE} ${EMBEDDED_IMAGES_FILE} ${IMGUI_CORE})
 target_include_directories(imcode PRIVATE external/IconFontCppHeaders)
+# watching folders: in process on macos (FSEvents), and on another machine through imcode-helper, a
+# small program built here, embedded in the app (cmake/embed_helper.cmake) and uploaded over ssh
+if(APPLE AND NOT IOS)
+    add_executable(imcode-helper src/watch_helper.cpp src/watch.cpp)
+    target_link_libraries(imcode-helper PRIVATE "-framework CoreServices")
+    set(IMCODE_HELPER_IN $<TARGET_FILE:imcode-helper>)
+    set(IMCODE_HELPER_DEP imcode-helper)
+    target_link_libraries(imcode PRIVATE "-framework CoreServices")
+else()
+    set(IMCODE_HELPER_IN "")
+    set(IMCODE_HELPER_DEP "")
+endif()
+add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/helper_bytes.cpp
+    COMMAND ${CMAKE_COMMAND} "-DIN=${IMCODE_HELPER_IN}" "-DOUT=${CMAKE_BINARY_DIR}/helper_bytes.cpp"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_helper.cmake
+    DEPENDS ${IMCODE_HELPER_DEP} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_helper.cmake VERBATIM)
+target_sources(imcode PRIVATE src/watch.cpp src/folder_watch.cpp ${CMAKE_BINARY_DIR}/helper_bytes.cpp)
 # the version shown and compared by the updater; a test build of an update overrides it
 set(IMCODE_VERSION ${PROJECT_VERSION} CACHE STRING "the version")
 # the commit it was built from, shown in settings
@@ -99,6 +116,13 @@ if(IMCODE_BUILD_TESTS)
         target_compile_features(imcode-keychain-test PRIVATE cxx_std_20)
         add_test(NAME imcode-keychain COMMAND imcode-keychain-test)
     endif()
+    add_executable(imcode-watch-test tests/watch_test.cpp src/watch.cpp)
+    if(APPLE)
+        target_link_libraries(imcode-watch-test PRIVATE "-framework CoreServices")
+    endif()
+    target_include_directories(imcode-watch-test PRIVATE src)
+    target_compile_features(imcode-watch-test PRIVATE cxx_std_20)
+    add_test(NAME imcode-watch COMMAND imcode-watch-test)
     add_executable(imcode-git-test tests/git_test.cpp src/git.cpp src/git_graph.cpp src/git_local.cpp src/ssh.cpp src/ssh_config.cpp src/keychain.cpp)
     target_link_libraries(imcode-git-test PRIVATE acp::host ${IMCODE_SSH})
     add_test(NAME imcode-git COMMAND imcode-git-test)
