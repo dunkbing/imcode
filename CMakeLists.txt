@@ -76,21 +76,35 @@ add_executable(imcode src/main.cpp src/onboarding.cpp src/palette.cpp src/sideba
 target_include_directories(imcode PRIVATE external/IconFontCppHeaders)
 # watching folders: in process on macos (FSEvents), and on another machine through imcode-helper, a
 # small program built here, embedded in the app (cmake/embed_helper.cmake) and uploaded over ssh
+set(IMCODE_HELPER_IN "")
+set(IMCODE_HELPER_DEP "")
 if(APPLE AND NOT IOS)
     add_executable(imcode-helper src/watch_helper.cpp src/watch.cpp)
     target_link_libraries(imcode-helper PRIVATE "-framework CoreServices")
     set(IMCODE_HELPER_IN $<TARGET_FILE:imcode-helper>)
     set(IMCODE_HELPER_DEP imcode-helper)
     target_link_libraries(imcode PRIVATE "-framework CoreServices")
-else()
-    set(IMCODE_HELPER_IN "")
-    set(IMCODE_HELPER_DEP "")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # inotify, in plain c: this machine runs it as a child, a linux host builds the same file (below)
+    enable_language(C)
+    add_executable(imcode-helper src/helper_linux.c)
+    set(IMCODE_HELPER_IN $<TARGET_FILE:imcode-helper>)
+    set(IMCODE_HELPER_DEP imcode-helper)
 endif()
-add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/helper_bytes.cpp
-    COMMAND ${CMAKE_COMMAND} "-DIN=${IMCODE_HELPER_IN}" "-DOUT=${CMAKE_BINARY_DIR}/helper_bytes.cpp"
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_helper.cmake
-    DEPENDS ${IMCODE_HELPER_DEP} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_helper.cmake VERBATIM)
-target_sources(imcode PRIVATE src/watch.cpp src/folder_watch.cpp ${CMAKE_BINARY_DIR}/helper_bytes.cpp)
+foreach(embed "helper_bytes|kHelperBytes|${IMCODE_HELPER_IN}|${IMCODE_HELPER_DEP}"
+              "helper_source|kHelperSource|${CMAKE_CURRENT_SOURCE_DIR}/src/helper_linux.c|")
+    string(REPLACE "|" ";" embed "${embed}")
+    list(GET embed 0 file)
+    list(GET embed 1 symbol)
+    list(GET embed 2 input)
+    list(GET embed 3 dep)
+    add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/${file}.cpp
+        COMMAND ${CMAKE_COMMAND} "-DIN=${input}" "-DOUT=${CMAKE_BINARY_DIR}/${file}.cpp" "-DNAME=${symbol}"
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_helper.cmake
+        DEPENDS ${dep} ${input} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_helper.cmake VERBATIM)
+    target_sources(imcode PRIVATE ${CMAKE_BINARY_DIR}/${file}.cpp)
+endforeach()
+target_sources(imcode PRIVATE src/watch.cpp src/folder_watch.cpp)
 # the version shown and compared by the updater; a test build of an update overrides it
 set(IMCODE_VERSION ${PROJECT_VERSION} CACHE STRING "the version")
 # the commit it was built from, shown in settings
@@ -138,6 +152,12 @@ if(IMCODE_BUILD_TESTS)
     add_executable(imcode-ssh-check tests/ssh_check.cpp src/diff.cpp src/git.cpp src/git_graph.cpp src/git_local.cpp src/thread.cpp src/history.cpp src/remote.cpp src/ssh.cpp src/ssh_config.cpp src/keychain.cpp
                    src/terminal.cpp)
     target_link_libraries(imcode-ssh-check PRIVATE acp::host ${IMCODE_SSH} ghostty-vt-static)
+    add_executable(imcode-watch-check tests/watch_check.cpp src/watch.cpp src/folder_watch.cpp src/ssh.cpp src/ssh_config.cpp src/keychain.cpp
+                   ${CMAKE_BINARY_DIR}/helper_bytes.cpp ${CMAKE_BINARY_DIR}/helper_source.cpp)
+    target_link_libraries(imcode-watch-check PRIVATE acp::host ${IMCODE_SSH})
+    if(APPLE AND NOT IOS)
+        target_link_libraries(imcode-watch-check PRIVATE "-framework CoreServices")
+    endif()
     add_executable(imcode-terminal-test tests/terminal_test.cpp src/terminal.cpp)
     target_link_libraries(imcode-terminal-test PRIVATE ghostty-vt-static)
     add_test(NAME imcode-terminal COMMAND imcode-terminal-test)

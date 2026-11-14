@@ -5,11 +5,13 @@
 #include <acp/transport.hpp>
 #include <acp_host/host.hpp>
 #include <atomic>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <mutex>
+#include <random>
 #include <thread>
 
 namespace fs = std::filesystem;
@@ -24,13 +26,20 @@ struct FolderWatch::State {
 };
 
 extern const unsigned char kHelperBytes[];
-extern const std::size_t kHelperSize;
+extern const std::size_t kHelperBytesSize;
+extern const unsigned char kHelperSource[];
+extern const std::size_t kHelperSourceSize;
 
 namespace {
     // the helper program, built for this machine and embedded in the app (cmake/embed_helper.cmake):
     // empty where there is no backend
     std::string helperBytes() {
-        return std::string(reinterpret_cast<const char*>(kHelperBytes), kHelperSize);
+        return std::string(reinterpret_cast<const char*>(kHelperBytes), kHelperBytesSize);
+    }
+
+    // the linux helper's c source: a linux host builds it with its own cc
+    std::string helperSource() {
+        return std::string(reinterpret_cast<const char*>(kHelperSource), kHelperSourceSize);
     }
 
     std::string quoted(const std::string& text) {
@@ -70,15 +79,12 @@ namespace {
             trace::event("watch.skipped", host + ": " + error.message);
             return nullptr;
         }
-        const std::string bytes = helperBytes();
-        if (bytes.empty()) {
-            trace::event("watch.skipped", "this build has no helper");
-            return nullptr;
-        }
-        // shortcut: the helper is built for this machine's system; a host running another is polled
         const std::string system = firstLine(*session, "uname -sm");
-        if (system != helperPlatform()) {
-            trace::event("watch.skipped", std::format("{} is {}, the helper is {}", host, system, helperPlatform()));
+        const bool linux = system.starts_with("Linux ");
+        // a linux host builds the embedded source; another system gets this build's helper if it is the same
+        const std::string bytes = linux ? helperSource() : helperBytes();
+        if (!linux && (bytes.empty() || system != helperPlatform())) {
+            trace::event("watch.skipped", std::format("{} is {}, no helper for it", host, system));
             return nullptr;
         }
         std::string failed;
@@ -87,15 +93,27 @@ namespace {
             return nullptr;
         }
         const std::string dir = home + "/.imcode/helper";
-        const std::string path = std::format("{}/imcode-helper-{:016x}", dir, fnv(bytes));
+        // named by its contents and the machine: a home folder can be shared between machines
+        std::string arch = system.substr(system.find(' ') + 1);
+        std::erase_if(arch, [](const char c) { return !std::isalnum(static_cast<unsigned char>(c)) && c != '_'; });
+        const std::string path = std::format("{}/imcode-helper-{:016x}-{}", dir, fnv(bytes), arch);
         if (firstLine(*session, "test -x " + quoted(path) + " && echo yes") != "yes") {
             trace::Span put("watch.install", host, 0);
             firstLine(*session, "mkdir -p " + quoted(dir));
-            if (!session->write(path, bytes, failed)) {
+            // a temporary name, then a rename: two ImCodes starting together cannot run a half-written file
+            const std::string temp = std::format("{}.{:x}", path, std::random_device{}());
+            if (!session->write(linux ? temp + ".c" : temp, bytes, failed)) {
                 trace::event("watch.skipped", "upload: " + failed);
                 return nullptr;
             }
-            firstLine(*session, "chmod 755 " + quoted(path));
+            const std::string build = linux ? "cc -w -O2 -o " + quoted(temp) + " " + quoted(temp + ".c") + " 2>&1 && " : "";
+            const std::string done = firstLine(*session, build + "chmod 755 " + quoted(temp) + " && mv " + quoted(temp) + " " + quoted(path) +
+                                                             " && echo yes");
+            firstLine(*session, "rm -f " + quoted(temp + ".c") + " " + quoted(temp));
+            if (done != "yes") {
+                trace::event("watch.skipped", host + ": install: " + done);
+                return nullptr;
+            }
         }
         auto channel = session->exec(quoted(path) + " watch " + quoted(cwd),
                                      [host](const std::string& line) { trace::event("watch.stderr", host + ": " + line); }, failed);
@@ -178,7 +196,12 @@ namespace {
 
 FolderWatch::FolderWatch(std::string host, std::string cwd, std::function<void()> wake) : state_(std::make_shared<State>()) {
     state_->wake = std::move(wake);
-    if (host.empty() && !std::getenv("IMCODE_WATCH_VIA_HELPER")) {
+#if defined(__APPLE__) || defined(_WIN32)
+    constexpr bool inProcess = true; // a backend in the app; linux runs the helper as a child
+#else
+    constexpr bool inProcess = false;
+#endif
+    if (host.empty() && inProcess && !std::getenv("IMCODE_WATCH_VIA_HELPER")) {
         state_->local = std::make_unique<Watch>(cwd, [wake = state_->wake] { wake(); });
         trace::event("watch.local", cwd + (state_->local->ok() ? "" : " (no backend)"));
         return;

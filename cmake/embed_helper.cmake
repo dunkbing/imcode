@@ -1,4 +1,4 @@
-# writes the helper program's bytes as a C array (-DIN=<file, or empty>, -DOUT=<source>)
+# writes a file as a C array (-DIN=<file, or empty> -DOUT=<source> -DNAME=<symbol>): NAME and NAMESize
 set(body "0")
 set(size 0)
 if(IN AND EXISTS "${IN}")
@@ -7,4 +7,4 @@ if(IN AND EXISTS "${IN}")
     math(EXPR size "${hexLength} / 2")
     string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," body "${hex}")
 endif()
-file(WRITE "${OUT}" "#include <cstddef>\nextern const unsigned char kHelperBytes[] = {${body}};\nextern const std::size_t kHelperSize = ${size};\n")
+file(WRITE "${OUT}" "#include <cstddef>\nextern const unsigned char ${NAME}[] = {${body}};\nextern const std::size_t ${NAME}Size = ${size};\n")
