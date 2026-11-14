@@ -1,6 +1,8 @@
 #include "watch.hpp"
 
+#include <algorithm>
 #include <mutex>
+#include <thread>
 #include <string_view>
 #include <utility>
 
@@ -9,6 +11,9 @@
 #include <climits>
 #include <cstdlib>
 #include <dispatch/dispatch.h>
+#endif
+#ifdef _WIN32
+#include <windows.h>
 #endif
 
 void FolderChanges::merge(FolderChanges&& other) {
@@ -209,6 +214,128 @@ Watch::~Watch() {
 
 bool Watch::ok() const {
     return impl_->stream != nullptr;
+}
+
+FolderChanges Watch::take() {
+    const std::lock_guard lock(impl_->mutex);
+    return std::exchange(impl_->pending, FolderChanges{});
+}
+
+#elif defined(_WIN32)
+
+std::string helperPlatform() {
+    return {}; // no helper to upload: a windows host is polled
+}
+
+struct Watch::Impl {
+    std::wstring root;
+    std::string rootUtf8;
+    HANDLE dir = INVALID_HANDLE_VALUE;
+    HANDLE stop = nullptr;
+    std::thread thread;
+    std::mutex mutex;
+    FolderChanges pending;
+    std::function<void()> onChange;
+};
+
+namespace {
+    std::string utf8(const WCHAR* text, const int length) {
+        if (length <= 0) {
+            return {};
+        }
+        std::string out(static_cast<size_t>(WideCharToMultiByte(CP_UTF8, 0, text, length, nullptr, 0, nullptr, nullptr)), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, text, length, out.data(), static_cast<int>(out.size()), nullptr, nullptr);
+        return out;
+    }
+
+    void run(Watch::Impl* impl) {
+        alignas(DWORD) char buffer[64 * 1024];
+        OVERLAPPED overlapped{};
+        overlapped.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        const HANDLE waits[] = {overlapped.hEvent, impl->stop};
+        for (;;) {
+            ResetEvent(overlapped.hEvent);
+            if (!ReadDirectoryChangesW(impl->dir, buffer, sizeof buffer, TRUE,
+                                       FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE |
+                                           FILE_NOTIFY_CHANGE_SIZE,
+                                       nullptr, &overlapped, nullptr)) {
+                break;
+            }
+            if (WaitForMultipleObjects(2, waits, FALSE, INFINITE) != WAIT_OBJECT_0) {
+                CancelIoEx(impl->dir, &overlapped);
+                GetOverlappedResult(impl->dir, &overlapped, nullptr, TRUE); // the buffer is still the system's until here
+                break;
+            }
+            DWORD got = 0;
+            if (!GetOverlappedResult(impl->dir, &overlapped, &got, FALSE)) {
+                break;
+            }
+            FolderChanges batch;
+            if (got == 0) { // more happened than the buffer held
+                batch.all = true;
+            }
+            for (DWORD at = 0; got != 0;) {
+                const auto* info = reinterpret_cast<const FILE_NOTIFY_INFORMATION*>(buffer + at);
+                std::string rel = utf8(info->FileName, static_cast<int>(info->FileNameLength / sizeof(WCHAR)));
+                std::ranges::replace(rel, '\\', '/');
+                const bool gone = info->Action == FILE_ACTION_REMOVED || info->Action == FILE_ACTION_RENAMED_OLD_NAME;
+                const bool entries = gone || info->Action == FILE_ACTION_ADDED || info->Action == FILE_ACTION_RENAMED_NEW_NAME;
+                bool isDir = gone; // a removed name may have been a folder: its listing is then stale too
+                if (!gone) {
+                    const DWORD attrs = GetFileAttributesW((impl->root + L"\\" + std::wstring(info->FileName, info->FileNameLength / sizeof(WCHAR))).c_str());
+                    isDir = attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY);
+                }
+                if (!rel.empty()) {
+                    note(batch, rel, entries, isDir);
+                }
+                if (info->NextEntryOffset == 0) {
+                    break;
+                }
+                at += info->NextEntryOffset;
+            }
+            if (batch.any()) {
+                {
+                    const std::lock_guard lock(impl->mutex);
+                    impl->pending.merge(std::move(batch));
+                }
+                if (impl->onChange) {
+                    impl->onChange();
+                }
+            }
+        }
+        CloseHandle(overlapped.hEvent);
+    }
+} // namespace
+
+Watch::Watch(std::string root, std::function<void()> onChange) : impl_(std::make_unique<Impl>()) {
+    impl_->onChange = std::move(onChange);
+    const int size = MultiByteToWideChar(CP_UTF8, 0, root.c_str(), -1, nullptr, 0);
+    impl_->root.resize(size > 0 ? static_cast<size_t>(size) - 1 : 0);
+    MultiByteToWideChar(CP_UTF8, 0, root.c_str(), -1, impl_->root.data(), size);
+    impl_->dir = CreateFileW(impl_->root.c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                             OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED, nullptr);
+    if (impl_->dir == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    impl_->stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    impl_->thread = std::thread(run, impl_.get());
+}
+
+Watch::~Watch() {
+    if (impl_->thread.joinable()) {
+        SetEvent(impl_->stop);
+        impl_->thread.join();
+    }
+    if (impl_->stop) {
+        CloseHandle(impl_->stop);
+    }
+    if (impl_->dir != INVALID_HANDLE_VALUE) {
+        CloseHandle(impl_->dir);
+    }
+}
+
+bool Watch::ok() const {
+    return impl_->thread.joinable();
 }
 
 FolderChanges Watch::take() {

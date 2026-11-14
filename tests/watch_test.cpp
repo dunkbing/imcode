@@ -31,10 +31,10 @@ int main() {
         std::printf("FAILED: protocol\n");
         return 1;
     }
-    if (helperPlatform().empty()) {
-        std::printf("ok (no watch backend here)\n");
-        return 0;
-    }
+#if !defined(__APPLE__) && !defined(_WIN32)
+    std::printf("ok (linux watches through the helper, not in process)\n");
+    return 0;
+#endif
     const fs::path root = fs::temp_directory_path() / "imcode-watch-test";
     fs::remove_all(root);
     fs::create_directories(root / "sub");
