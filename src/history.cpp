@@ -84,7 +84,7 @@ namespace History {
     } // namespace
 
     std::string transcript(const std::string& agentId, const std::string& cwd, const std::string& sessionId) {
-        trace::Span traced_("history.transcript-lookup", agentId + " " + sessionId.substr(0, 8), 0);
+        trace::Span traced_("history.transcript-lookup", agentId + " " + sessionId.substr(0, 8), 3);
         const char* home = homeEnv();
         const fs::path base = home ? home : "";
         std::error_code ec;

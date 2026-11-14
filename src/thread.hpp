@@ -171,6 +171,7 @@ private:
     AcpHost::AsyncOp<Uploaded> uploadOp_;
     // what a remote turn changed, measured off the ui thread
     AcpHost::AsyncOp<std::optional<Item>> changesOp_;
+    AcpHost::AsyncOp<std::string> snapOp_; // the folder before a local turn, read off the ui thread
     std::string uploadText_;
     std::vector<std::string> uploadFiles_;
     bool uploadDropped_ = false; // stopped meanwhile: the message is not sent

@@ -2,6 +2,7 @@
 #include "home.hpp"
 #include "imgui_internal.h" // RenderArrow
 #include "text.hpp"
+#include "trace.hpp"
 
 #include "imshell/clipboard.hpp"
 #include "imshell/image.hpp"
@@ -1177,6 +1178,24 @@ void App::threadView(Thread& t) {
 
 void App::threadBody(Thread& t) {
     t.unread = false; // it is being looked at
+    // a saved thread on this machine that stays open for a moment starts its agent: it can take ten
+    // seconds to come up, and that then overlaps with reading and writing. a thread only passed
+    // over while browsing the list starts nothing
+    {
+        static const Thread* shown = nullptr;
+        static std::chrono::steady_clock::time_point since;
+        static std::set<const Thread*> warmed;
+        const auto now = std::chrono::steady_clock::now();
+        if (shown != &t) {
+            warmed.erase(shown);
+            shown = &t;
+            since = now;
+        } else if (now - since > std::chrono::seconds(1) && !t.hasAgent() && t.host.empty() && !t.sessionId.empty() &&
+                   warmed.insert(&t).second) {
+            trace::event("warm-on-dwell", t.title.substr(0, 24));
+            t.wake();
+        }
+    }
     // typing starts the agent, so its start-up overlaps with writing the message
     static std::set<const Thread*> woken;
     if (input[0] == 0) {

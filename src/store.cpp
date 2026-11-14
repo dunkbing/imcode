@@ -59,7 +59,7 @@ namespace Store {
     }
 
     void save(const std::filesystem::path& file, const Data& data) {
-        trace::Span traced_("store.save", std::format("threads={}", data.threads.size()), 0);
+        trace::Span traced_("store.save", std::format("threads={}", data.threads.size()), 3);
         json projects = json::array();
         for (const auto& p : data.projects) {
             projects.push_back({{"host", p.host}, {"cwd", p.cwd}});

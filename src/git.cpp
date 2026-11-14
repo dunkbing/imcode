@@ -43,7 +43,7 @@ namespace Git {
     }
 
     Status status(const std::string& host, const std::string& cwd) {
-        trace::Span traced_("git.status", host + " " + cwd, 0);
+        trace::Span traced_("git.status", host + " " + cwd, 5);
         if (host.empty()) {
             return Local::status(cwd).value_or(Status{});
         }

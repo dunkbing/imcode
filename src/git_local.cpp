@@ -208,7 +208,7 @@ namespace Git::Local {
     } // namespace
 
     std::optional<Status> status(const std::string& cwd) {
-        trace::Span traced_("git.status", std::filesystem::path(cwd).filename().string(), 0);
+        trace::Span traced_("git.status", std::filesystem::path(cwd).filename().string(), 5);
         const Repo repo = open(cwd);
         if (!repo) {
             return std::nullopt;

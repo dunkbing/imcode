@@ -462,7 +462,14 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
         add({.kind = Item::Kind::User, .text = text, .files = names});
     }
     // the folder as it is now: what the turn changes is measured against it
-    turnBefore_ = uploaded_.snapped ? uploaded_.before : Git::snapshot(host, cwd);
+    if (uploaded_.snapped) {
+        turnBefore_ = uploaded_.before;
+    } else if (!snapOp_.isRunning()) {
+        // shortcut: read while the turn starts, so an edit in its first moments is missed; a turn that
+        // ends before it lands gets no changes line
+        turnBefore_.clear();
+        snapOp_.start([host = host, cwd = cwd] { return Git::snapshot(host, cwd); });
+    }
     acp_->prompt(blocks); // held until the session is ready
 }
 
@@ -663,6 +670,7 @@ void Thread::noticeElsewhere() {
 }
 
 void Thread::poll() {
+    snapOp_.check([this](std::string tree) { turnBefore_ = std::move(tree); });
     changesOp_.check([this](std::optional<Item> item) {
         if (item) {
             add(std::move(*item));
@@ -850,13 +858,9 @@ void Thread::poll() {
             // what the turn changed in the folder, as a line under it
             if (!turnBefore_.empty()) {
                 const std::string before = std::exchange(turnBefore_, {});
-                if (host.empty()) {
-                    if (auto item = turnChanges(host, cwd, before)) {
-                        add(std::move(*item));
-                    }
-                } else if (!changesOp_.isRunning()) {
-                    // shortcut: one at a time, and the line lands when it is measured, after
-                    // anything sent meanwhile; a turn ending first gets no line
+                if (!changesOp_.isRunning()) {
+                    // off the ui thread (a big folder takes a second): one at a time, and the line lands
+                    // when it is measured, after anything sent meanwhile; a turn ending first gets no line
                     changesOp_.start([host = host, cwd = cwd, before] { return turnChanges(host, cwd, before); });
                 }
             }
