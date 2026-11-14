@@ -800,6 +800,9 @@ void App::frame() {
     } else {
         bar = imshell::BeginTitleBar();
     }
+    if (sidebarEdge > 0) { // the sidebar's colour continues up behind its part of the bar (last frame's width)
+        ImGui::GetWindowDrawList()->AddRectFilled(bar.pos, ImVec2(sidebarEdge, bar.pos.y + bar.size.y), ImGui::GetColorU32(colors.mantle));
+    }
     if (data.onboarded) {
         // the thread list's toggle, then the filter, add project and new thread: they stay when the list is hidden
         const bool listShown = narrow ? sidebarOpen : !data.sidebarHidden;
@@ -860,12 +863,19 @@ void App::frame() {
     ImGui::SetNextWindowPos(content.pos);
     ImGui::SetNextWindowSize(content.size);
     ImGui::Begin("main", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
+    if (data.onboarded && sidebarEdge > 0) { // the sidebar is its own surface, edge to edge (last frame's width)
+        ImDrawList* surface = ImGui::GetWindowDrawList();
+        surface->PushClipRectFullScreen();
+        surface->AddRectFilled(content.pos, ImVec2(sidebarEdge, content.pos.y + content.size.y), ImGui::GetColorU32(colors.mantle));
+        surface->PopClipRect();
+    }
     if (!data.onboarded) {
         onboarding();
     } else {
         const bool list = !narrow || sidebarOpen || current < 0;
         bool resized = false; // a panel was dragged to a new size: saved when let go
-        float dividerX = 0, dividerTop = 0; // the sidebar's right edge and top, for the line above it
+        float dividerX = 0, dividerTop = 0, dividerBottom = 0; // the sidebar's right edge, top and bottom: the line goes on past both
+        sidebarEdge = 0;
         const imshell::ResizableOptions lines{.line = ImGui::GetColorU32(themeColors().surface1),
                                               .lit = ImGui::GetColorU32(themeColors().blue)};
         // the thread: the chat (the terminal under it) and the files beside it, or the files
@@ -936,7 +946,10 @@ void App::frame() {
         if (narrow) {
             // one at a time: the list over the thread
             if (list) {
+                sidebarEdge = display.x;
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, colors.mantle);
                 ImGui::BeginChild("sidebar", ImVec2(0, 0), ImGuiChildFlags_Borders);
+                ImGui::PopStyleColor();
                 sidebar();
                 ImGui::EndChild();
             } else {
@@ -954,7 +967,9 @@ void App::frame() {
                 const double from = trace::nowMs();
                 trace::Span s("ui.sidebar", "", 8);
                 dividerX = ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - 0.5f;
+                sidebarEdge = dividerX + 0.5f;
                 dividerTop = ImGui::GetWindowPos().y;
+                dividerBottom = ImGui::GetWindowPos().y + ImGui::GetWindowHeight();
                 sidebar();
                 uiSidebarMs = trace::nowMs() - from;
             }
@@ -969,6 +984,7 @@ void App::frame() {
             ImDrawList* draw = ImGui::GetWindowDrawList();
             draw->PushClipRectFullScreen();
             draw->AddLine(ImVec2(dividerX, 0), ImVec2(dividerX, dividerTop + 1), ImGui::GetColorU32(ImGuiCol_Border));
+            draw->AddLine(ImVec2(dividerX, dividerBottom - 1), ImVec2(dividerX, display.y), ImGui::GetColorU32(ImGuiCol_Border));
             draw->PopClipRect();
         }
         if (resized) {
