@@ -2,6 +2,8 @@
 
 #include "imshell/button.hpp"
 #include "imshell/components.hpp"
+#include "imshell/embedded.hpp"
+#include "imshell/image.hpp"
 #include "imshell/resizable.hpp"
 #include "colors.hpp"
 #include "imshell/updater.hpp"
@@ -499,6 +501,20 @@ void App::settingsDraw() {
     }
     default: // which build this is: what to quote when something is off
         heading("ABOUT", nullptr);
+        {
+            // 64 points of a 64 pixel picture: whole pixels at 1x and 2x, so the edges stay sharp
+            auto logo = icons.find("imcode");
+            if (logo == icons.end()) {
+                const EmbeddedImage* image = findEmbeddedImage("imcode");
+                logo = icons.emplace("imcode", image && upload ? imshell::LoadTexture(image->data, image->size, upload) : ImTextureID{}).first;
+            }
+            if (logo->second != ImTextureID{}) {
+                const ImVec2 at = ImGui::GetCursorScreenPos();
+                ImGui::GetWindowDrawList()->AddImage(logo->second, at, ImVec2(at.x + 64, at.y + 64));
+                ImGui::Dummy(ImVec2(64, 64));
+                ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
+            }
+        }
         ImGui::TextColored(colors.subtext0, "ImCode " IMCODE_VERSION "  " IMCODE_COMMIT);
 #ifdef IMCODE_UPDATER
         ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
