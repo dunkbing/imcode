@@ -777,7 +777,7 @@ void App::composer(Thread& t, float width) {
         const ImVec2 after = ImGui::GetCursorPos();
         const ImVec2 pad = ImGui::GetStyle().FramePadding;
         ImGui::SetCursorPos(ImVec2(inputAt.x + pad.x, inputAt.y + pad.y));
-        ImGui::TextColored(colors.overlay1, "Ask anything");
+        ImGui::TextColored(colors.overlay1, "%s", (def ? "Message " + def->name + " agent" : std::string("Message agent")).c_str());
         ImGui::SetCursorPos(after);
     }
 
