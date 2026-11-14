@@ -1,0 +1,5 @@
+# opening the agent/model picker on a new thread starts the agent: the composer must stay in the middle
+DEV="new"
+FILES="a.txt"
+INPUT="20 click 1045 407"
+FRAMES=300

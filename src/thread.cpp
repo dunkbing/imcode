@@ -185,6 +185,7 @@ bool Thread::ensureStarted() {
     }
     // the agent replays the conversation it kept: ours would only double it
     replaying_ = !sessionId.empty();
+    newSession_ = sessionId.empty();
     if (replaying_ && !keepHistory_) {
         items.clear();
         ++revision_;

@@ -1414,7 +1414,7 @@ void App::threadBody(Thread& t) {
     const float left = (avail.x - width) * 0.5f;
     const float composerHeight = composerInputHeight(input, width) + ImGui::GetFrameHeight() + 34;
 
-    if (t.items.empty() && !t.busy() && t.sessionId.empty()) {
+    if (t.items.empty() && !t.busy() && (t.sessionId.empty() || t.newSession())) {
         // nothing said yet (a saved thread is on its way: its composer stays at the bottom): the question and the composer in the middle
         const std::string name = std::filesystem::path(t.cwd).filename().string();
         const std::string ask = "What should we build in " + name + "?";

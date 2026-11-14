@@ -134,6 +134,9 @@ public:
     [[nodiscard]] std::string startStep() const; // which part of coming up it is on
     [[nodiscard]] bool busy() const;        // a turn is running, or waits for the session
     [[nodiscard]] bool needsAnswer() const; // an unanswered permission or sign-in
+    [[nodiscard]] bool newSession() const { // started new: its session id is not a saved conversation
+        return newSession_;
+    }
     [[nodiscard]] bool replaying() const { // a saved conversation is coming back in
         return replaying_;
     }
@@ -160,6 +163,7 @@ private:
     std::unique_ptr<AcpClient> acp_;
     std::string heldUser_; // sent while history replays: shown after it, where it belongs
     bool replaying_ = false;
+    bool newSession_ = false; // the agent was started without a saved session
     long long ownSavedAt_ = 0;
     bool queued_ = false; // a prompt waits for the session
     // a remote host is reached off the ui thread: the result is the error, empty when
