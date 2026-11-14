@@ -164,6 +164,7 @@ private:
     void add(Item item);
 
     std::unique_ptr<AcpClient> acp_;
+    void retireAgent(); // drop the agent: its process and threads are stopped off the ui thread
     std::string heldUser_; // sent while history replays: shown after it, where it belongs
     bool replaying_ = false;
     std::map<std::string, std::string> pending_; // picked before the session was ready: sent when it is

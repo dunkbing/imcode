@@ -660,9 +660,9 @@ void App::composer(Thread& t, float width) {
         // the field only takes a bare Enter: a modifier left down (a screenshot shortcut's key-up never reaches the window)
         // makes it ignore the key, no send and no new line. text unchanged on a press = that: send it
         const bool swallowed = !send && ImGui::IsItemActive() && before == input && !t.watching();
-        trace::event("composer.enter", std::format("returned={} swallowed={} active={} wantText={} len={} files={} watching={} busy={} agent={} ctrl={} shift={} alt={} super={}",
+        trace::event("composer.enter", std::format("returned={} swallowed={} active={} wantText={} len={} files={} watching={} busy={} agent={} ctrl={} shift={} alt={} super={} was={}",
                                                     send, swallowed, ImGui::IsItemActive(), io.WantTextInput, std::strlen(input), attachments.size(),
-                                                    t.watching(), t.busy(), t.hasAgent(), io.KeyCtrl, io.KeyShift, io.KeyAlt, io.KeySuper));
+                                                    t.watching(), t.busy(), t.hasAgent(), io.KeyCtrl, io.KeyShift, io.KeyAlt, io.KeySuper, before.size()));
         send |= swallowed;
     }
     ImGui::EndDisabled();
@@ -1414,6 +1414,7 @@ void App::threadBody(Thread& t) {
             shown = &t;
             since = now;
             seen = typable = false;
+            imshell::requestFrames(std::chrono::milliseconds(1200)); // the dwell below is checked per frame: an idle app draws none
         } else if (now - since > (t.sessionId.empty() ? std::chrono::milliseconds(300) : std::chrono::seconds(1)) && !t.hasAgent() &&
                    t.host.empty() && (!t.sessionId.empty() || t.title.empty()) &&
                    warmed.insert(&t).second) {

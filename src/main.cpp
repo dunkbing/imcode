@@ -46,8 +46,8 @@ namespace ui = imshell::ui;
 
 // what this run is on, for the head of the trace log: names and numbers only, no secrets
 static void traceEnvironment(const std::filesystem::path& dataDir) {
-    trace::env(std::format("app=ImCode version={} commit={} dirty={} build={} imshell={} imgui={}", IMCODE_VERSION, IMCODE_COMMIT,
-                           IMCODE_DIRTY, IMCODE_BUILD_TYPE, IMCODE_IMSHELL_COMMIT, IMGUI_VERSION));
+    trace::env(std::format("app=ImCode version={} commit={} dirty={} build={} built={}_{} imshell={} imgui={}", IMCODE_VERSION, IMCODE_COMMIT,
+                           IMCODE_DIRTY, IMCODE_BUILD_TYPE, __DATE__, __TIME__, IMCODE_IMSHELL_COMMIT, IMGUI_VERSION));
     std::string os = "unknown", arch = "unknown", model, host, user;
 #if defined(__APPLE__) || defined(__linux__)
     utsname name{};
@@ -1030,7 +1030,7 @@ void App::frame() {
     if (ImGui::IsKeyPressed(ImGuiKey_Enter, false)) {
         // where every Enter went, sent or not: the window that has the key, and what could be eating it
         const ImGuiContext& g = *ImGui::GetCurrentContext();
-        trace::event("key.enter", std::format("active={} nav={} wantText={} popup={} ime={} ctrl={} shift={} alt={} super={}",
+        trace::event("key.enter", std::format("active={} nav={} wantText={} popup={} imeBox={} ctrl={} shift={} alt={} super={}",
                                               g.ActiveIdWindow ? g.ActiveIdWindow->Name : "-", g.NavWindow ? g.NavWindow->Name : "-",
                                               ImGui::GetIO().WantTextInput, ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId),
                                               g.PlatformImeData.WantVisible, ImGui::GetIO().KeyCtrl, ImGui::GetIO().KeyShift,

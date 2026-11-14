@@ -1,4 +1,5 @@
 #include "thread.hpp"
+#include <thread>
 #include "text.hpp"
 
 #include "acp_host/registry.hpp"
@@ -234,7 +235,7 @@ bool Thread::ensureStarted() {
                            cwd, sessionId);
     if (!ok) {
         add({.kind = Item::Kind::Error, .text = err});
-        acp_.reset();
+        retireAgent();
     }
     return ok;
 }
@@ -318,8 +319,20 @@ bool Thread::watch() {
     return true;
 }
 
+// stopping an agent closes its process or ssh channel and joins its reader: seconds over a slow link
+void Thread::retireAgent() {
+    if (!acp_) {
+        return;
+    }
+    // shortcut: one detached thread per agent; an exit during the stop leaves the child to the os
+    std::thread([old = std::move(acp_)]() mutable {
+        trace::Span stopped("agent.teardown", "", 50);
+        old.reset();
+    }).detach();
+}
+
 void Thread::release() {
-    trace::event("thread.release", std::format("{} watching={} agent={}", cut(title, 24), watching_, acp_ != nullptr));
+    trace::Span released("thread.release", std::format("{} watching={} agent={}", cut(title, 24), watching_, acp_ != nullptr), 5);
     if (watching_) {
         watching_ = false;
         items.clear();
@@ -329,7 +342,7 @@ void Thread::release() {
     if (!acp_ || busy() || needsAnswer() || !queue.empty() || connectOp_.isRunning()) {
         return;
     }
-    acp_.reset();
+    retireAgent();
     items.clear();
     replaying_ = false;
     keepHistory_ = false;
@@ -338,14 +351,14 @@ void Thread::release() {
 }
 
 void Thread::retryResume() {
-    acp_.reset();
+    retireAgent();
     replaying_ = false;
     keepHistory_ = false;
     ensureStarted();
 }
 
 void Thread::startOver() {
-    acp_.reset();
+    retireAgent();
     replaying_ = false;
     keepHistory_ = false;
     sessionId.clear(); // the old one stays the agent's; this thread goes on in a new one
@@ -385,7 +398,7 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
             add({.kind = Item::Kind::Error, .text = error});
             return;
         }
-        acp_.reset(); // the agent that came up for the pickers is in the project's folder
+        retireAgent(); // the agent that came up for the pickers is in the project's folder
         sessionId.clear(); // and so is its session: the worktree gets a new one
         root = cwd;
         cwd = made;
@@ -704,7 +717,7 @@ void Thread::noticeElsewhere() {
         return;
     }
     if (size > idleSize_) { // written, and not by this app: follow it there, read only
-        acp_.reset();
+        retireAgent();
         replaying_ = false;
         keepHistory_ = false;
         idleSize_ = 0;
@@ -1009,7 +1022,7 @@ void Thread::poll() {
         send(waiting.text, waiting.files);
     }
     if (gone) {
-        acp_.reset();
+        retireAgent();
         replaying_ = false;
         keepHistory_ = false;
         queued_ = false;
