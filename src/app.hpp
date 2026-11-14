@@ -358,6 +358,7 @@ struct App : imshell::Delegate {
     void sidebar();
     void sidebarButtons(); // project filter, add project, new thread: in the title bar
     bool barButton(const char* icon, bool on, bool hideIcon = false); // a flat title-bar button
+    bool sidebarToggle(bool shown); // the sidebar glyph: a window with a left pane, filled while the list shows
 
     // the composer's picker: the agent's commands after "/", the project's files after "@"
     struct Picker {
@@ -404,6 +405,7 @@ struct App : imshell::Delegate {
     void agentIconAt(const std::string& agentId, ImVec2 min, float size); // drawn only, no item
 
     void threadView(Thread& t);
+    void threadHeader(const Thread& t); // project and title above the conversation
     void threadBody(Thread& t);
     void transcriptItem(Thread& t, Item& item, int index, float width);
     // onHunk (changes dialog): a button per hunk, called with its number and 's'tage, 'u'nstage or 'd'iscard

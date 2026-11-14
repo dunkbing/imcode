@@ -1361,7 +1361,36 @@ void App::statusLine(Thread& t, float left) {
 
 // the thread in a window of its own that never scrolls: only the transcript inside it does, so
 // the composer and the line under it stay put
+// the project (click to start a thread in another one) and the title, at the left edge of the reading column
+void App::threadHeader(const Thread& t) {
+    const Colors colors = themeColors();
+    const float avail = ImGui::GetContentRegionAvail().x;
+    const float width = std::min(760.0f, avail - 2 * Theme::Spacing::M);
+    const float left = ImGui::GetCursorPosX() + (avail - width) * 0.5f;
+    ImGui::SetCursorPos(ImVec2(left, ImGui::GetCursorPosY() + Theme::Spacing::S));
+    ImGui::AlignTextToFramePadding();
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
+    ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+    if (ImGui::Button((std::filesystem::path(t.projectDir()).filename().string() + "  " ICON_FA_CHEVRON_DOWN "##project").c_str())) {
+        ImGui::OpenPopup("projects");
+    }
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(3);
+    projectPopup();
+    ImGui::SameLine();
+    ImGui::TextColored(colors.overlay0, "/");
+    ImGui::SameLine();
+    // as much of the title as fits in the column
+    const float room = left + width - ImGui::GetCursorPosX();
+    const size_t fits = static_cast<size_t>(std::max(0.0f, room / ImGui::CalcTextSize("0").x));
+    const std::string title = t.title.empty() ? "New thread" : t.title;
+    ImGui::TextUnformatted(title.size() > fits ? (cut(title, fits > 2 ? fits - 2 : 0) + "..").c_str() : title.c_str());
+}
+
 void App::threadView(Thread& t) {
+    threadHeader(t);
     ImGui::BeginChild("thread-view", ImVec2(0, 0), ImGuiChildFlags_None,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     threadBody(t);

@@ -383,6 +383,25 @@ bool App::barButton(const char* icon, bool on, bool hideIcon) {
     return pressed;
 }
 
+// the sidebar glyph (the icon font has none): a rounded window with a divider near the left, the left pane filled while shown
+bool App::sidebarToggle(bool shown) {
+    const Colors colors = themeColors();
+    const bool pressed = barButton("##sidebar-toggle", false, true);
+    const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
+    const ImVec2 size(16, 13);
+    const ImVec2 from(std::floor((min.x + max.x - size.x) * 0.5f) + 0.5f, std::floor((min.y + max.y - size.y) * 0.5f) + 0.5f);
+    const ImVec2 to(from.x + size.x, from.y + size.y);
+    const ImU32 ink = ImGui::GetColorU32(shown || ImGui::IsItemHovered() ? colors.text : colors.subtext0);
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    const float divider = from.x + 5.5f;
+    if (shown) {
+        draw->AddRectFilled(from, ImVec2(divider, to.y), ink, 3, ImDrawFlags_RoundCornersLeft);
+    }
+    draw->AddRect(from, to, ink, 3, 0, 1.3f);
+    draw->AddLine(ImVec2(divider, from.y), ImVec2(divider, to.y), ink, 1.3f);
+    return pressed;
+}
+
 // project filter, add project and new thread: drawn in the title bar, so they stay when the list is hidden
 void App::sidebarButtons() {
     const Colors colors = themeColors();

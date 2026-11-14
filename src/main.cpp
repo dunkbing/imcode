@@ -676,7 +676,7 @@ void App::frame() {
     if (data.onboarded) {
         // the thread list's toggle, then the filter, add project and new thread: they stay when the list is hidden
         const bool listShown = narrow ? sidebarOpen : !data.sidebarHidden;
-        if (barButton(ICON_FA_TABLE_COLUMNS, listShown)) {
+        if (sidebarToggle(listShown)) {
             if (narrow) {
                 sidebarOpen = !sidebarOpen;
             } else {
@@ -693,31 +693,6 @@ void App::frame() {
     }
     ImGui::AlignTextToFramePadding();
     if (data.onboarded && current >= 0) {
-        const Thread& t = *data.threads[current];
-        // the project and title go when the buttons around them leave no room
-        const bool titleFits = bar.pos.x + bar.size.x - bar.rightInset - 112 - 12 - ImGui::GetCursorScreenPos().x > 140;
-        if (titleFits) {
-            // the project: click to start a thread in another one
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
-            ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
-            if (ImGui::Button((std::filesystem::path(t.projectDir()).filename().string() + "  " ICON_FA_CHEVRON_DOWN "##project").c_str())) {
-                ImGui::OpenPopup("projects");
-            }
-            ImGui::PopStyleVar();
-            ImGui::PopStyleColor(3);
-            projectPopup();
-            ImGui::SameLine();
-            ImGui::TextColored(colors.overlay0, "/");
-            ImGui::SameLine();
-            // as much of the title as fits before the buttons at the right
-            const float room = bar.pos.x + bar.size.x - bar.rightInset - 112 - 12 - ImGui::GetCursorScreenPos().x;
-            const size_t fits = static_cast<size_t>(std::max(0.0f, room / ImGui::CalcTextSize("0").x));
-            const std::string title = t.title.empty() ? "New thread" : t.title;
-            ImGui::TextUnformatted(title.size() > fits ? (cut(title, fits > 2 ? fits - 2 : 0) + "..").c_str()
-                                                       : title.c_str());
-        }
         // at the right end, before the os's own buttons
         ImGui::SameLine();
         ImGui::SetCursorScreenPos(ImVec2(bar.pos.x + bar.size.x - bar.rightInset - 112,
@@ -763,6 +738,7 @@ void App::frame() {
     } else {
         const bool list = !narrow || sidebarOpen || current < 0;
         bool resized = false; // a panel was dragged to a new size: saved when let go
+        float dividerX = 0, dividerTop = 0; // the sidebar's right edge and top, for the line above it
         const imshell::ResizableOptions lines{.line = ImGui::GetColorU32(themeColors().surface1),
                                               .lit = ImGui::GetColorU32(themeColors().blue)};
         // the thread: the chat (the terminal under it) and the files beside it, or the files
@@ -849,6 +825,8 @@ void App::frame() {
             if (imshell::ResizablePanel({.size = &sidebarWidth, .min = 200, .fixed = true,
                                          .childFlags = ImGuiChildFlags_Borders})) {
                 trace::Span s("ui.sidebar", "", 8);
+                dividerX = ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - 0.5f;
+                dividerTop = ImGui::GetWindowPos().y;
                 sidebar();
             }
             if (imshell::ResizablePanel({.min = files.open ? 781.0f : 420.0f})) {
@@ -856,6 +834,11 @@ void App::frame() {
                 threadArea();
             }
             resized |= imshell::EndResizable();
+            // the divider runs up through the title bar too
+            ImDrawList* draw = ImGui::GetWindowDrawList();
+            draw->PushClipRectFullScreen();
+            draw->AddLine(ImVec2(dividerX, 0), ImVec2(dividerX, dividerTop + 1), ImGui::GetColorU32(ImGuiCol_Border));
+            draw->PopClipRect();
         }
         if (resized) {
             save();
