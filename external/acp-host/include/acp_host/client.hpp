@@ -115,6 +115,11 @@ public:
     // session/new again, after a sign-in done outside the agent (a terminal login)
     void retrySession();
     [[nodiscard]] bool isTurnActive() const;
+    // set before start: the conversation is on screen already, so session/resume (no replay) is
+    // used when the agent offers it
+    void setHistoryShown(bool shown) {
+        historyShown_ = shown;
+    }
     [[nodiscard]] bool supportsLoadSession() const {
         return loadSession_;
     }
@@ -199,6 +204,8 @@ private:
     bool authTried_ = false;
     std::string preferredAuth_; // method id remembered from the last successful sign-in
     std::atomic<bool> loadSession_{false};
+    std::atomic<bool> resumeSession_{false}; // the agent can reopen a session without replaying it
+    std::atomic<bool> historyShown_{false};  // the host already shows the conversation: no replay wanted
     std::atomic<bool> listSessions_{false};
     std::atomic<bool> sessionReady_{false};
     std::atomic<bool> turnActive_{false};

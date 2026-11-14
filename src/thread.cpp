@@ -182,6 +182,7 @@ bool Thread::ensureStarted() {
         ++revision_;
     }
     acp_ = std::make_unique<AcpClient>();
+    acp_->setHistoryShown(keepHistory_); // the transcript is on screen: no replay wanted
     // the host is connected by now: opening the channel is one round trip
     const auto [ok, err] =
         host.empty() ? acp_->start(*argv, cwd, "", "", "", sessionId)

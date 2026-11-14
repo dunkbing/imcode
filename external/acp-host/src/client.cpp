@@ -136,6 +136,7 @@ void AcpClient::onInitialized(const acp::Response& r) {
     }
     const auto init = acp::InitializeResult::fromJson(r.result);
     loadSession_ = init.agentCapabilities.loadSession;
+    resumeSession_ = init.agentCapabilities.sessionResume;
     listSessions_ = init.agentCapabilities.sessionList;
     authMethods_ = init.authMethods;
 
@@ -165,6 +166,14 @@ void AcpClient::retrySession() {
 
 void AcpClient::openSession() {
     sessionRequested_ = true;
+    if (!resumeSessionId_.empty() && historyShown_ && resumeSession_) {
+        acp::ResumeSessionRequest req;
+        req.sessionId = resumeSessionId_;
+        req.cwd = cwd_;
+        req.mcpServers = mcpServers_;
+        conn_->resumeSession(req, [this](acp::Response res) { onSessionOpened("session/resume", res); });
+        return;
+    }
     if (!resumeSessionId_.empty() && loadSession_) {
         conn_->loadSession(resumeSessionId_, cwd_, mcpServers_,
                            [this](acp::Response res) { onSessionOpened("session/load", res); });
@@ -307,7 +316,7 @@ void AcpClient::onSessionOpened(const std::string& method, const acp::Response& 
             handleAuthError(*r.error);
             return;
         }
-        if (method == "session/load") {
+        if (method != "session/new") {
             // pruned, or open in another client (a terminal): the app asks whether to try
             // again or start over, so a conversation is never dropped behind the user's back
             const json& data = r.error->data;
@@ -321,7 +330,7 @@ void AcpClient::onSessionOpened(const std::string& method, const acp::Response& 
     }
     {
         std::lock_guard lock(stateMutex_);
-        sessionId_ = method == "session/load" ? resumeSessionId_ : r.result.value("sessionId", "");
+        sessionId_ = method == "session/new" ? r.result.value("sessionId", "") : resumeSessionId_;
     }
     pushEvent({.type = AcpEvent::Type::ConfigOptions,
                .configOptions = acp::configOptionsFromJson(r.result)});
