@@ -29,3 +29,5 @@ cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TA
 ## Use
 
 Add a project: a folder on this machine, or a host over ssh (a name from `~/.ssh/config` or `user@host`) and a folder there. Start a thread and pick an agent. On a remote host the agent runs on that host, in that folder.
+
+The file tree, the open file and the git status follow changes on disk by themselves, also on a remote host: the app watches the folder of the shown thread (FSEvents, inotify or `ReadDirectoryChangesW`), and on an ssh host it starts a small helper there, compiling its C source with the host's `cc` on a Linux host. Where that cannot run (no compiler, a Windows host) the status line polls instead; the trace log (`watch.live`, `watch.skipped`) says which. The helper is kept in `~/.imcode/helper` on the host. Files dropped on the tree are copied into the folder under the pointer; anywhere else they attach to the next message.

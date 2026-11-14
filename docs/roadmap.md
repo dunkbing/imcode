@@ -131,6 +131,8 @@ One host per machine owns the agents and the threads; every screen is a client o
 - [ ] Several terminals per thread, splits, scrollback kept on the host and restored on reconnect ([#94](https://github.com/dunkbing/imcode/issues/94))
 - [ ] A terminal selection as context in the composer; terminal links open in the browser panel ([#95](https://github.com/dunkbing/imcode/issues/95))
 - [~] File browser: tree, breadcrumbs, filter by file name (done; over sftp untested); quick open, text search across the project ([#96](https://github.com/dunkbing/imcode/issues/96))
+- [~] The tree, the open file and the git status follow changes on disk without a timer: FSEvents on macOS, `ReadDirectoryChangesW` on Windows, inotify on Linux (through `imcode-helper`); on an ssh host the helper is built there from the C source the app carries (macOS hosts get the app's own binary), and where no watch can start the old polling stays. Done; Windows and Linux desktops are untested in the app, and Windows hosts are polled
+- [ ] Show where a file drop lands: an outline on the composer, or on the tree and its folder (needs a drag-over signal from imshell)
 - [ ] Edit and save files; previews of markdown, HTML, images, PDF, CSV, notebooks, office files, fonts ([#97](https://github.com/dunkbing/imcode/issues/97))
 - [ ] Drag a file from the tree into the composer ([#98](https://github.com/dunkbing/imcode/issues/98))
 - [ ] Browser panel: tabs, local servers found by port, zoom, a floating mini view ([#99](https://github.com/dunkbing/imcode/issues/99))
