@@ -42,6 +42,10 @@ namespace Store {
         for (const auto& row : root.value("projects", json::array())) {
             addProject({row.value("host", ""), row.value("cwd", "")});
         }
+        const json cached = root.value("options", json::object()); // a named value: items() of a temporary dangles
+        for (const auto& [key, options] : cached.items()) {
+            Thread::optionCache()[key] = acp::configOptionsFromJson(options); // before the threads: they start from it
+        }
         for (const auto& row : root.value("threads", json::array())) {
             auto thread = std::make_unique<Thread>(row.value("cwd", ""), row.value("agent", ""),
                                                    row.value("host", ""));
@@ -77,6 +81,10 @@ namespace Store {
                                {"updated", t->updatedAt},
                                {"own", t->ownWriteAt}});
         }
+        json options = json::object();
+        for (const auto& [key, list] : Thread::optionCache()) {
+            options[key] = acp::configOptionsToJson(list);
+        }
         // written beside and renamed: a crash mid-write must not lose the list
         const auto tmp = std::filesystem::path(file).concat(".tmp");
         std::ofstream(tmp) << json{{"onboarded", data.onboarded},
@@ -93,6 +101,7 @@ namespace Store {
                                    {"importAsked", data.importAsked},
                                    {"defaults", data.defaults},
                                    {"layout", {data.sidebarWidth, data.filesWidth, data.treeWidth, data.terminalHeight}},
+                                   {"options", options},
                                    {"projects", projects},
                                    {"threads", threads}}.dump(2) << "\n";
         std::error_code ec;

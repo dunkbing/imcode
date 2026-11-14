@@ -1431,11 +1431,7 @@ void App::threadBody(Thread& t) {
         attachedRows(left);
         ImGui::SetCursorPosX(left);
         composer(t, width);
-        statusLine(t, left);
-        if (t.starting()) {
-            ImGui::SetCursorPosX(left + 8);
-            ImGui::TextColored(colors.overlay1, "%s", startLabel(t).c_str());
-        }
+        statusLine(t, left); // no start-up progress here: it shows once a message is going
         return;
     }
 

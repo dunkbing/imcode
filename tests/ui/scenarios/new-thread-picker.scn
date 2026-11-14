@@ -1,5 +1,7 @@
-# opening the agent/model picker on a new thread starts the agent: the composer must stay in the middle
+# the picker of a new thread lists the models this agent offered last time, with no agent ready yet
 DEV="new"
 FILES="a.txt"
+AGENT=$root/tests/ui/silent-agent
+OPTIONS='{"|claude-code":[{"id":"model","name":"Model","category":"model","type":"select","currentValue":"sonnet","options":[{"value":"opus","name":"Opus 5.5"},{"value":"sonnet","name":"Sonnet 5.5"},{"value":"haiku","name":"Haiku 5.5"}]}]}'
 INPUT="20 click 1045 407"
-FRAMES=300
+FRAMES=60

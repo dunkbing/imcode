@@ -20,7 +20,30 @@
 using json = nlohmann::json;
 
 Thread::Thread(std::string cwd_, std::string agentId_, std::string host_)
-    : cwd(std::move(cwd_)), agentId(std::move(agentId_)), host(std::move(host_)) {}
+    : cwd(std::move(cwd_)), agentId(std::move(agentId_)), host(std::move(host_)) {
+    seedConfig();
+}
+
+std::map<std::string, std::vector<acp::ConfigOption>>& Thread::optionCache() {
+    static std::map<std::string, std::vector<acp::ConfigOption>> cache;
+    return cache;
+}
+
+void Thread::seedConfig() {
+    const auto cached = optionCache().find(host + "|" + agentId);
+    if (cached == optionCache().end()) {
+        return;
+    }
+    config = cached->second;
+    for (auto& option : config) { // what the user last picked for this agent shows as the current value
+        const auto want = wanted.find(option.id);
+        if (want != wanted.end() && option.type == "select" &&
+            std::ranges::any_of(option.options, [&](const auto& o) { return o.value == want->second; }) &&
+            !(option.category == "mode" && riskyMode(want->second))) {
+            option.currentValue = want->second;
+        }
+    }
+}
 
 void Thread::add(Item item) {
     items.push_back(std::move(item));
@@ -517,8 +540,15 @@ void Thread::setConfig(const std::string& id, const std::string& value) {
         picked[id] = value;
         changed_ = true;
     }
-    if (acp_) {
+    for (auto& option : config) { // the list on screen (cached or not) shows the pick at once
+        if (option.id == id && option.type == "select") {
+            option.currentValue = value;
+        }
+    }
+    if (acp_ && acp_->isSessionReady()) {
         acp_->setConfigOption(id, value);
+    } else {
+        pending_[id] = value; // the agent drops it before the session: sent with the real options
     }
 }
 
@@ -952,6 +982,20 @@ void Thread::poll() {
             config = std::move(ev.configOptions);
             for (const auto& [id, value] : dueChoices(config, wanted)) {
                 acp_->setConfigOption(id, value);
+            }
+            // picks made here meanwhile win over the remembered ones
+            for (const auto& [id, value] : std::exchange(pending_, {})) {
+                const bool due = std::ranges::any_of(config, [&, &id = id, &value = value](const auto& option) {
+                    return option.id == id && option.currentValue != value &&
+                           std::ranges::any_of(option.options, [&](const auto& o) { return o.value == value; });
+                });
+                if (due) {
+                    acp_->setConfigOption(id, value);
+                }
+            }
+            if (!config.empty()) { // an agent with no options does not wipe what it offered before
+                optionCache()[host + "|" + agentId] = config;
+                changed_ = true; // saved with the list: the next new thread starts from it
             }
             break;
         case AcpEvent::Type::Commands:

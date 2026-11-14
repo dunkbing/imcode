@@ -1,0 +1,7 @@
+# a model picked before the agent is ready shows at once (and is sent with the real options)
+DEV="new"
+FILES="a.txt"
+AGENT=$root/tests/ui/silent-agent
+OPTIONS='{"|claude-code":[{"id":"model","name":"Model","category":"model","type":"select","currentValue":"sonnet","options":[{"value":"opus","name":"Opus 5.5"},{"value":"sonnet","name":"Sonnet 5.5"},{"value":"haiku","name":"Haiku 5.5"}]}]}'
+INPUT="20 click 1045 407;30 click 724 186"
+FRAMES=60

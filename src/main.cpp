@@ -444,6 +444,7 @@ void App::newThread(int projectIndex, std::string agentId) {
     dropDraft();
     data.threads.push_back(std::make_unique<Thread>(p.cwd, agentId, p.host));
     data.threads.back()->wanted = data.defaults[agentId];
+    data.threads.back()->seedConfig(); // the picker shows the agent's last options with these laid over them
     project = projectIndex;
     current = -1;
     select(static_cast<int>(data.threads.size()) - 1);

@@ -79,6 +79,9 @@ public:
     // a new thread starts with what was last picked for its agent: option id -> value, applied
     // as the options arrive. `picked` is what the user chose here, taken by the app to remember
     std::map<std::string, std::string> wanted, picked;
+    // what each agent offered the last time (host + "|" + agent id): a new thread shows it at once, the real options replace it
+    static std::map<std::string, std::vector<acp::ConfigOption>>& optionCache();
+    void seedConfig(); // config from the cache, with `wanted` laid over it
     std::vector<AcpCommand> commands;      // its slash commands
     long long contextUsed = 0, contextSize = 0; // tokens, as the agent last reported
     double cost = -1;                           // of the session so far; -1 = not reported
@@ -163,6 +166,7 @@ private:
     std::unique_ptr<AcpClient> acp_;
     std::string heldUser_; // sent while history replays: shown after it, where it belongs
     bool replaying_ = false;
+    std::map<std::string, std::string> pending_; // picked before the session was ready: sent when it is
     bool newSession_ = false; // the agent was started without a saved session
     long long ownSavedAt_ = 0;
     bool queued_ = false; // a prompt waits for the session

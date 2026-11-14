@@ -5,6 +5,7 @@
 #   scripts/dev check                     run them all against tests/ui/golden/<name>.png
 #   scripts/dev check --update            ... and keep what they show as the new golden files
 # BUILD=<dir> picks the build folder (default build). a scenario is a file of variables:
+#   AGENT (the agent command: default the echo agent; tests/ui/silent-agent never answers; $root is the repo), OPTIONS (models the agent offered before),
 #   DEV (IMCODE_DEV), INPUT (IMCODE_INPUT: "<frame> click X Y;<frame> type text;..."), FRAMES, WINDOW,
 #   FILES (made in the project folder), HOST (a project on that ssh host: needs IMCODE_DEV_HOST
 #   and links ~/.ssh into the scratch HOME, so it is skipped by check), @DIR@ in INPUT = the folder
@@ -17,7 +18,7 @@ golden=$root/tests/ui/golden
 run() { # <name> <out.png>: one scenario
     name=$1
     out=$2
-    unset DEV INPUT FRAMES WINDOW FILES HOST
+    unset DEV INPUT FRAMES WINDOW FILES HOST OPTIONS AGENT
     . "$scn/$name.scn"
     work=$(mktemp -d "${TMPDIR:-/tmp}/imcode-dev.XXXXXX")
     trap 'rm -rf "$work"' EXIT
@@ -33,9 +34,11 @@ run() { # <name> <out.png>: one scenario
     fi
     cwd=$work/scn/p
     [ -n "$host" ] && cwd=${IMCODE_DEV_CWD:-/tmp}
-    echo '{"onboarded":true,"agents":[],"machines":[],"machine":"","projects":[{"host":"'"$host"'","cwd":"'"$cwd"'"}],"threads":[],"last":""}' > "$work/data/threads.json"
+    opts=${OPTIONS:-}
+    [ -n "$opts" ] || opts="{}"
+    echo '{"onboarded":true,"options":'"$opts"',"agents":[],"machines":[],"machine":"","projects":[{"host":"'"$host"'","cwd":"'"$cwd"'"}],"threads":[],"last":""}' > "$work/data/threads.json"
     input=$(printf '%s' "${INPUT:-}" | sed "s#@DIR@#$work/scn/p#g")
-    HOME=$work/home IMCODE_DATA_DIR=$work/data IMCODE_AGENT_CMD=$build/external/acp-cpp/acp-echo-agent \
+    HOME=$work/home IMCODE_DATA_DIR=$work/data IMCODE_AGENT_CMD=${AGENT:-$build/external/acp-cpp/acp-echo-agent} \
         IMCODE_WINDOW=${WINDOW:-1300x700} IMCODE_SHOT=$work/shot.ppm IMCODE_SHOT_FRAMES=${FRAMES:-40} \
         IMCODE_DEV=${DEV:-new} IMCODE_INPUT=$input "$build/imcode" > /dev/null 2>&1 || true
     [ -s "$work/shot.ppm" ] || { echo "$name: no screenshot (is $build/imcode built?)" >&2; return 1; }

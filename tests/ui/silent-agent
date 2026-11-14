@@ -1,0 +1,3 @@
+#!/bin/sh
+# an agent that starts and never answers: the app waits for it, as for a slow one
+exec tail -f /dev/null
