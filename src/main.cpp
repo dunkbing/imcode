@@ -311,9 +311,8 @@ void App::startScan() {
 }
 
 void App::openFile(const std::string& path) {
-    attachments.push_back(path); // ui thread only, like the composer that reads it
+    dropped.push_back(path); // ui thread only; handleDrops() places it once the frame shows what is under the pointer
     imshell::requestFrames();
-    focusInput = true;
 }
 
 bool App::wantsFrames() {
@@ -970,6 +969,7 @@ void App::frame() {
     }
     paletteDraw();
     machineDialog(false);
+    handleDrops();
     importDialog();
     settingsDraw();
     graphDraw();

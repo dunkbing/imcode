@@ -66,6 +66,66 @@ namespace {
         return "Saved to ~/Downloads/" + target.filename().string();
     }
 
+    // files from this machine copied into a folder of the project, here or on its host, each under a
+    // free name; what to tell the user. shortcut: read whole into memory (capped), no progress
+    std::string copyIn(const std::string& host, const std::string& dir, const std::string& rel, const std::vector<std::string>& paths) {
+        constexpr size_t cap = 512u << 20;
+        std::shared_ptr<Ssh::Session> session;
+        std::set<std::string> taken;
+        std::error_code ec;
+        if (!host.empty()) {
+            Ssh::Error failed;
+            session = Ssh::session(host, "", failed);
+            if (!session) {
+                return failed.message;
+            }
+            std::string error;
+            for (const auto& entry : session->list(dir, error)) {
+                taken.insert(entry.name);
+            }
+        }
+        std::string last, notes;
+        int done = 0;
+        for (const auto& source : paths) {
+            const fs::path from(source);
+            if (fs::is_directory(from, ec)) {
+                notes += " " + from.filename().string() + " is a folder: not uploaded.";
+                continue;
+            }
+            std::string name = from.filename().string();
+            for (int n = 1; host.empty() ? fs::exists(fs::path(dir) / name, ec) : taken.contains(name); ++n) {
+                name = from.stem().string() + std::format(" ({})", n) + from.extension().string();
+            }
+            std::string error;
+            if (host.empty()) {
+                fs::copy_file(from, fs::path(dir) / name, ec);
+                if (ec) {
+                    error = ec.message();
+                }
+            } else {
+                std::ifstream in(from, std::ios::binary);
+                std::string bytes(std::istreambuf_iterator<char>(in), {});
+                if (!in && !in.eof()) {
+                    error = "Could not read " + source;
+                } else if (bytes.size() >= cap) {
+                    error = name + " is over 512 MB: not uploaded.";
+                } else if (!session->write(dir + "/" + name, bytes, error) && error.empty()) {
+                    error = "Could not write " + name;
+                }
+            }
+            if (!error.empty()) {
+                return error;
+            }
+            taken.insert(name);
+            last = rel.empty() ? name : rel + "/" + name;
+            ++done;
+        }
+        if (done == 0) {
+            return notes.empty() ? "Nothing to upload." : notes.substr(1);
+        }
+        return (done == 1 ? "Uploaded to " + last : std::format("Uploaded {} files to {}", done, rel.empty() ? "the project root" : rel)) + notes;
+    }
+
     // what is in a folder, here or over sftp: folders first, then by name
     std::vector<Ssh::Entry> list(const std::string& host, const std::string& path, std::string& error) {
         if (!host.empty()) {
@@ -242,13 +302,16 @@ namespace {
                 if (row(path, ICON_FA_FILE, entry.name, depth, path == f.doc.path)) {
                     opened = path;
                 }
+                if (ImGui::IsItemHovered()) {
+                    f.hoverDir = dir;
+                }
                 if (ImGui::BeginPopupContextItem(("##menu" + path).c_str())) {
                     if (ImGui::MenuItem(ICON_FA_CLOCK_ROTATE_LEFT "  History of this file")) {
                         f.historyOf = path;
                     }
                     // a file on a host: a copy in ~/Downloads
                     if (!f.host.empty() && ImGui::MenuItem(ICON_FA_DOWNLOAD "  Download", nullptr, false, !f.downloadOp.isRunning())) {
-                        f.downloading = entry.name;
+                        f.downloading = "Downloading " + entry.name + "...";
                         f.downloadNote.clear();
                         f.downloadOp.start([host = f.host, full = under(f.cwd, path), name = entry.name] {
                             return download(host, full, name);
@@ -259,7 +322,11 @@ namespace {
                 continue;
             }
             const bool expanded = f.expanded.contains(path);
-            if (row(path, expanded ? ICON_FA_FOLDER_OPEN : ICON_FA_FOLDER, entry.name, depth, false)) {
+            const bool folderRow = row(path, expanded ? ICON_FA_FOLDER_OPEN : ICON_FA_FOLDER, entry.name, depth, false);
+            if (ImGui::IsItemHovered()) {
+                f.hoverDir = path;
+            }
+            if (folderRow) {
                 if (expanded) {
                     f.expanded.erase(path);
                 } else {
@@ -354,6 +421,10 @@ void App::filesPoll() {
         f.downloadNote = std::move(note);
         f.downloading.clear();
         f.downloadedAt = ImGui::GetTime();
+        if (f.uploadDir) {
+            f.dirs.erase(*std::exchange(f.uploadDir, std::nullopt)); // listed again with the new file
+            f.indexed = false;
+        }
     });
     f.readOp.check([&](Files::Doc got) {
         if (got.epoch == f.epoch) {
@@ -495,6 +566,7 @@ bool App::filesPanel(Thread& t, bool beside) {
         }
     };
     const auto treeView = [&] {
+        f.overTree = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
         ImGui::SetNextItemWidth(-FLT_MIN);
         ImGui::InputTextWithHint("##filter", ICON_FA_MAGNIFYING_GLASS "  Search files", f.filter,
                                  sizeof(f.filter));
@@ -502,7 +574,7 @@ bool App::filesPanel(Thread& t, bool beside) {
         if (!f.downloading.empty() || (!f.downloadNote.empty() && ImGui::GetTime() - f.downloadedAt < 8)) {
             ImGui::Spacing();
             ImGui::PushTextWrapPos();
-            ImGui::TextColored(colors.overlay1, "%s", f.downloading.empty() ? f.downloadNote.c_str() : ("Downloading " + f.downloading + "...").c_str());
+            ImGui::TextColored(colors.overlay1, "%s", f.downloading.empty() ? f.downloadNote.c_str() : f.downloading.c_str());
             ImGui::PopTextWrapPos();
             imshell::requestFrames();
         }
@@ -552,4 +624,26 @@ bool App::filesPanel(Thread& t, bool beside) {
         files.historyOf.clear();
     }
     return released;
+}
+
+// files dropped on the window, placed after the frame is drawn (it knows what is under the pointer):
+// on the tree, copied into the folder there (uploaded on a host); anywhere else, attached to the
+// next message, which uploads them to a host itself
+void App::handleDrops() {
+    if (dropped.empty()) {
+        return;
+    }
+    Files& f = files;
+    auto paths = std::exchange(dropped, {});
+    if (f.open && f.overTree && current >= 0 && f.tab == 0 && !f.downloadOp.isRunning()) {
+        f.uploadDir = f.hoverDir;
+        f.downloadNote.clear();
+        f.downloading = "Uploading " + fs::path(paths.front()).filename().string() + (paths.size() > 1 ? " and more..." : "...");
+        f.downloadOp.start([host = f.host, dir = under(f.cwd, f.hoverDir), rel = f.hoverDir, paths = std::move(paths)] {
+            return copyIn(host, dir, rel, paths);
+        });
+        return;
+    }
+    attachments.insert(attachments.end(), paths.begin(), paths.end());
+    focusInput = true;
 }

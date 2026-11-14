@@ -151,7 +151,7 @@ namespace {
         return out;
     }
 
-    void play(const std::vector<Step>& steps, int frame) {
+    void play(App& app, const std::vector<Step>& steps, int frame) {
         ImGuiIO& io = ImGui::GetIO();
         for (const Step& s : steps) {
             const int age = frame - s.frame;
@@ -166,6 +166,13 @@ namespace {
             } else if (s.what == "wheel" && age == 0 && std::sscanf(s.args.c_str(), "%f %f %f", &x1, &y1, &x2) == 3) {
                 io.AddMousePosEvent(x1, y1); // wheel x y amount: a scroll there
                 io.AddMouseWheelEvent(0, x2);
+            } else if (s.what == "drop") { // drop x y path: a file dropped there from the finder
+                int used = 0;
+                if (age == 0 && std::sscanf(s.args.c_str(), "%f %f %n", &x1, &y1, &used) >= 2) {
+                    io.AddMousePosEvent(x1, y1);
+                } else if (age == 1 && std::sscanf(s.args.c_str(), "%f %f %n", &x1, &y1, &used) >= 2) {
+                    app.openFile(s.args.substr(static_cast<size_t>(used)));
+                }
             } else if (s.what == "move" && age == 0 && std::sscanf(s.args.c_str(), "%f %f", &x1, &y1) == 2) {
                 io.AddMousePosEvent(x1, y1); // a hover, nothing pressed
             } else if (s.what == "type" && age == 0) {
@@ -245,7 +252,7 @@ int runHeadless(App& app, const char* out, int width, int height, int frames) {
     Canvas canvas{static_cast<int>(width * scale), static_cast<int>(height * scale), {}};
     const std::vector<Step> steps = inputSteps();
     for (int i = 0; i < frames; ++i) {
-        play(steps, i);
+        play(app, steps, i);
         ImGui::NewFrame();
         app.frame();
         ImGui::Render();
