@@ -66,6 +66,9 @@ namespace Round {
     constexpr float Dialog = 6, Panel = 8, Row = 4;
 } // namespace Round
 
+// the panels start this far above the main window's padding, so the conversation header sits close to the top; sidebar() adds it back inside
+constexpr float kPanelTopShift = 10;
+
 struct App : imshell::Delegate {
     imshell::App* shell = nullptr; // the window: uploads textures
     bool headless = false;        // no window (headless.cpp): frames are drawn into memory

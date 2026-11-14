@@ -1363,29 +1363,33 @@ void App::statusLine(Thread& t, float left) {
 
 // the thread in a window of its own that never scrolls: only the transcript inside it does, so
 // the composer and the line under it stay put
-// the project (click to start a thread in another one) and the title, at the left edge of the reading column
+// the conversation's side padding: a fixed size, so nothing shifts when the panel is resized
+constexpr float kPanelPad = Theme::Spacing::XL;
+// the paddings of the panel being drawn: against the window edge the main window's own padding already counts for
+// part of it (the sidebar side and the files side are panels, which have none)
+struct Pads {
+    float left, right;
+};
+static Pads panelPads() {
+    const float own = ImGui::GetStyle().WindowPadding.x;
+    const float edge = ImGui::GetMainViewport()->WorkSize.x;
+    const ImVec2 at = ImGui::GetWindowPos();
+    return {at.x <= own + 1 ? kPanelPad - own : kPanelPad, at.x + ImGui::GetWindowWidth() >= edge - own - 1 ? kPanelPad - own : kPanelPad};
+}
+
+// the project and the title, along the top of the conversation
 void App::threadHeader(const Thread& t) {
     const Colors colors = themeColors();
     const float avail = ImGui::GetContentRegionAvail().x;
-    const float width = std::min(760.0f, avail - 2 * Theme::Spacing::M);
-    const float left = ImGui::GetCursorPosX() + (avail - width) * 0.5f;
-    ImGui::SetCursorPos(ImVec2(left, ImGui::GetCursorPosY() + Theme::Spacing::S));
+    const Pads pads = panelPads();
+    ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + pads.left, ImGui::GetCursorPosY()));
     ImGui::AlignTextToFramePadding();
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
-    ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
-    if (ImGui::Button((std::filesystem::path(t.projectDir()).filename().string() + "  " ICON_FA_CHEVRON_DOWN "##project").c_str())) {
-        ImGui::OpenPopup("projects");
-    }
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(3);
-    projectPopup();
+    ImGui::TextColored(colors.subtext0, "%s", std::filesystem::path(t.projectDir()).filename().string().c_str());
     ImGui::SameLine();
     ImGui::TextColored(colors.overlay0, "/");
     ImGui::SameLine();
-    // as much of the title as fits in the column
-    const float room = left + width - ImGui::GetCursorPosX();
+    // as much of the title as fits
+    const float room = avail - pads.right - ImGui::GetCursorPosX();
     const size_t fits = static_cast<size_t>(std::max(0.0f, room / ImGui::CalcTextSize("0").x));
     const std::string title = t.title.empty() ? "New thread" : t.title;
     ImGui::TextUnformatted(title.size() > fits ? (cut(title, fits > 2 ? fits - 2 : 0) + "..").c_str() : title.c_str());
@@ -1443,8 +1447,9 @@ void App::threadBody(Thread& t) {
     const Colors colors = themeColors();
     const AcpAgentDef* def = AcpAgents::find(t.agentId);
     const ImVec2 avail = ImGui::GetContentRegionAvail();
-    const float width = std::min(760.0f, avail.x - 2 * Theme::Spacing::M); // the reading column
-    const float left = (avail.x - width) * 0.5f;
+    const Pads pads = panelPads();
+    const float width = avail.x - pads.left - pads.right; // fills the panel between its fixed paddings
+    const float left = pads.left;
     const float composerHeight = composerInputHeight(input, width) + ImGui::GetFrameHeight() + 34;
 
     if (t.items.empty() && !t.busy() && (t.sessionId.empty() || t.newSession())) {
@@ -1453,10 +1458,9 @@ void App::threadBody(Thread& t) {
         const std::string ask = "What should we build in " + name + "?";
         const float room = attachedStrip(); // the strip goes in above the composer, which stays (asked before the big font: it sets the frame height)
         ImGui::PushFont(nullptr, 24.0f);
-        const float askWidth = ImGui::CalcTextSize(ask.c_str()).x;
         // a third of the way down, or centred when the area is short (a tall terminal)
         const float block = composerHeight + 90;
-        ImGui::SetCursorPos(ImVec2((avail.x - askWidth) * 0.5f,
+        ImGui::SetCursorPos(ImVec2(left,
                                    std::max(0.0f, std::min(avail.y * 0.36f, (avail.y - block) * 0.5f) - room)));
         ImGui::TextUnformatted(ask.c_str());
         ImGui::PopFont();
@@ -1554,7 +1558,7 @@ void App::threadBody(Thread& t) {
                                                       ImGui::GetColorU32(colors.yellow), 2);
         }
     };
-    ImGui::Dummy(ImVec2(0, Theme::Spacing::L));
+    ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
     ImGui::Indent(left);
     ImGui::PushTextWrapPos(left + width);
     // only the rows near the view are drawn; the others are a gap of their last measured height

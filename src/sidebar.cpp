@@ -28,6 +28,7 @@ void App::sidebar() {
     const float button = ImGui::GetFrameHeight();
     const float spacing = ImGui::GetStyle().ItemSpacing.x;
 
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + kPanelTopShift); // the panels start higher than the theme's padding
     // the project filter, add project and new thread buttons are in the title bar (sidebarButtons)
     // clear of the divider beside the list
     searchField("##search", "Search", search, sizeof(search), ImGui::GetContentRegionAvail().x - 6);

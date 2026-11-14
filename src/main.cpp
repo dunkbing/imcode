@@ -794,8 +794,9 @@ void App::frame() {
         ImGui::SetNextWindowPos(bar.pos);
         ImGui::SetNextWindowSize(bar.size);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, (barHeight - ImGui::GetFrameHeight()) * 0.5f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(0, 0)); // the theme's 200 would make the bar a tall window that covers the content once clicked
         ImGui::Begin("##bar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
-        ImGui::PopStyleVar();
+        ImGui::PopStyleVar(2);
         ImGui::SetCursorPosX(bar.leftInset);
     } else {
         bar = imshell::BeginTitleBar();
@@ -873,6 +874,7 @@ void App::frame() {
         onboarding();
     } else {
         const bool list = !narrow || sidebarOpen || current < 0;
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() - kPanelTopShift);
         bool resized = false; // a panel was dragged to a new size: saved when let go
         float dividerX = 0, dividerTop = 0, dividerBottom = 0; // the sidebar's right edge, top and bottom: the line goes on past both
         sidebarEdge = 0;
@@ -953,12 +955,12 @@ void App::frame() {
                 sidebar();
                 ImGui::EndChild();
             } else {
-                ImGui::BeginChild("thread");
+                ImGui::BeginChild("thread", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
                 threadArea();
                 ImGui::EndChild();
             }
         } else if (data.sidebarHidden) {
-            ImGui::BeginChild("thread");
+            ImGui::BeginChild("thread", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
             threadArea();
             ImGui::EndChild();
         } else if (imshell::BeginResizable("layout", lines)) {
