@@ -383,6 +383,17 @@ struct App : imshell::Delegate {
         int w = 0, h = 0;
     };
     std::map<std::string, Thumb> thumbs; // attachments seen, by path
+    // on a host an attachment is copied there as soon as it is added, and its chip shows the path there
+    struct Upload {
+        enum class State { Queued, Sending, Done, Failed } state = State::Queued;
+        std::string remote, error;
+    };
+    using Uploads = std::vector<std::pair<std::string, Upload>>;
+    std::map<std::string, Upload> uploads; // host + "\n" + local path
+    AcpHost::AsyncOp<Uploads> uploadOp;
+    void attachPoll();
+    [[nodiscard]] const Thread* shownThread() const;
+    [[nodiscard]] bool remoteComposer() const; // the shown thread is on a host
 
     // the agent's own mark, tinted like text; a generic one when there is none
     // rowHeight: the height of the row it sits in (a frame-height row of buttons), 0 = a text line

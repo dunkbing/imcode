@@ -388,7 +388,7 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
     if (!host.empty()) {
         std::vector<std::string> due;
         for (const auto& file : files) {
-            if (!imageType(file) && !uploaded_.remote.contains(file) && !uploaded_.failed.contains(file)) {
+            if (!uploaded_.remote.contains(file) && !uploaded_.failed.contains(file)) {
                 due.push_back(file);
             }
         }
@@ -444,7 +444,7 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
         const std::filesystem::path path(file);
         const char* image = imageType(file);
         std::error_code ec;
-        if (image) {
+        if (image && host.empty()) {
             // shortcut: sent whether or not the agent said it reads pictures; one that
             // does not answers with its own error
             if (std::filesystem::file_size(path, ec) > 5'000'000 || ec) {
@@ -694,7 +694,9 @@ void Thread::poll() {
         if (std::exchange(uploadDropped_, false)) {
             return;
         }
+        auto kept = std::move(uploaded_.remote); // copied before the send began: they are not in `got`
         uploaded_ = std::move(got);
+        uploaded_.remote.merge(kept);
         send(text, files);
         uploaded_ = {};
     });

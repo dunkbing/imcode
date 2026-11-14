@@ -115,8 +115,13 @@ public:
     [[nodiscard]] bool watching() const {
         return watching_ && live_;
     }
-    // files: local paths. images go along as pictures, other files as links (not over ssh)
+    // files: local paths. on this machine images go along as pictures, other files as links; on a
+    // host every file goes as a link to its copy there
     void send(const std::string& text, const std::vector<std::string>& files = {});
+    // files already copied to the host (local path -> path there), for the next send
+    void preUploaded(const std::map<std::string, std::string>& remote) {
+        uploaded_.remote.insert(remote.begin(), remote.end());
+    }
     void cancel();
     // a queued message goes ahead of the rest right away: the running turn is stopped for it
     void sendNow(size_t queued);

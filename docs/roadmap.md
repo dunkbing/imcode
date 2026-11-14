@@ -15,7 +15,7 @@ Order is by phase; within a phase, top first. `[x]` done, `[~]` partly. Each ope
 - [x] Tool call details: diffs for edits, output for commands, files that open in the viewer
 - [~] Agents install themselves: managed Bun, here and on a remote (done); registry binaries, with progress ([#2](https://github.com/dunkbing/imcode/issues/2))
 - [~] Queue a message while a turn runs (done); edit and resend the last one ([#3](https://github.com/dunkbing/imcode/issues/3))
-- [x] Images and files as attachments: picked, dropped on the window or pasted; uploaded to the host for a remote thread
+- [x] Images and files as attachments: picked, dropped on the window or pasted; on a remote thread each is copied to the host as soon as it is added, and its chip shows the path there (no preview)
 - [~] Context and cost from `usage_update`, and the agent's own title for a thread (done); compaction notices ([#4](https://github.com/dunkbing/imcode/issues/4))
 - [x] Rename, archive, search threads
 - [~] Detect installed agents: turn on, install, sign in, update; browse the ACP registry ([#5](https://github.com/dunkbing/imcode/issues/5))

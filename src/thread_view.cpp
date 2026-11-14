@@ -1,5 +1,7 @@
 #include "app.hpp"
 #include "home.hpp"
+#include "remote.hpp"
+#include "ssh.hpp"
 #include "imgui_internal.h" // RenderArrow
 #include "text.hpp"
 #include "trace.hpp"
@@ -1019,10 +1021,102 @@ void App::composer(Thread& t, float width) {
     ImGui::PopStyleVar();
     if (send && canSend) { // while a turn runs this queues
         shownRevision = -3; // what was sent comes into view
+        if (!t.host.empty()) { // the copies already on the host: the message only names them
+            std::map<std::string, std::string> copies;
+            for (const auto& path : attachments) {
+                if (const auto up = uploads.find(t.host + "\n" + path); up != uploads.end() && up->second.state == Upload::State::Done) {
+                    copies[path] = up->second.remote;
+                }
+            }
+            t.preUploaded(copies);
+        }
         t.send(input, std::exchange(attachments, {}));
         input[0] = 0;
         focusInput = true;
     }
+}
+
+const Thread* App::shownThread() const {
+    return current >= 0 && current < static_cast<int>(data.threads.size()) ? data.threads[current].get() : nullptr;
+}
+
+bool App::remoteComposer() const {
+    const Thread* t = shownThread();
+    return t && !t->host.empty();
+}
+
+// attachments on a host are copied there one batch at a time, off the ui thread, from the moment
+// they are added; what the shown thread sends then only names the copies
+void App::attachPoll() {
+    uploadOp.check([this](Uploads done) {
+        for (auto& [key, upload] : done) {
+            if (const auto it = uploads.find(key); it != uploads.end()) {
+                it->second = std::move(upload);
+            }
+        }
+        imshell::requestFrames();
+    });
+    // removed or sent: forgotten, so the same file added again is copied again (it may have changed)
+    for (auto it = uploads.begin(); it != uploads.end();) {
+        const std::string path = it->first.substr(it->first.find('\n') + 1);
+        if (it->second.state != Upload::State::Sending && std::ranges::find(attachments, path) == attachments.end()) {
+            it = uploads.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    const Thread* t = shownThread();
+    if (!t || t->host.empty()) {
+        return;
+    }
+    const std::string prefix = t->host + "\n";
+    for (const auto& path : attachments) {
+        uploads.try_emplace(prefix + path);
+    }
+    if (uploadOp.isRunning()) {
+        return;
+    }
+    std::vector<std::string> due;
+    for (auto& [key, upload] : uploads) {
+        if (upload.state == Upload::State::Queued && key.starts_with(prefix)) {
+            upload.state = Upload::State::Sending;
+            due.push_back(key);
+        }
+    }
+    if (due.empty()) {
+        return;
+    }
+    uploadOp.start([host = t->host, due, stamp = std::chrono::steady_clock::now().time_since_epoch().count()] {
+        Uploads out;
+        Ssh::Error sshError;
+        const auto session = Ssh::session(host, "", sshError);
+        long long n = 0;
+        for (const auto& key : due) {
+            const std::filesystem::path path(key.substr(host.size() + 1));
+            Upload upload;
+            std::error_code ec;
+            std::string failed;
+            if (std::filesystem::file_size(path, ec) > 20'000'000 || ec) {
+                failed = ec ? "cannot read it" : "over 20 MB";
+            } else if (!session) {
+                failed = sshError.message;
+            } else {
+                std::ifstream in(path, std::ios::binary);
+                const std::string bytes((std::istreambuf_iterator<char>(in)), {});
+                const std::string remote = Remote::uploadPath(path.filename().string(), stamp + n++);
+                if (session->write(remote, bytes, failed)) {
+                    upload.state = Upload::State::Done;
+                    upload.remote = remote;
+                }
+            }
+            if (upload.state != Upload::State::Done) {
+                upload.state = Upload::State::Failed;
+                upload.error = failed;
+            }
+            out.emplace_back(key, std::move(upload));
+        }
+        return out;
+    });
 }
 
 bool App::imageFile(const std::string& path) {
@@ -1035,8 +1129,9 @@ float App::attachedStrip() const {
     if (attachments.empty()) {
         return 0;
     }
-    // pictures are thumbnails, any other file a one-line chip: only pictures make the row tall
-    return (std::ranges::any_of(attachments, imageFile) ? 56.0f : ImGui::GetFrameHeight()) + 8;
+    // pictures are thumbnails, any other file a one-line chip: only pictures make the row tall.
+    // on a host every file is a chip with its path there
+    return (!remoteComposer() && std::ranges::any_of(attachments, imageFile) ? 56.0f : ImGui::GetFrameHeight()) + 8;
 }
 
 // what will go with the next message: a strip of tiles above the composer, a picture as its
@@ -1048,6 +1143,8 @@ void App::attachedRows(float left) {
     }
     const Colors colors = themeColors();
     const float size = attachedStrip() - 8;
+    const bool remote = remoteComposer();
+    const std::string host = remote ? shownThread()->host : std::string();
     int drop = -1;
     ImGui::SetCursorPosX(left + 8);
     const ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -1061,7 +1158,7 @@ void App::attachedRows(float left) {
             std::error_code ec;
             const auto bytes = std::filesystem::file_size(path, ec);
             if (!ec && bytes < (24u << 20)) {
-                if (imageFile(path)) {
+                if (!remote && imageFile(path)) {
                     std::ifstream in(path, std::ios::binary);
                     const std::vector<uint8_t> data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
                     thumb.tex = upload ? imshell::LoadTexture(data.data(), data.size(), upload, &thumb.w, &thumb.h) : ImTextureID{};
@@ -1070,10 +1167,25 @@ void App::attachedRows(float left) {
             found = thumbs.emplace(path, thumb).first;
         }
         const Thumb& thumb = found->second;
-        const std::string name = std::filesystem::path(path).filename().string();
+        std::string name = std::filesystem::path(path).filename().string();
+        ImVec4 nameColor = colors.subtext0;
+        std::string shown = path; // the tooltip
+        if (remote) { // the path on the host once it is there, never the local file
+            const auto up = uploads.find(host + "\n" + path);
+            if (up != uploads.end() && up->second.state == Upload::State::Done) {
+                name = shown = up->second.remote;
+            } else if (up != uploads.end() && up->second.state == Upload::State::Failed) {
+                name += ": not uploaded (" + up->second.error + ")";
+                nameColor = colors.red;
+                shown = name;
+            } else {
+                name = "Uploading " + name + "...";
+                shown = name;
+            }
+        }
         const float width = thumb.tex && thumb.h > 0
                                 ? std::clamp(size * static_cast<float>(thumb.w) / static_cast<float>(thumb.h), 28.0f, 140.0f)
-                                : std::min(200.0f, ImGui::CalcTextSize(name.c_str()).x + 62);
+                                : std::min(remote ? 420.0f : 200.0f, ImGui::CalcTextSize(name.c_str()).x + 62);
         const float height = thumb.tex ? size : std::min(size, ImGui::GetFrameHeight()); // a file is a chip, not a picture-sized tile
         const ImVec2 lo(x, origin.y + (size - height) / 2), hi(x + width, lo.y + height);
         ImGui::PushID(static_cast<int>(1000 + i));
@@ -1081,7 +1193,7 @@ void App::attachedRows(float left) {
         ImGui::SetNextItemAllowOverlap(); // the remove button sits on top of it
         ImGui::InvisibleButton("tile", ImVec2(width, height));
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("%s", path.c_str());
+            ImGui::SetTooltip("%s", shown.c_str());
         }
         draw->AddRectFilled(lo, hi, ImGui::GetColorU32(colors.surface0), Round::Row);
         if (thumb.tex) {
@@ -1090,7 +1202,7 @@ void App::attachedRows(float left) {
             draw->AddText(ImVec2(lo.x + 10, lo.y + (height - ImGui::GetTextLineHeight()) / 2), ImGui::GetColorU32(colors.overlay1),
                           ICON_FA_PAPERCLIP);
             draw->PushClipRect(lo, ImVec2(hi.x - 22, hi.y), true);
-            draw->AddText(ImVec2(lo.x + 30, lo.y + (height - ImGui::GetTextLineHeight()) / 2), ImGui::GetColorU32(colors.subtext0),
+            draw->AddText(ImVec2(lo.x + 30, lo.y + (height - ImGui::GetTextLineHeight()) / 2), ImGui::GetColorU32(nameColor),
                           name.c_str());
             draw->PopClipRect();
         }
