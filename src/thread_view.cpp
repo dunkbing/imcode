@@ -614,6 +614,8 @@ void App::composer(Thread& t, float width) {
     }
     // another client is writing this conversation: read only here, shown live
     ImGui::BeginDisabled(t.watching());
+    const bool enterNow = ImGui::IsKeyPressed(ImGuiKey_Enter, false);
+    const std::string before = enterNow ? input : "";
     bool send = ImGui::InputTextMultiline(
         "##input", input, sizeof(input), ImVec2(-FLT_MIN, inputHeight),
         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CtrlEnterForNewLine |
@@ -631,10 +633,15 @@ void App::composer(Thread& t, float width) {
         &picker);
     // to find why enter does nothing: every press while the field is active, and what it did
     // (a press that sends deactivates the field in the same frame: active is false then)
-    if (ImGui::IsKeyPressed(ImGuiKey_Enter, false)) {
-        trace::event("composer.enter", std::format("returned={} active={} wantText={} len={} files={} watching={} busy={} agent={}", send,
-                                                    ImGui::IsItemActive(), ImGui::GetIO().WantTextInput, std::strlen(input),
-                                                    attachments.size(), t.watching(), t.busy(), t.hasAgent()));
+    if (enterNow) {
+        const ImGuiIO& io = ImGui::GetIO();
+        // the field only takes a bare Enter: a modifier left down (a screenshot shortcut's key-up never reaches the window)
+        // makes it ignore the key, no send and no new line. text unchanged on a press = that: send it
+        const bool swallowed = !send && ImGui::IsItemActive() && before == input && !t.watching();
+        trace::event("composer.enter", std::format("returned={} swallowed={} active={} wantText={} len={} files={} watching={} busy={} agent={} ctrl={} shift={} alt={} super={}",
+                                                    send, swallowed, ImGui::IsItemActive(), io.WantTextInput, std::strlen(input), attachments.size(),
+                                                    t.watching(), t.busy(), t.hasAgent(), io.KeyCtrl, io.KeyShift, io.KeyAlt, io.KeySuper));
+        send |= swallowed;
     }
     ImGui::EndDisabled();
     if (t.watching()) {
