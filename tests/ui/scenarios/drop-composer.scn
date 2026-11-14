@@ -1,0 +1,5 @@
+# files dragged over the message box: outlined, "Drop to attach"
+DEV="new"
+FILES="a.txt"
+INPUT="25 dragover 700 365"
+FRAMES=45

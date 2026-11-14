@@ -1,0 +1,4 @@
+# a project with files, the new-thread screen
+DEV="new"
+FILES="a.txt"
+FRAMES=30

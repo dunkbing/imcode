@@ -1,0 +1,5 @@
+# a file dropped on the message box becomes a chip, and Enter with text and a file is allowed
+DEV="new"
+FILES="notes.txt"
+INPUT="20 drop 700 365 @DIR@/notes.txt;24 click 700 380;25 type look at this"
+FRAMES=300

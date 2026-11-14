@@ -1,0 +1,17 @@
+#!/bin/sh
+# build and copy just the executable to another machine over ssh: no zip, download or quarantine.
+#   scripts/push <user@host> [folder]       folder on the host: default ~/imcode-dev
+# run it there from a terminal (IMCODE_DATA_DIR=/tmp/x keeps it away from the installed app's data):
+#   ~/imcode-dev/imcode
+# BUILD=<dir> picks the build folder: default build-release, which targets macOS 14; the plain build
+# folder targets this machine's own macOS and may not start on an older one
+set -eu
+root=$(cd "$(dirname "$0")/.." && pwd)
+build=${BUILD:-$root/build-release}
+host=${1:?"scripts/push <user@host> [folder]"}
+dest=${2:-imcode-dev}
+cmake --build "$build" --target imcode -j6 2>&1 | tail -1
+exe=$build/imcode
+# a temporary name, then a rename: a copy that stops halfway never replaces a working one
+ssh -C "$host" "mkdir -p '$dest' && cat > '$dest/imcode.new' && chmod 755 '$dest/imcode.new' && mv '$dest/imcode.new' '$dest/imcode'" < "$exe"
+echo "$host:$dest/imcode ($(wc -c < "$exe" | tr -d ' ') bytes, $(git -C "$root" rev-parse --short HEAD))"

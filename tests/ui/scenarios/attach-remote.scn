@@ -1,0 +1,7 @@
+# on a host: the dropped file is copied there at once and its chip shows the path there.
+# IMCODE_DEV_HOST=user@host scripts/dev shot attach-remote
+HOST=1
+DEV="new"
+FILES="notes.txt"
+INPUT="20 drop 700 365 @DIR@/notes.txt"
+FRAMES=400

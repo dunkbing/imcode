@@ -1,0 +1,5 @@
+# files dragged over the tree: the panel and the folder row under the pointer are outlined
+DEV="new;files"
+FILES="src/x.c a.txt"
+INPUT="25 dragover 1100 63"
+FRAMES=45

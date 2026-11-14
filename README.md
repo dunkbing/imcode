@@ -15,6 +15,10 @@ cmake --build build -j 4
 
 Tests: configure with `-DIMCODE_BUILD_TESTS=ON`, then run `ctest --test-dir build`.
 
+UI checks without a window, on scratch data: `scripts/dev list` shows the scenarios (`tests/ui/scenarios/*.scn`: a few steps of mouse and keys played into the app), `scripts/dev shot <name>` writes one screenshot, and `scripts/dev check` compares every scenario with `tests/ui/golden/` (also a ctest on macOS with ImageMagick; `scripts/dev check --update` keeps what they show after a change on purpose). A scenario with `HOST=1` runs against `IMCODE_DEV_HOST=user@host`.
+
+`scripts/push <user@host>` builds `build-release` and copies only the executable to another machine over ssh (default `~/imcode-dev/imcode`), instead of a zip to download and open.
+
 Releases on macOS go through imshell's `imshell_app`: `cmake --build build-release --target imcode-app` makes `ImCode.app` and `imcode-macos-arm64.zip` in the build folder, signed with `IMSHELL_SIGN_IDENTITY` and notarized with `IMSHELL_NOTARY_PROFILE` when they are in the environment (ad hoc otherwise). Configure the folder first; a feed and key turn auto-update on, and it stays off without them:
 
 ```sh
