@@ -19,6 +19,8 @@ UI checks without a window, on scratch data: `scripts/dev list` shows the scenar
 
 `scripts/push <user@host>` builds `build-release` and copies only the executable to another machine over ssh (default `~/imcode-dev/imcode`), instead of a zip to download and open.
 
+`scripts/remote-check linux <user@host>` builds the inotify helper with the host's `cc` and checks it reports a new file (and runs the watcher test where there is a `g++`); `scripts/remote-check windows` starts the EC2 build machine (`IMCODE_WIN_INSTANCE`, `AWS_PROFILE`, `AWS_REGION`), compiles and runs the watcher test with `cl` over SSM, and stops it again.
+
 Releases on macOS go through imshell's `imshell_app`: `cmake --build build-release --target imcode-app` makes `ImCode.app` and `imcode-macos-arm64.zip` in the build folder, signed with `IMSHELL_SIGN_IDENTITY` and notarized with `IMSHELL_NOTARY_PROFILE` when they are in the environment (ad hoc otherwise). Configure the folder first; a feed and key turn auto-update on, and it stays off without them:
 
 ```sh

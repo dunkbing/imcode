@@ -1,0 +1,66 @@
+#!/bin/sh
+# the checks that need another OS, on a machine you name (nothing is installed there):
+#   scripts/remote-check linux <user@host>   the inotify helper (cc) and, with g++, the watcher test
+#   scripts/remote-check windows             the watcher test with cl on the build machine below
+# windows starts the EC2 build machine, schedules its shutdown, runs, and stops it again (also
+# when the check fails). it needs the aws cli with a profile that may use SSM:
+#   AWS_PROFILE=jack AWS_REGION=ap-southeast-1 IMCODE_WIN_INSTANCE=i-... scripts/remote-check windows
+# the machine's ssh/aws keys stay in your own config: nothing here holds a secret
+set -eu
+root=$(cd "$(dirname "$0")/.." && pwd)
+case ${1:-} in
+linux)
+    host=${2:?"scripts/remote-check linux <user@host>"}
+    work=imcode-check-$$
+    COPYFILE_DISABLE=1 tar --no-xattrs -C "$root" -cf - src/helper_linux.c src/watch.cpp src/watch.hpp tests/watch_test.cpp | ssh -C "$host" "mkdir -p $work && tar -C $work -xf -"
+    # the helper must report a file written under the folder it watches
+    ssh "$host" "set -e; cd $work
+        cc -w -O2 -o helper src/helper_linux.c
+        mkdir -p t; (sleep 1; echo x > t/new.txt) &
+        out=\$( (sleep 3; ) | timeout 5 ./helper watch \$PWD/t 2>&1 || true)
+        echo \"\$out\" | grep -q 'new.txt' && echo 'ok   helper reports a new file' || { echo \"FAIL helper: \$out\"; r=1; }
+        if command -v g++ > /dev/null; then
+            g++ -std=c++20 -Isrc -o watch_test tests/watch_test.cpp src/watch.cpp && ./watch_test || r=1
+        else echo 'skip watcher test (no g++)'; fi
+        cd ..; rm -rf $work; exit \${r:-0}"
+    ;;
+windows)
+    inst=${IMCODE_WIN_INSTANCE:?"set IMCODE_WIN_INSTANCE=<instance id>"}
+    aws_() { aws ${AWS_PROFILE:+--profile "$AWS_PROFILE"} ${AWS_REGION:+--region "$AWS_REGION"} "$@"; }
+    tmp=$(mktemp -d "${TMPDIR:-/tmp}/imcode-win.XXXXXX")
+    stop() { aws_ ec2 stop-instances --instance-ids "$inst" > /dev/null; rm -rf "$tmp"; echo "stopping $inst"; }
+    trap stop EXIT
+    aws_ ec2 start-instances --instance-ids "$inst" > /dev/null
+    aws_ ec2 wait instance-running --instance-ids "$inst"
+    # ssm needs its agent up: wait until the instance answers
+    for i in $(seq 1 40); do
+        [ "$(aws_ ssm describe-instance-information --filters Key=InstanceIds,Values="$inst" --query 'InstanceInformationList[0].PingStatus' --output text)" = Online ] && break
+        sleep 15
+    done
+    b64() { base64 < "$root/$1" | tr -d '\n'; }
+    {
+        printf '%s\n' '{"commands":['
+        printf '%s\n' '"shutdown /a 2>$null; shutdown /s /t 3600",'
+        printf '%s\n' '"$d=\"C:\\iw\"; Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue; New-Item -ItemType Directory $d\\src,$d\\tests | Out-Null",'
+        for f in src/watch.cpp src/watch.hpp tests/watch_test.cpp; do
+            w=$(printf '%s\n' "$f" | sed 's#/#\\\\#')
+            printf '%s\n' "\"[IO.File]::WriteAllBytes(\\\"C:\\\\iw\\\\$w\\\", [Convert]::FromBase64String('$(b64 "$f")'))\","
+        done
+        printf '%s\n' '"cmd /c \"call \\\"C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat\\\" && cd /d C:\\iw && cl /nologo /EHsc /std:c++20 /Isrc tests\\watch_test.cpp src\\watch.cpp /Fe:watch_test.exe && watch_test.exe\" 2>&1"'
+        printf '%s\n' ']}'
+    } > "$tmp/cmd.json"
+    id=$(aws_ ssm send-command --instance-ids "$inst" --document-name AWS-RunPowerShellScript --parameters "file://$tmp/cmd.json" --timeout-seconds 600 --query Command.CommandId --output text)
+    for i in $(seq 1 60); do
+        st=$(aws_ ssm get-command-invocation --command-id "$id" --instance-id "$inst" --query Status --output text 2> /dev/null || echo Pending)
+        case $st in Success | Failed | TimedOut | Cancelled) break ;; esac
+        sleep 10
+    done
+    # ssm keeps ~2500 characters: the end of the output is what says ok or FAILED
+    aws_ ssm get-command-invocation --command-id "$id" --instance-id "$inst" --query StandardOutputContent --output text | tail -8
+    [ "$st" = Success ]
+    ;;
+*)
+    sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac
