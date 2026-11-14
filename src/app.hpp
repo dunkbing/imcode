@@ -356,6 +356,8 @@ struct App : imshell::Delegate {
     void paletteDraw();
 
     void sidebar();
+    void sidebarButtons(); // project filter, add project, new thread: in the title bar
+    bool barButton(const char* icon, bool on, bool hideIcon = false); // a flat title-bar button
 
     // the composer's picker: the agent's commands after "/", the project's files after "@"
     struct Picker {

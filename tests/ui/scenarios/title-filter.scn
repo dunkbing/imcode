@@ -1,0 +1,5 @@
+# the project filter opens under its title-bar button
+DEV="new"
+FILES="a.txt"
+INPUT="10 click 128 19"
+FRAMES=40

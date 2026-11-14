@@ -1,0 +1,4 @@
+# the thread list's toggle and the filter, add project and new thread buttons in the title bar
+DEV="new"
+FILES="a.txt"
+FRAMES=30

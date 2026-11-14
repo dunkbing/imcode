@@ -1,0 +1,5 @@
+# the toggle hides the thread list: the three buttons stay, the thread takes the width
+DEV="new"
+FILES="a.txt"
+INPUT="10 click 93 19"
+FRAMES=40

@@ -1,0 +1,5 @@
+# a narrow window: the title bar keeps the buttons without overlapping the title or the panel buttons
+DEV="new"
+FILES="a.txt"
+WINDOW=560x700
+FRAMES=30

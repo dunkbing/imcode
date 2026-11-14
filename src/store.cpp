@@ -26,6 +26,7 @@ namespace Store {
         out.lastSession = root.value("last", "");
         out.filter = {root.value("filterHost", ""), root.value("filterCwd", "")};
         out.theme = root.value("theme", out.theme);
+        out.sidebarHidden = root.value("sidebarHidden", false);
         out.notifyAnswer = root.value("notifyAnswer", true);
         out.notifyFinished = root.value("notifyFinished", true);
         out.notifyOthers = root.value("notifyOthers", true);
@@ -93,6 +94,7 @@ namespace Store {
                                    {"filterHost", data.filter.host},
                                    {"filterCwd", data.filter.cwd},
                                    {"theme", data.theme},
+                                   {"sidebarHidden", data.sidebarHidden},
                                    {"notifyAnswer", data.notifyAnswer},
                                    {"notifyFinished", data.notifyFinished},
                                    {"notifyOthers", data.notifyOthers},

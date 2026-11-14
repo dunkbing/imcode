@@ -629,51 +629,55 @@ void App::frame() {
     } else {
         bar = imshell::BeginTitleBar();
     }
-    if (data.onboarded && narrow) {
-        if (imshell::IconButton(ICON_FA_BARS, imshell::ButtonVariant::Secondary, ImVec2(30, 22))) {
-            sidebarOpen = !sidebarOpen;
+    if (data.onboarded) {
+        // the thread list's toggle, then the filter, add project and new thread: they stay when the list is hidden
+        const bool listShown = narrow ? sidebarOpen : !data.sidebarHidden;
+        if (barButton(ICON_FA_TABLE_COLUMNS, listShown)) {
+            if (narrow) {
+                sidebarOpen = !sidebarOpen;
+            } else {
+                data.sidebarHidden = !data.sidebarHidden;
+                save();
+            }
         }
-        ImGui::SameLine();
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip(listShown ? "Hide sidebar" : "Show sidebar");
+        }
+        ImGui::SameLine(0, 6);
+        sidebarButtons();
+        ImGui::SameLine(0, 12);
     }
     ImGui::AlignTextToFramePadding();
     if (data.onboarded && current >= 0) {
         const Thread& t = *data.threads[current];
-        // the project: click to start a thread in another one
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
-        ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
-        if (ImGui::Button((std::filesystem::path(t.projectDir()).filename().string() + "  " ICON_FA_CHEVRON_DOWN "##project").c_str())) {
-            ImGui::OpenPopup("projects");
+        // the project and title go when the buttons around them leave no room
+        const bool titleFits = bar.pos.x + bar.size.x - bar.rightInset - 112 - 12 - ImGui::GetCursorScreenPos().x > 140;
+        if (titleFits) {
+            // the project: click to start a thread in another one
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
+            ImGui::PushStyleColor(ImGuiCol_Text, colors.subtext0);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+            if (ImGui::Button((std::filesystem::path(t.projectDir()).filename().string() + "  " ICON_FA_CHEVRON_DOWN "##project").c_str())) {
+                ImGui::OpenPopup("projects");
+            }
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(3);
+            projectPopup();
+            ImGui::SameLine();
+            ImGui::TextColored(colors.overlay0, "/");
+            ImGui::SameLine();
+            // as much of the title as fits before the buttons at the right
+            const float room = bar.pos.x + bar.size.x - bar.rightInset - 112 - 12 - ImGui::GetCursorScreenPos().x;
+            const size_t fits = static_cast<size_t>(std::max(0.0f, room / ImGui::CalcTextSize("0").x));
+            const std::string title = t.title.empty() ? "New thread" : t.title;
+            ImGui::TextUnformatted(title.size() > fits ? (cut(title, fits > 2 ? fits - 2 : 0) + "..").c_str()
+                                                       : title.c_str());
         }
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(3);
-        projectPopup();
-        ImGui::SameLine();
-        ImGui::TextColored(colors.overlay0, "/");
-        ImGui::SameLine();
-        // as much of the title as fits before the buttons at the right
-        const float room = bar.pos.x + bar.size.x - bar.rightInset - 112 - 12 - ImGui::GetCursorScreenPos().x;
-        const size_t fits = static_cast<size_t>(std::max(0.0f, room / ImGui::CalcTextSize("0").x));
-        const std::string title = t.title.empty() ? "New thread" : t.title;
-        ImGui::TextUnformatted(title.size() > fits ? (cut(title, fits > 2 ? fits - 2 : 0) + "..").c_str()
-                                                   : title.c_str());
         // at the right end, before the os's own buttons
         ImGui::SameLine();
         ImGui::SetCursorScreenPos(ImVec2(bar.pos.x + bar.size.x - bar.rightInset - 112,
                                          ImGui::GetCursorScreenPos().y));
-        // flat, with room around the icon; filled while its panel is open
-        auto barButton = [&](const char* icon, bool on) {
-            ImGui::PushStyleColor(ImGuiCol_Button, on ? colors.surface1 : ImVec4(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colors.surface0);
-            ImGui::PushStyleColor(ImGuiCol_Text, on ? colors.text : colors.subtext0);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Round::Row);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
-            const bool pressed = ImGui::Button(icon, ImVec2(30, 22));
-            ImGui::PopStyleVar(2);
-            ImGui::PopStyleColor(3);
-            return pressed;
-        };
         if (barButton(ICON_FA_TERMINAL, terminalOpen)) {
             toggleTerminal();
         }
@@ -793,6 +797,10 @@ void App::frame() {
                 threadArea();
                 ImGui::EndChild();
             }
+        } else if (data.sidebarHidden) {
+            ImGui::BeginChild("thread");
+            threadArea();
+            ImGui::EndChild();
         } else if (imshell::BeginResizable("layout", lines)) {
             if (imshell::ResizablePanel({.size = &sidebarWidth, .min = 200, .fixed = true,
                                          .childFlags = ImGuiChildFlags_Borders})) {

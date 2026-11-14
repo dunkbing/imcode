@@ -1,0 +1,5 @@
+# the narrowest a phone gets: nothing overlaps
+DEV="new"
+FILES="a.txt"
+WINDOW=390x700
+FRAMES=30
