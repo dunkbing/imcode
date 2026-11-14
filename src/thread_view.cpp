@@ -581,9 +581,26 @@ void App::composer(Thread& t, float width) {
         const auto tempDir = std::filesystem::temp_directory_path() / "imcode-pasted";
         // copied files as they are; a picture (a screenshot, a copied image) saved as a png
         std::vector<std::string> pasted;
-        for (const auto& item : imshell::Clipboard::Read()) {
+        const auto items = imshell::Clipboard::Read();
+        // a picture copied from an app can come with a file reference beside it (a temporary file, a link):
+        // the picture is what was copied. copied files never carry a picture without their path
+        const bool picture = std::ranges::any_of(items, [](const auto& item) { return item.has("image/png") && item.file().empty(); });
+        if (trace::enabled()) {
+            std::string seen;
+            for (const auto& item : items) {
+                seen += "[" + std::filesystem::path(item.file()).filename().string() + ":";
+                for (const auto& [type, bytes] : item.data) {
+                    seen += " " + type;
+                }
+                seen += "] ";
+            }
+            trace::event("paste.items", seen);
+        }
+        for (const auto& item : items) {
             if (const std::string file = item.file(); !file.empty()) {
-                pasted.push_back(file);
+                if (!picture) {
+                    pasted.push_back(file);
+                }
             } else if (item.has("image/png")) {
                 std::error_code made;
                 std::filesystem::create_directories(tempDir, made);
