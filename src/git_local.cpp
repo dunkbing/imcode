@@ -1,3 +1,4 @@
+#include "trace.hpp"
 // the git operations for a repository on this machine, through libgit2: no git command
 #include "git_local.hpp"
 
@@ -207,6 +208,7 @@ namespace Git::Local {
     } // namespace
 
     std::optional<Status> status(const std::string& cwd) {
+        trace::Span traced_("git.status", std::filesystem::path(cwd).filename().string(), 0);
         const Repo repo = open(cwd);
         if (!repo) {
             return std::nullopt;
@@ -268,6 +270,7 @@ namespace Git::Local {
     } // namespace
 
     std::optional<std::vector<Change>> changes(const std::string& cwd, const std::string& from, const std::string& to) {
+        trace::Span traced_("git.changes", std::filesystem::path(cwd).filename().string(), 0);
         const Repo repo = open(cwd);
         if (!repo) {
             return std::nullopt;
@@ -307,6 +310,7 @@ namespace Git::Local {
     } // namespace
 
     std::optional<std::string> fileDiff(const std::string& cwd, const Change& change, Side side) {
+        trace::Span traced_("git.file-diff", std::filesystem::path(cwd).filename().string(), 0);
         const Repo repo = open(cwd);
         if (!repo) {
             return std::nullopt;
@@ -425,6 +429,7 @@ namespace Git::Local {
     }
 
     std::optional<std::string> snapshot(const std::string& cwd) {
+        trace::Span traced_("git.snapshot", std::filesystem::path(cwd).filename().string(), 0);
         Repo repo = open(cwd);
         if (!repo || git_repository_is_bare(repo.get())) {
             return std::nullopt;
@@ -504,6 +509,7 @@ namespace Git::Local {
     }
 
     std::optional<CommitDetail> show(const std::string& cwd, const std::string& hash) {
+        trace::Span traced_("git.show", std::filesystem::path(cwd).filename().string(), 0);
         const Repo repo = open(cwd);
         if (!repo) {
             return std::nullopt;
@@ -538,6 +544,7 @@ namespace Git::Local {
     }
 
     std::optional<std::vector<LogEntry>> log(const std::string& cwd, size_t limit, size_t skip) {
+        trace::Span traced_("git.log", std::filesystem::path(cwd).filename().string(), 0);
         const Repo repo = open(cwd);
         if (!repo) {
             return std::nullopt;
@@ -615,6 +622,7 @@ namespace Git::Local {
     }
 
     std::optional<std::vector<std::string>> files(const std::string& cwd, size_t cap) {
+        trace::Span traced_("git.files", std::filesystem::path(cwd).filename().string(), 0);
         const Repo repo = open(cwd);
         if (!repo || git_repository_is_bare(repo.get())) {
             return std::nullopt;

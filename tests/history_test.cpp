@@ -80,6 +80,12 @@ int main() {
     entries = History::readFrom("claude-code", path, offset);
     ok = ok && entries.size() == 1 && entries[0].text == "Done." && History::quietFor(path) < 5 &&
          History::quietFor("") > 1000;
+    // a slash command is shown as typed; its output tag is left out
+    std::ofstream(live, std::ios::app)
+        << R"({"type":"user","message":{"role":"user","content":"<command-name>/exit</command-name>\n<command-message>exit</command-message>\n<command-args></command-args>"}})" << "\n"
+        << R"({"type":"user","message":{"role":"user","content":"<local-command-stdout>Goodbye!</local-command-stdout>"}})" << "\n";
+    entries = History::readFrom("claude-code", path, offset);
+    ok = ok && entries.size() == 1 && entries[0].kind == History::Entry::Kind::User && entries[0].text == "/exit";
     // codex: found by its session id in the file name; injected instructions left out
     fs::create_directories(home / ".codex/sessions/2026/11/11");
     const fs::path rollout = home / ".codex/sessions/2026/11/11/rollout-2026-11-11T10-00-00-cdx2.jsonl";

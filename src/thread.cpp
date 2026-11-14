@@ -4,6 +4,7 @@
 #include "acp_host/registry.hpp"
 #include "git.hpp"
 #include "history.hpp"
+#include "trace.hpp"
 #include "remote.hpp"
 #include "ssh.hpp"
 #include <algorithm>
@@ -124,6 +125,7 @@ bool Thread::ensureStarted() {
     if (acp_ && acp_->isRunning()) {
         return true;
     }
+    trace::Span ensure("thread.ensure-started", std::format("{} {}", agentId, cut(title, 24)));
     const AcpAgentDef* def = AcpAgents::find(agentId);
     // tests: IMCODE_AGENT_CMD=<binary> stands in for the picked agent (acp-echo-agent)
     const char* testCmd = std::getenv("IMCODE_AGENT_CMD");
@@ -143,7 +145,13 @@ bool Thread::ensureStarted() {
             error = def->name + " cannot be started on a remote machine yet.";
         }
     } else {
-        argv = testCmd ? std::vector<std::string>{testCmd} : AcpAgents::resolveInvocation(*def);
+        {
+            trace::Span resolved("agent.resolve", agentId, 0);
+            argv = testCmd ? std::vector<std::string>{testCmd} : AcpAgents::resolveInvocation(*def);
+            if (argv) {
+                resolved.note(argv->front());
+            }
+        }
         if (!argv && !def->npmPackage.empty() && !bunTried_ && !connectOp_.isRunning()) {
             // npm agents run on bun: none on this machine, so the app's own is fetched once
             bunTried_ = true;
@@ -183,6 +191,8 @@ bool Thread::ensureStarted() {
     }
     acp_ = std::make_unique<AcpClient>();
     acp_->setHistoryShown(keepHistory_); // the transcript is on screen: no replay wanted
+    traceStartedAt_ = trace::nowMs();
+    trace::Span launch("agent.launch", std::format("{} {} history-shown={}", agentId, sessionId.empty() ? "new" : "resume", keepHistory_));
     // the host is connected by now: opening the channel is one round trip
     const auto [ok, err] =
         host.empty() ? acp_->start(*argv, cwd, "", "", "", sessionId)
@@ -217,6 +227,7 @@ namespace {
 }
 
 void Thread::open() {
+    trace::Span opened("thread.open", std::format("{} session={} items={}", cut(title, 24), sessionId.substr(0, 8), items.size()), 0);
     // a saved thread on this machine is shown from its transcript at once, like the agent's own cli;
     // the agent starts when it is needed (a message, the model picker, a slash command). others (a
     // remote host, an agent without a readable transcript): the agent replays the history
@@ -236,6 +247,7 @@ bool Thread::writtenElsewhere() const {
 
 void Thread::leaveWatch() {
     if (watching_) {
+        trace::event("thread.leave-watch", std::format("{} items={}", cut(title, 24), items.size()));
         watching_ = false;
         keepHistory_ = true;
         ++revision_;
@@ -243,9 +255,11 @@ void Thread::leaveWatch() {
 }
 
 bool Thread::watch() {
+    trace::Span watched("thread.watch", cut(title, 24));
     // shortcut: this machine only; a remote cli's transcript would be read over sftp
     watchPath_ = host.empty() ? History::transcript(agentId, cwd, sessionId) : "";
     if (watchPath_.empty()) {
+        watched.note("no transcript found");
         return false;
     }
     items.clear();
@@ -259,14 +273,18 @@ bool Thread::watch() {
         watchOffset_ = size - tail;
         add({.kind = Item::Kind::Info, .text = "Earlier messages are not shown.", .loadEarlier = true});
     }
+    watched.note(std::format("file={} size={} start-at={} read-limit={}", std::filesystem::path(watchPath_).filename().string(), ec ? 0 : size,
+                             watchOffset_, tail));
     watchCheckMs_ = 0;
     watching_ = true;
     live_ = writtenElsewhere();
+    watched.note(std::format("live-elsewhere={}", live_));
     ++revision_;
     return true;
 }
 
 void Thread::release() {
+    trace::event("thread.release", std::format("{} watching={} agent={}", cut(title, 24), watching_, acp_ != nullptr));
     if (watching_) {
         watching_ = false;
         items.clear();
@@ -342,6 +360,9 @@ void Thread::send(const std::string& text, const std::vector<std::string>& files
         title = text.empty() ? "Attachment" : text.substr(0, text.find('\n'));
     }
     errored = false;
+    trace::event("send", std::format("chars={} files={} agent={} starting={} busy={}", text.size(), files.size(),
+                                      acp_ ? "up" : "none", starting(), busy()));
+    traceSentAt_ = trace::nowMs();
     updatedAt = ownWriteAt = std::time(nullptr);
     changed_ = true;
     if (!ensureStarted()) {
@@ -587,13 +608,23 @@ void Thread::follow() {
     if (watching_ && (nowMs() - watchCheckMs_ > 500 || catchingUp_)) {
         watchCheckMs_ = nowMs();
         const size_t before = watchOffset_;
+        trace::Span read("thread.read-transcript", std::filesystem::path(watchPath_).filename().string(), 2);
+        size_t entries = 0;
         for (auto& e : History::readFrom(agentId, watchPath_, watchOffset_)) {
+            ++entries;
             add({.kind = e.kind == History::Entry::Kind::User        ? Item::Kind::User
                          : e.kind == History::Entry::Kind::Assistant ? Item::Kind::Assistant
                                                                      : Item::Kind::Tool,
                  .text = e.kind == History::Entry::Kind::Tool ? "" : e.text,
                  .toolTitle = e.kind == History::Entry::Kind::Tool ? e.text : "",
                  .toolStatus = "completed"});
+        }
+        read.note(std::format("entries={} bytes={}", entries, watchOffset_ - before));
+        if (items.empty() && !std::exchange(emptyNoted_, true)) {
+            add({.kind = Item::Kind::Info, .text = "Nothing to show from the saved history of this conversation. Send a message to continue it."});
+        }
+        if (entries > 0) {
+            read.force();
         }
         const bool live = writtenElsewhere();
         catchingUp_ = watchOffset_ - before >= History::maxRead / 2; // more waiting: read again next poll
@@ -687,6 +718,39 @@ void Thread::poll() {
              ev.type == AcpEvent::Type::ThoughtDelta || ev.type == AcpEvent::Type::ToolCall ||
              ev.type == AcpEvent::Type::ToolCallUpdate || ev.type == AcpEvent::Type::Plan)) {
             continue; // the history is on screen already, from the transcript
+        }
+        if (trace::enabled()) {
+            const double now = trace::nowMs();
+            switch (ev.type) {
+            case AcpEvent::Type::SessionReady:
+                trace::event("agent.session-ready", std::format("{:.0f} ms after launch, items={}", now - traceStartedAt_, items.size()));
+                break;
+            case AcpEvent::Type::MessageDelta:
+            case AcpEvent::Type::ThoughtDelta:
+            case AcpEvent::Type::ToolCall:
+                if (traceSentAt_ > 0) {
+                    trace::event("turn.first-output", std::format("{:.0f} ms after send", now - traceSentAt_));
+                    traceSentAt_ = 0;
+                }
+                break;
+            case AcpEvent::Type::TurnEnded:
+                trace::event("turn.ended", std::format("{} items={}", ev.text, items.size()));
+                break;
+            case AcpEvent::Type::Error:
+                trace::event("agent.error", cut(ev.text, 200));
+                break;
+            case AcpEvent::Type::Exited:
+                trace::event("agent.exited", cut(ev.text, 200));
+                break;
+            case AcpEvent::Type::ResumeFailed:
+                trace::event("agent.resume-failed", cut(ev.text, 200));
+                break;
+            case AcpEvent::Type::Permission:
+                trace::event("agent.permission", ev.permission.title);
+                break;
+            default:
+                break;
+            }
         }
         switch (ev.type) {
         case AcpEvent::Type::SessionReady:

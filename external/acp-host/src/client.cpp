@@ -11,6 +11,9 @@
 #include <utility>
 
 namespace {
+    double msSince(std::chrono::steady_clock::time_point since) {
+        return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - since).count();
+    }
     // passes lines through and reports each one: the log view of what crossed the wire
     class TracedTransport : public acp::Transport {
     public:
@@ -55,6 +58,7 @@ AcpClient::start(const std::vector<std::string>& argv, const std::string& cwd,
     if (conn_ && conn_->isRunning()) {
         return {true, ""};
     }
+    launchedAt_ = std::chrono::steady_clock::now();
     cwd_ = cwd;
     mcpUrl_ = mcpUrl;
     mcpName_ = mcpName;
@@ -68,9 +72,11 @@ AcpClient::start(const std::vector<std::string>& argv, const std::string& cwd,
     }
     // GUI apps on macOS get a minimal PATH; use the login shell's so agents
     // installed via npm/homebrew are found
+    AcpHost::logf(acp::LogLevel::Info, "ACP: launching {} (argv {})", argv.empty() ? "(remote)" : argv.front(), argv.size());
     if (const std::string& path = AcpAgents::loginShellPath(); !path.empty()) {
         opts.env.emplace_back("PATH", path);
     }
+    AcpHost::logf(acp::LogLevel::Info, "ACP: login shell path ready {:.0f} ms after launch", msSince(launchedAt_));
     // claude refuses to start when it thinks it is nested in another session;
     // inherited when the host app itself was launched from one
     opts.dropEnv = {"CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT",
@@ -114,6 +120,7 @@ AcpClient::start(const std::vector<std::string>& argv, const std::string& cwd,
         }
         conn_ = std::make_unique<acp::Connection>(*this, traced(std::move(process)));
     }
+    AcpHost::logf(acp::LogLevel::Info, "ACP: transport up {:.0f} ms after launch, sending initialize", msSince(launchedAt_));
     // no fs and no terminal (acp v2 drops both). terminal sign-in
     // yes: claude offers no method without it (the panel opens the system terminal)
     acp::ClientCapabilities caps;
@@ -129,6 +136,7 @@ std::pair<bool, std::string> AcpClient::startOver(OpenTransport open, const std:
 }
 
 void AcpClient::onInitialized(const acp::Response& r) {
+    AcpHost::logf(acp::LogLevel::Info, "ACP: initialize answered {:.0f} ms after launch (ok={})", msSince(launchedAt_), r.ok());
     initialized_ = true;
     if (!r.ok()) {
         pushEvent({.type = AcpEvent::Type::Error, .text = r.error->describe()});
@@ -165,6 +173,7 @@ void AcpClient::retrySession() {
 }
 
 void AcpClient::openSession() {
+    sessionAskedAt_ = std::chrono::steady_clock::now();
     sessionRequested_ = true;
     if (!resumeSessionId_.empty() && historyShown_ && resumeSession_) {
         acp::ResumeSessionRequest req;
@@ -311,6 +320,8 @@ void AcpClient::tick() {
 }
 
 void AcpClient::onSessionOpened(const std::string& method, const acp::Response& r) {
+    AcpHost::logf(acp::LogLevel::Info, "ACP: {} answered in {:.0f} ms ({:.0f} ms after launch, ok={})", method,
+                  msSince(sessionAskedAt_), msSince(launchedAt_), r.ok());
     if (!r.ok()) {
         if (isAuthError(*r.error) && !authMethods_.empty()) {
             handleAuthError(*r.error);

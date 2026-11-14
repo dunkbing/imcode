@@ -183,6 +183,8 @@ private:
     size_t tailBytes_ = 512 * 1024; // how much of the end of a transcript is read at first; "load earlier" grows it
     bool earlierWanted_ = false;
     bool keepHistory_ = false; // the transcript is on screen: the agent's replay of it is dropped
+    double traceStartedAt_ = 0, traceSentAt_ = 0; // trace.hpp: when the agent was launched, when the turn began
+    bool emptyNoted_ = false; // the "nothing to show" line was added
     [[nodiscard]] bool writtenElsewhere() const; // the transcript was written lately, and not by this app
     void leaveWatch();                           // carry on here: the agent starts, the transcript stays
 public:

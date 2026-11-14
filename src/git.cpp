@@ -1,4 +1,6 @@
 #include "git.hpp"
+#include "trace.hpp"
+#include "text.hpp"
 #include "home.hpp"
 
 #include "acp_host/agents.hpp"
@@ -41,6 +43,7 @@ namespace Git {
     }
 
     Status status(const std::string& host, const std::string& cwd) {
+        trace::Span traced_("git.status", host + " " + cwd, 0);
         if (host.empty()) {
             return Local::status(cwd).value_or(Status{});
         }
@@ -126,6 +129,7 @@ namespace Git {
 
         // a shell script on this machine or on the host, its output (both streams)
         std::string run(const std::string& host, const std::string& script, std::chrono::seconds timeout = std::chrono::seconds(60)) {
+        trace::Span traced_("git.run", host + " " + cut(script, 70), 0);
             if (host.empty()) {
                 return ProcessRunner::run({.args = {localShell(), "-c", script},
                                            .environment = {{"PATH", AcpAgents::loginShellPath()}},
@@ -244,6 +248,7 @@ namespace Git {
 
     std::vector<Change> changes(const std::string& host, const std::string& cwd, const std::string& from,
                                 const std::string& to) {
+        trace::Span traced_("git.changes", host + " " + cwd, 0);
         if (host.empty()) {
             return Local::changes(cwd, from, to).value_or(std::vector<Change>{});
         }
@@ -307,6 +312,7 @@ namespace Git {
 
     std::vector<LogEntry> log(const std::string& host, const std::string& cwd, size_t limit, size_t skip,
                               const std::string& path) {
+        trace::Span traced_("git.log", host + " " + cwd, 0);
         if (!path.empty()) {
             return parseLog(run(host, "cd " + quote(cwd) + " && git log --follow --skip=" + std::to_string(skip) + " -n " +
                                           std::to_string(limit) + " --format='%H%x1f%P%x1f%an%x1f%at%x1f%D%x1f%s%x1e' -- " +
@@ -358,6 +364,7 @@ namespace Git {
     }
 
     CommitDetail show(const std::string& host, const std::string& cwd, const std::string& hash) {
+        trace::Span traced_("git.show", host + " " + cwd, 0);
         CommitDetail out;
         if (host.empty()) {
             out = Local::show(cwd, hash).value_or(CommitDetail{});
@@ -374,6 +381,7 @@ namespace Git {
     }
 
     std::string snapshot(const std::string& host, const std::string& cwd) {
+        trace::Span traced_("git.snapshot", host + " " + cwd, 0);
         if (host.empty()) {
             return Local::snapshot(cwd).value_or("");
         }
@@ -403,6 +411,7 @@ namespace Git {
     }
 
     std::vector<Diff::Line> fileDiff(const std::string& host, const std::string& cwd, const Change& change, Side side) {
+        trace::Span traced_("git.file-diff", host + " " + cwd, 0);
         if (host.empty()) {
             return parseDiff(Local::fileDiff(cwd, change, side).value_or(""));
         }
@@ -599,6 +608,7 @@ namespace Git {
 
     std::string addWorktree(const std::string& host, const std::string& repo, const std::string& name,
                             std::string& error) {
+        trace::Span traced_("git.add-worktree", host + " " + repo, 0);
         const std::string repoName = repo.substr(repo.find_last_of('/') + 1);
         if (host.empty()) {
             const char* home = homeEnv();

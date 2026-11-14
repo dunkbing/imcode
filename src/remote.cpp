@@ -1,3 +1,4 @@
+#include "trace.hpp"
 #include "remote.hpp"
 
 #include "acp_host/registry.hpp"
@@ -55,6 +56,7 @@ namespace Remote {
     }
 
     std::string agentCommand(const AcpAgentDef& def, const std::string& dir) {
+        trace::Span traced_("remote.agent-command", def.id + " " + dir, 0);
         std::string args;
         for (const auto& arg : def.runArgs) {
             args += " " + quote(arg);

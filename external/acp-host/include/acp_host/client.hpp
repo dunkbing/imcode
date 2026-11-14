@@ -3,6 +3,7 @@
 #include "acp_host/host.hpp"
 #include <acp/connection.hpp>
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -205,6 +206,7 @@ private:
     std::string preferredAuth_; // method id remembered from the last successful sign-in
     std::atomic<bool> loadSession_{false};
     std::atomic<bool> resumeSession_{false}; // the agent can reopen a session without replaying it
+    std::chrono::steady_clock::time_point launchedAt_{}, sessionAskedAt_{}; // for the timing log
     std::atomic<bool> historyShown_{false};  // the host already shows the conversation: no replay wanted
     std::atomic<bool> listSessions_{false};
     std::atomic<bool> sessionReady_{false};

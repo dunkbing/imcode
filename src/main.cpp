@@ -1,5 +1,6 @@
 #include "app.hpp"
 #include "text.hpp"
+#include "trace.hpp"
 
 #include "code_colors.hpp"
 #include "imshell/markdown.hpp"
@@ -139,6 +140,11 @@ void App::setup() {
     const char* dataDir = std::getenv("IMCODE_DATA_DIR");
     const std::filesystem::path dir = dataDir ? dataDir : imshell::DataDir("imcode");
     AcpRegistry::setInstallRoot(dir / "agents");
+    trace::open(dir);
+    trace::event("start", std::format("data={}", dir.string()));
+    acp::setLogger([](acp::LogLevel level, const std::string& message) {
+        trace::event(level >= acp::LogLevel::Warn ? "acp-warn" : "acp", message.substr(0, 300));
+    });
     dataFile = dir / "threads.json";
     data = Store::load(dataFile);
     sidebarWidth = data.sidebarWidth;
@@ -354,6 +360,11 @@ void App::dropDraft() {
 }
 
 void App::select(int index) {
+    if (index >= 0 && index < static_cast<int>(data.threads.size())) {
+        const Thread& to = *data.threads[index];
+        trace::event("select-thread", std::format("#{} agent={} items={} agent-running={} host={}", index, to.agentId,
+                                                   to.items.size(), to.hasAgent(), to.host.empty() ? "local" : to.host));
+    }
     if (index != current && current >= 0 && current < static_cast<int>(data.threads.size())) {
         data.threads[current]->leftAt = ++leaveCount_;
         // the last few idle agents stay running: opening one again is instant, not a new process
@@ -411,6 +422,7 @@ int App::addProject(const std::string& host, const std::string& cwd) {
 }
 
 void App::newThread(int projectIndex, std::string agentId) {
+    trace::event("new-thread", std::format("project={} agent={}", projectIndex, agentId));
     if (projectIndex < 0 || projectIndex >= static_cast<int>(data.projects.size())) {
         paletteOpen(); // a thread needs a folder first
         return;
@@ -460,7 +472,10 @@ void App::hostLoop() {
         const bool watched = nowMs() - lastFrameMs < 1500;
         std::map<const Thread*, Seen> now;
         for (auto& t : data.threads) {
-            t->poll(); // every thread, shown or not
+            {
+                trace::Span polled("poll", cut(t->title, 24), 5);
+                t->poll(); // every thread, shown or not
+            }
             changed |= t->takeChanged();
             for (auto& [id, value] : std::exchange(t->picked, {})) {
                 data.defaults[t->agentId][id] = value;
@@ -565,7 +580,12 @@ void App::stopHost() {
 }
 
 void App::frame() {
+    trace::Span frameSpan("slow-frame", "", 30);
+    const double lockFrom = trace::nowMs();
     std::lock_guard lock(hostMutex);
+    if (const double waited = trace::nowMs() - lockFrom; waited > 8) {
+        trace::event("ui-waited-for-host", std::format("{:.1f} ms", waited));
+    }
     lastFrameMs = nowMs();
     for (int i = 0; !pressedSession.empty() && i < static_cast<int>(data.threads.size()); ++i) {
         if (data.threads[i]->sessionId == pressedSession) {
@@ -774,9 +794,11 @@ void App::frame() {
         } else if (imshell::BeginResizable("layout", lines)) {
             if (imshell::ResizablePanel({.size = &sidebarWidth, .min = 200, .fixed = true,
                                          .childFlags = ImGuiChildFlags_Borders})) {
+                trace::Span s("ui.sidebar", "", 8);
                 sidebar();
             }
             if (imshell::ResizablePanel({.min = files.open ? 781.0f : 420.0f})) {
+                trace::Span s("ui.thread-area", "", 8);
                 threadArea();
             }
             resized |= imshell::EndResizable();
@@ -787,6 +809,11 @@ void App::frame() {
     }
     // cmd/ctrl+shift+p: quick actions
     const ImGuiIO& io = ImGui::GetIO();
+    if (trace::enabled() && (ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right))) {
+        const ImGuiWindow* over = ImGui::GetCurrentContext()->HoveredWindow;
+        trace::event(ImGui::IsMouseClicked(ImGuiMouseButton_Left) ? "click" : "right-click",
+                     std::format("{:.0f},{:.0f} in {}", io.MousePos.x, io.MousePos.y, over ? over->Name : "-"));
+    }
     if (data.onboarded && (io.KeySuper || io.KeyCtrl) && io.KeyShift &&
         ImGui::IsKeyPressed(ImGuiKey_P, false)) {
         paletteOpen(true);

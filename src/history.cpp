@@ -1,4 +1,5 @@
 #include "history.hpp"
+#include "trace.hpp"
 #include "home.hpp"
 #include "ssh.hpp"
 #include "text.hpp"
@@ -83,6 +84,7 @@ namespace History {
     } // namespace
 
     std::string transcript(const std::string& agentId, const std::string& cwd, const std::string& sessionId) {
+        trace::Span traced_("history.transcript-lookup", agentId + " " + sessionId.substr(0, 8), 0);
         const char* home = homeEnv();
         const fs::path base = home ? home : "";
         std::error_code ec;
@@ -118,6 +120,7 @@ namespace History {
     }
 
     std::vector<Entry> readFrom(const std::string& agentId, const std::string& path, size_t& offset) {
+        trace::Span traced_("history.read-from", std::filesystem::path(path).filename().string() + " offset=" + std::to_string(offset), 1);
         std::vector<Entry> out;
         // at most a few megabytes a call, read in one go: a long conversation (screenshots in
         // it) runs to a hundred megabytes and is taken a piece at a time
@@ -139,6 +142,25 @@ namespace History {
             return out;
         }
         offset += end + 1;
+        // a slash command the user ran is stored as tags: shown the way it was typed
+        const auto command = [](const std::string& text) -> std::string {
+            constexpr std::string_view name = "<command-name>", nameEnd = "</command-name>", args = "<command-args>",
+                                       argsEnd = "</command-args>";
+            if (!text.starts_with(name)) {
+                return {};
+            }
+            const size_t close = text.find(nameEnd);
+            if (close == std::string::npos) {
+                return {};
+            }
+            std::string shownText = text.substr(name.size(), close - name.size());
+            const size_t from = text.find(args);
+            const size_t to = text.find(argsEnd);
+            if (from != std::string::npos && to != std::string::npos && to > from + args.size()) {
+                shownText += " " + text.substr(from + args.size(), to - from - args.size());
+            }
+            return shownText;
+        };
         const auto shown = [](const std::string& text) { // injected context starts with a tag or a heading
             return !text.empty() && text.front() != '<' && !text.starts_with("# AGENTS.md");
         };
@@ -178,8 +200,13 @@ namespace History {
                        !row.value("isMeta", false) && row.contains("message")) {
                 const json content = row["message"].value("content", json());
                 if (content.is_string()) {
-                    if (type == "user" && shown(content.get<std::string>())) {
-                        out.push_back({Entry::Kind::User, content.get<std::string>()});
+                    const std::string text = content.get<std::string>();
+                    if (type == "user") {
+                        if (const std::string typed = command(text); !typed.empty()) {
+                            out.push_back({Entry::Kind::User, typed});
+                        } else if (shown(text)) {
+                            out.push_back({Entry::Kind::User, text});
+                        }
                     }
                     continue;
                 }
@@ -211,6 +238,7 @@ namespace History {
     }
 
     std::vector<Found> scan(int perFolder) {
+        trace::Span traced_("history.scan-local", "", 0);
         const char* home = homeEnv();
         const fs::path base = home ? home : "";
         std::error_code ec;
@@ -316,6 +344,7 @@ namespace History {
     }
 
     std::vector<Found> scanRemote(const std::string& host, int perFolder) {
+        trace::Span traced_("history.scan-remote", host, 0);
         // the newest session files, each with its first lines (long lines cut: a picture in one)
         const std::string list =
             "ls -t \"$HOME\"/.claude/projects/*/*.jsonl \"$HOME\"/.codex/sessions/*/*/*/rollout-*.jsonl 2>/dev/null"

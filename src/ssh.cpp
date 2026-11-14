@@ -1,3 +1,4 @@
+#include "trace.hpp"
 #include "ssh.hpp"
 #include "home.hpp"
 
@@ -801,6 +802,7 @@ namespace Ssh {
 
     std::shared_ptr<Session> session(const std::string& host, const std::string& secret,
                                      Error& error) {
+        trace::Span traced_("ssh.session", host, 5);
         std::string useSecret = secret;
         bool fromKeychain = false;
         {
