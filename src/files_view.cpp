@@ -1,5 +1,6 @@
 #include "app.hpp"
 #include "git_local.hpp"
+#include "home.hpp"
 #include "imshell/resizable.hpp"
 
 #include "imshell/image.hpp"
@@ -28,6 +29,41 @@ namespace {
 
     std::string under(const std::string& cwd, const std::string& path) {
         return path.empty() ? cwd : cwd + "/" + path;
+    }
+
+    // a file on a host saved in ~/Downloads under a free name; what to tell the user
+    // shortcut: read whole into memory (capped), no progress; stream it in chunks for big files
+    std::string download(const std::string& host, const std::string& full, const std::string& name) {
+        constexpr size_t cap = 512u << 20;
+        const char* home = homeEnv();
+        if (!home) {
+            return "Could not find the Downloads folder.";
+        }
+        Ssh::Error failed;
+        const auto session = Ssh::session(host, "", failed);
+        if (!session) {
+            return failed.message;
+        }
+        std::string error;
+        const std::string bytes = session->read(full, cap, error);
+        if (!error.empty()) {
+            return error;
+        }
+        if (bytes.size() >= cap) {
+            return name + " is over 512 MB: not downloaded.";
+        }
+        const fs::path dir = fs::path(home) / "Downloads";
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+        const fs::path base(name);
+        fs::path target = dir / base;
+        for (int n = 1; fs::exists(target, ec); ++n) {
+            target = dir / (base.stem().string() + std::format(" ({})", n) + base.extension().string());
+        }
+        if (!(std::ofstream(target, std::ios::binary) << bytes)) {
+            return "Could not write " + target.string();
+        }
+        return "Saved to ~/Downloads/" + target.filename().string();
     }
 
     // what is in a folder, here or over sftp: folders first, then by name
@@ -210,6 +246,14 @@ namespace {
                     if (ImGui::MenuItem(ICON_FA_CLOCK_ROTATE_LEFT "  History of this file")) {
                         f.historyOf = path;
                     }
+                    // a file on a host: a copy in ~/Downloads
+                    if (!f.host.empty() && ImGui::MenuItem(ICON_FA_DOWNLOAD "  Download", nullptr, false, !f.downloadOp.isRunning())) {
+                        f.downloading = entry.name;
+                        f.downloadNote.clear();
+                        f.downloadOp.start([host = f.host, full = under(f.cwd, path), name = entry.name] {
+                            return download(host, full, name);
+                        });
+                    }
                     ImGui::EndPopup();
                 }
                 continue;
@@ -305,6 +349,11 @@ void App::filesPoll() {
             f.index = std::move(got);
             f.indexed = true;
         }
+    });
+    f.downloadOp.check([&](std::string note) {
+        f.downloadNote = std::move(note);
+        f.downloading.clear();
+        f.downloadedAt = ImGui::GetTime();
     });
     f.readOp.check([&](Files::Doc got) {
         if (got.epoch == f.epoch) {
@@ -449,6 +498,14 @@ bool App::filesPanel(Thread& t, bool beside) {
         ImGui::SetNextItemWidth(-FLT_MIN);
         ImGui::InputTextWithHint("##filter", ICON_FA_MAGNIFYING_GLASS "  Search files", f.filter,
                                  sizeof(f.filter));
+        // a download in flight, then what came of it for a few seconds
+        if (!f.downloading.empty() || (!f.downloadNote.empty() && ImGui::GetTime() - f.downloadedAt < 8)) {
+            ImGui::Spacing();
+            ImGui::PushTextWrapPos();
+            ImGui::TextColored(colors.overlay1, "%s", f.downloading.empty() ? f.downloadNote.c_str() : ("Downloading " + f.downloading + "...").c_str());
+            ImGui::PopTextWrapPos();
+            imshell::requestFrames();
+        }
         ImGui::Spacing();
         ImGui::BeginChild("rows");
         if (f.filter[0]) {

@@ -189,6 +189,9 @@ struct App : imshell::Delegate {
         int tab = 0;           // the right panel shows: 0 the files, 1 the changes
         AcpHost::AsyncOp<Listing> listOp, indexOp;
         AcpHost::AsyncOp<Doc> readOp;
+        AcpHost::AsyncOp<std::string> downloadOp; // a remote file saved to Downloads: what to say about it
+        std::string downloading, downloadNote;   // the file in flight; the last result
+        double downloadedAt = 0;
     } files;
 
     // what is on this machine, looked up off the ui thread (the login shell is slow)
