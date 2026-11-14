@@ -25,6 +25,7 @@ namespace fs = std::filesystem;
 using Files = App::Files;
 
 namespace {
+    constexpr bool kFileSearch = false; // the "Search files" box above the tree: off for now, the filter code stays
     constexpr size_t textBytes = 1 << 20;
     constexpr int maxLineBytes = 2000;
     constexpr size_t maxIndexed = 20000;
@@ -568,10 +569,12 @@ bool App::filesPanel(Thread& t, bool beside) {
     };
     const auto treeView = [&] {
         f.overTree = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::InputTextWithHint("##filter", ICON_FA_MAGNIFYING_GLASS "  Search files", f.filter,
-                                 sizeof(f.filter));
-        ImGui::Spacing();
+        f.hoverDir.clear(); // over empty space a drop goes to the project folder
+        if constexpr (kFileSearch) {
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputTextWithHint("##filter", ICON_FA_MAGNIFYING_GLASS "  Search files", f.filter, sizeof(f.filter));
+            ImGui::Spacing();
+        }
         ImGui::BeginChild("rows");
         if (f.filter[0]) {
             matches(f, opened);

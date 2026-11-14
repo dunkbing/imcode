@@ -988,6 +988,15 @@ void App::frame() {
         updateTold = true;
         ui::Toast(("ImCode " + imshell::updater::LatestVersion() + " is available: Settings to update").c_str(), ui::Tone::Info, 8);
     }
+    if (ImGui::IsKeyPressed(ImGuiKey_Enter, false)) {
+        // where every Enter went, sent or not: the window that has the key, and what could be eating it
+        const ImGuiContext& g = *ImGui::GetCurrentContext();
+        trace::event("key.enter", std::format("active={} nav={} wantText={} popup={} ime={} ctrl={} shift={} alt={} super={}",
+                                              g.ActiveIdWindow ? g.ActiveIdWindow->Name : "-", g.NavWindow ? g.NavWindow->Name : "-",
+                                              ImGui::GetIO().WantTextInput, ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId),
+                                              g.PlatformImeData.WantVisible, ImGui::GetIO().KeyCtrl, ImGui::GetIO().KeyShift,
+                                              ImGui::GetIO().KeyAlt, ImGui::GetIO().KeySuper));
+    }
     transferCard();
     ui::RenderToasts();
     imshell::Alert::render(); // last: over everything
