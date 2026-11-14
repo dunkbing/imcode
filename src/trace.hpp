@@ -20,6 +20,7 @@ namespace trace {
         inline std::mutex mu;
         inline std::FILE* file = nullptr;
         inline std::filesystem::path path; // trace.log
+        inline std::string header;         // the env lines: written again in front of a cut copy
         inline const auto start = std::chrono::steady_clock::now();
         inline std::atomic<int> nextThread{0};
 
@@ -60,10 +61,12 @@ namespace trace {
         in.seekg(static_cast<std::streamoff>(from));
         std::string text(size - from, '\0');
         in.read(text.data(), static_cast<std::streamsize>(text.size()));
-        if (from > 0) { // began mid-line: drop that part
+        if (from > 0) { // began mid-line: drop that part, and say what it came from
             if (const size_t nl = text.find('\n'); nl != std::string::npos) {
                 text.erase(0, nl + 1);
             }
+            std::lock_guard lock(detail::mu);
+            text = detail::header + "(the log was cut: its first lines are left out)\n" + text;
         }
         return text;
     }
@@ -85,6 +88,17 @@ namespace trace {
             return;
         }
         line(detail.empty() ? std::string(name) : std::format("{}  {}", name, detail));
+    }
+
+    // what this run is on, as key=value fields: kept, and put in front of a copy of the log that
+    // starts later than the log did, so a pasted trace says what it came from
+    inline void env(std::string_view fields) {
+        if (!detail::file) {
+            return;
+        }
+        line(std::format("env  {}", fields));
+        std::lock_guard lock(detail::mu);
+        detail::header += std::format("env  {}\n", fields);
     }
 
     // a timed step: logs its duration when it ends (only if it took at least minMs)

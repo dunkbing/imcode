@@ -110,6 +110,18 @@ set(IMCODE_VERSION ${PROJECT_VERSION} CACHE STRING "the version")
 # the commit it was built from, shown in settings
 execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
                 OUTPUT_VARIABLE IMCODE_COMMIT OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+# what the trace log says about the build: changes to tracked files, the toolkit pin
+execute_process(COMMAND git status --porcelain --untracked-files=no WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                OUTPUT_VARIABLE IMCODE_STATUS ERROR_QUIET)
+if(IMCODE_STATUS STREQUAL "")
+    set(IMCODE_DIRTY "no")
+else()
+    set(IMCODE_DIRTY "yes")
+endif()
+execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/external/imshell
+                OUTPUT_VARIABLE IMCODE_IMSHELL_COMMIT OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+target_compile_definitions(imcode PRIVATE IMCODE_DIRTY="${IMCODE_DIRTY}" IMCODE_IMSHELL_COMMIT="${IMCODE_IMSHELL_COMMIT}"
+    IMCODE_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
 target_compile_definitions(imcode PRIVATE IMCODE_VERSION="${IMCODE_VERSION}" IMCODE_COMMIT="${IMCODE_COMMIT}"
     IMCODE_APPCAST_URL="${IMCODE_APPCAST_URL}" IMCODE_UPDATE_KEY="${IMCODE_UPDATE_KEY}" IMCODE_MANIFEST_URL="${IMCODE_MANIFEST_URL}")
 if(IMCODE_UPDATER)
@@ -125,6 +137,9 @@ if(IMCODE_BUILD_TESTS)
     enable_testing()
     add_executable(imcode-diff-test tests/diff_test.cpp src/diff.cpp)
     add_test(NAME imcode-diff COMMAND imcode-diff-test)
+    add_executable(imcode-trace-test tests/trace_test.cpp)
+    target_compile_features(imcode-trace-test PRIVATE cxx_std_20)
+    add_test(NAME imcode-trace COMMAND imcode-trace-test)
     if(APPLE)
         add_executable(imcode-keychain-test tests/keychain_test.cpp src/keychain.cpp)
         target_link_libraries(imcode-keychain-test PRIVATE "-framework Security" "-framework CoreFoundation")

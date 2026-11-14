@@ -35,6 +35,49 @@
 using Theme = imshell::Theme;
 namespace ui = imshell::ui;
 
+
+#if defined(__APPLE__) || defined(__linux__)
+#include <sys/utsname.h>
+#include <unistd.h>
+#endif
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#endif
+
+// what this run is on, for the head of the trace log: names and numbers only, no secrets
+static void traceEnvironment(const std::filesystem::path& dataDir) {
+    trace::env(std::format("app=ImCode version={} commit={} dirty={} build={} imshell={} imgui={}", IMCODE_VERSION, IMCODE_COMMIT,
+                           IMCODE_DIRTY, IMCODE_BUILD_TYPE, IMCODE_IMSHELL_COMMIT, IMGUI_VERSION));
+    std::string os = "unknown", arch = "unknown", model, host, user;
+#if defined(__APPLE__) || defined(__linux__)
+    utsname name{};
+    if (uname(&name) == 0) {
+        os = std::format("{} {}", name.sysname, name.release);
+        arch = name.machine;
+    }
+    char hostName[256] = {};
+    if (gethostname(hostName, sizeof hostName - 1) == 0) {
+        host = hostName;
+    }
+#endif
+#ifdef __APPLE__
+    char text[128] = {};
+    size_t size = sizeof text;
+    if (sysctlbyname("kern.osproductversion", text, &size, nullptr, 0) == 0) {
+        os = std::format("macOS {} ({})", text, os);
+    }
+    size = sizeof text;
+    if (sysctlbyname("hw.model", text, &size, nullptr, 0) == 0) {
+        model = text;
+    }
+#endif
+    if (const char* name = std::getenv("USER")) {
+        user = name;
+    }
+    trace::env(std::format("os={} arch={} model={} host={} user={}", os, arch, model.empty() ? "-" : model, host.empty() ? "-" : host,
+                           user.empty() ? "-" : user));
+    trace::env(std::format("data={}", dataDir.string()));
+}
 constexpr float barHeight = 40; // taller than the os default: air above and below its row
 
 int runHeadless(App& app, const char* out, int width, int height, int frames); // headless.cpp
@@ -142,6 +185,7 @@ void App::setup() {
     AcpRegistry::setInstallRoot(dir / "agents");
     trace::open(dir);
     trace::event("start", std::format("data={}", dir.string()));
+    traceEnvironment(dir);
     acp::setLogger([](acp::LogLevel level, const std::string& message) {
         trace::event(level >= acp::LogLevel::Warn ? "acp-warn" : "acp", message.substr(0, 300));
     });
@@ -1008,6 +1052,14 @@ void App::frame() {
                                               ImGui::GetIO().WantTextInput, ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId),
                                               g.PlatformImeData.WantVisible, ImGui::GetIO().KeyCtrl, ImGui::GetIO().KeyShift,
                                               ImGui::GetIO().KeyAlt, ImGui::GetIO().KeySuper));
+    }
+    static bool displayNoted = false;
+    if (!displayNoted) { // the screen and where the thread in front runs: known once there is a frame
+        displayNoted = true;
+        const ImGuiIO& io0 = ImGui::GetIO();
+        trace::env(std::format("display={:.0f}x{:.0f} scale={:.1f} thread-host={}", io0.DisplaySize.x, io0.DisplaySize.y,
+                               io0.DisplayFramebufferScale.x,
+                               current < 0 ? "-" : data.threads[current]->host.empty() ? "local" : data.threads[current]->host));
     }
     {
         // what ImGui believes is held while a text field has the keyboard, logged when it changes: a modifier or
