@@ -94,6 +94,7 @@ struct App : imshell::Delegate {
     bool machineAdding = false;     // asked for the add dialog over the app
     bool machineAddingIn = false;   // ... and over the settings (a popup opens at the level it is asked at)
     bool machineDone = false;       // the machine was reached and saved: the dialog closes
+    bool machineScanning = false;   // reached; the dialog stays up while its earlier sessions are looked for
     bool machineFocus = false;
     char machineInput[256] = "";
     std::string machineError, machineSecret; // the add dialog: what failed, and a password it may ask for

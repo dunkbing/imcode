@@ -177,8 +177,9 @@ bool App::machineDialog(bool inSettings) {
             }
             save();
             machineTrying.clear();
-            machineDone = true;
             offerImport(r.host);
+            machineScanning = hostImport.op.isRunning();
+            machineDone = !machineScanning;
         } else {
             machineError = r.error.message;
             machineAskSecret = r.error.needsSecret;
@@ -201,12 +202,16 @@ bool App::machineDialog(bool inSettings) {
     ImGui::PopStyleVar(3);
     ImGui::PopStyleColor(2);
     if (adding) {
-        const bool done = std::exchange(machineDone, false);
+        const bool done = std::exchange(machineDone, false) || (machineScanning && !hostImport.op.isRunning());
+        if (done) {
+            machineScanning = false;
+        }
         const auto known = [&](const std::string& host) {
             return std::ranges::find(data.machines, host) != data.machines.end() ||
                    std::ranges::any_of(data.projects, [&](const Store::Project& p) { return p.host == host; });
         };
         const bool connecting = machineOp.isRunning();
+        const bool busy = connecting || machineScanning;
         // connects first; the answer is handled above, next frame
         const auto add = [&](const std::string& typed, const std::string& host) {
             // words are only for a pasted ssh command: anything else with a space is not a target
@@ -260,10 +265,13 @@ bool App::machineDialog(bool inSettings) {
                 ImGui::TextColored(colors.overlay0, "%s", (entry.user.empty() ? entry.hostname : entry.user + "@" + entry.hostname).c_str());
             }
             ImGui::SameLine(ImGui::GetContentRegionMax().x - addWidth);
-            if (imshell::Button("Add", imshell::ButtonVariant::Secondary, ImVec2(addWidth, 0))) {
+            ImGui::BeginDisabled(busy);
+            if (imshell::Button(connecting && machineTrying == entry.alias ? "..." : "Add", imshell::ButtonVariant::Secondary,
+                                ImVec2(addWidth, 0))) {
                 std::snprintf(machineInput, sizeof(machineInput), "%s", entry.alias.c_str());
                 add(entry.alias, entry.alias);
             }
+            ImGui::EndDisabled();
             ImGui::PopID();
         }
         if (header) {
@@ -278,7 +286,9 @@ bool App::machineDialog(bool inSettings) {
         bool enter = ImGui::InputTextWithHint("##typed", "user@host, or ssh user@host", machineInput, sizeof(machineInput),
                                               ImGuiInputTextFlags_EnterReturnsTrue);
         ImGui::SameLine(0, 8);
+        ImGui::BeginDisabled(busy);
         enter |= imshell::Button("Add##typed", imshell::ButtonVariant::Primary, ImVec2(addWidth, 0));
+        ImGui::EndDisabled();
         if (machineAskSecret) {
             ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - addWidth - 8);
@@ -291,9 +301,9 @@ bool App::machineDialog(bool inSettings) {
         if (enter) {
             add(machineInput, Ssh::destination(machineInput));
         }
-        if (connecting) {
+        if (busy) {
             ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
-            ui::Progress(-1, "Connecting");
+            ui::Progress(-1, (connecting ? "Connecting to " + machineTrying : "Looking for earlier sessions on " + hostImport.host).c_str());
         } else if (!machineError.empty()) {
             ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
             ImGui::PushStyleColor(ImGuiCol_Text, machineAskSecret ? colors.yellow : colors.red);
@@ -305,6 +315,7 @@ bool App::machineDialog(bool inSettings) {
                                                                  ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))) {
             if (!done) {
                 machineTrying.clear(); // abandoned: a late answer is dropped
+                machineScanning = false;
             }
             ImGui::CloseCurrentPopup();
         }
