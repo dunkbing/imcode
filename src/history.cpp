@@ -10,7 +10,9 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <map>
+#include <mutex>
 #include <set>
 #include <sstream>
 #include <nlohmann/json.hpp>
@@ -98,11 +100,34 @@ namespace History {
             return fs::exists(file, ec) ? file.string() : "";
         }
         if (agentId == "codex" && !sessionId.empty()) {
-            // rollout-<time>-<session>.jsonl under a dated folder
-            for (const auto& entry : fs::recursive_directory_iterator(base / ".codex" / "sessions", ec)) {
-                const std::string name = entry.path().filename().string();
-                if (name.ends_with(sessionId + ".jsonl")) {
-                    return entry.path().string();
+            // rollout-<time>-<session>.jsonl under <year>/<month>/<day>: what was found stays found,
+            // and the walk starts at the newest folders (a conversation you reopen is a recent one)
+            static std::mutex mu;
+            static std::map<std::string, std::string> known;
+            {
+                std::lock_guard lock(mu);
+                if (const auto it = known.find(sessionId); it != known.end() && fs::exists(it->second, ec)) {
+                    return it->second;
+                }
+            }
+            const auto newestFirst = [&](const fs::path& dir) {
+                std::vector<fs::path> names;
+                for (const auto& entry : fs::directory_iterator(dir, ec)) {
+                    names.push_back(entry.path());
+                }
+                std::ranges::sort(names, std::greater<>{});
+                return names;
+            };
+            for (const auto& year : newestFirst(base / ".codex" / "sessions")) {
+                for (const auto& month : newestFirst(year)) {
+                    for (const auto& day : newestFirst(month)) {
+                        for (const auto& file : newestFirst(day)) {
+                            if (file.filename().string().ends_with(sessionId + ".jsonl")) {
+                                std::lock_guard lock(mu);
+                                return known[sessionId] = file.string();
+                            }
+                        }
+                    }
                 }
             }
         }

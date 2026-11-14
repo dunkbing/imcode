@@ -64,6 +64,18 @@ int main() {
         c = std::isalnum(static_cast<unsigned char>(c)) ? c : '-';
     }
     fs::create_directories(home / ".claude/projects" / folder);
+    // a codex rollout is found under its dated folders, old or new, and what was found is kept
+    fs::create_directories(home / ".codex/sessions/2025/01/02");
+    fs::create_directories(home / ".codex/sessions/2026/11/11");
+    std::ofstream(home / ".codex/sessions/2025/01/02/rollout-a-old1.jsonl") << "{}\n";
+    std::ofstream(home / ".codex/sessions/2026/11/11/rollout-b-new1.jsonl") << "{}\n";
+    const std::string oldPath = History::transcript("codex", cwd, "old1");
+    const std::string newPath = History::transcript("codex", cwd, "new1");
+    if (!oldPath.ends_with("2025/01/02/rollout-a-old1.jsonl") || !newPath.ends_with("2026/11/11/rollout-b-new1.jsonl") ||
+        History::transcript("codex", cwd, "nope") != "" || History::transcript("codex", cwd, "old1") != oldPath) {
+        std::printf("FAILED: codex lookup old=%s new=%s\n", oldPath.c_str(), newPath.c_str());
+        return 1;
+    }
     const fs::path live = home / ".claude/projects" / folder / "s1.jsonl";
     std::ofstream(live) << R"({"type":"user","message":{"role":"user","content":"<system-reminder>x</system-reminder>"}})" << "\n"
                         << R"({"type":"user","message":{"role":"user","content":[{"type":"text","text":"rename it"}]}})" << "\n"
