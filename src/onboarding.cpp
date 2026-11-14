@@ -165,6 +165,7 @@ bool App::machineDialog(bool inSettings) {
     // adding a machine: a dialog of its own, drawn where it was asked for (over the settings, or over the app)
     static std::vector<SSHHostEntry> configured; // ~/.ssh/config, read when the dialog opens
     if (std::exchange(inSettings ? machineAddingIn : machineAdding, false)) {
+        trace::act("add-machine", inSettings ? "from settings" : "from the app");
         const char* config = std::getenv("IMCODE_SSH_CONFIG");
         configured = parseSSHConfig(config ? config : "");
         ImGui::OpenPopup("##addMachine");
@@ -535,6 +536,7 @@ void App::settingsDraw() {
         if (imshell::Button("Copy Trace Log", imshell::ButtonVariant::Secondary)) {
             // the end of this run's log: timings and names only, never message text
             const std::string log = trace::tail(1 << 20);
+            trace::act("copy-trace", std::format("bytes={}", log.size()));
             if (log.empty()) {
                 ui::Toast("The trace log is off or empty", ui::Tone::Warning, 3);
             } else {
@@ -543,7 +545,7 @@ void App::settingsDraw() {
             }
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Copies the end of this run's trace log (at most the last 1 MB; timings and names, no message text)");
+            ImGui::SetTooltip("Copies the end of this run's trace log (at most the last 1 MB) with its machine and build header. It holds what you did by name (switching threads, sending, panels), timings, errors, memory use and counts: never message text, file contents, tokens or paths beyond file names");
         }
 #ifdef IMCODE_UPDATER
         ImGui::Dummy(ImVec2(0, Theme::Spacing::S));

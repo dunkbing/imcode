@@ -76,7 +76,7 @@ namespace {
         Ssh::Error error;
         const auto session = Ssh::session(host, "", error);
         if (!session) {
-            trace::event("watch.skipped", host + ": " + error.message);
+            trace::warn("watch.skipped", host + ": " + error.message);
             return nullptr;
         }
         const std::string system = firstLine(*session, "uname -sm");
@@ -84,7 +84,7 @@ namespace {
         // a linux host builds the embedded source; another system gets this build's helper if it is the same
         const std::string bytes = linux ? helperSource() : helperBytes();
         if (!linux && (bytes.empty() || system != helperPlatform())) {
-            trace::event("watch.skipped", std::format("{} is {}, no helper for it", host, system));
+            trace::warn("watch.skipped", std::format("{} is {}, no helper for it", host, system));
             return nullptr;
         }
         std::string failed;
@@ -103,7 +103,7 @@ namespace {
             // a temporary name, then a rename: two ImCodes starting together cannot run a half-written file
             const std::string temp = std::format("{}.{:x}", path, std::random_device{}());
             if (!session->write(linux ? temp + ".c" : temp, bytes, failed)) {
-                trace::event("watch.skipped", "upload: " + failed);
+                trace::warn("watch.skipped", "upload: " + failed);
                 return nullptr;
             }
             const std::string build = linux ? "cc -w -O2 -o " + quoted(temp) + " " + quoted(temp + ".c") + " 2>&1 && " : "";
@@ -111,14 +111,14 @@ namespace {
                                                              " && echo yes");
             firstLine(*session, "rm -f " + quoted(temp + ".c") + " " + quoted(temp));
             if (done != "yes") {
-                trace::event("watch.skipped", host + ": install: " + done);
+                trace::warn("watch.skipped", host + ": install: " + done);
                 return nullptr;
             }
         }
         auto channel = session->exec(quoted(path) + " watch " + quoted(cwd),
-                                     [host](const std::string& line) { trace::event("watch.stderr", host + ": " + line); }, failed);
+                                     [host](const std::string& line) { trace::warn("watch.stderr", host + ": " + line); }, failed);
         if (!channel) {
-            trace::event("watch.skipped", "start: " + failed);
+            trace::warn("watch.skipped", "start: " + failed);
         }
         return channel;
     }
@@ -136,7 +136,7 @@ namespace {
         }
         auto [transport, error] = acp::ProcessTransport::spawn({file, "watch", cwd});
         if (!transport) {
-            trace::event("watch.skipped", "spawn: " + error);
+            trace::warn("watch.skipped", "spawn: " + error);
         }
         return std::move(transport);
     }
@@ -179,7 +179,7 @@ namespace {
                 batch = {};
                 state->wake();
             } else if (!decode(line, batch)) {
-                trace::event("watch.bad-line", line.substr(0, 80));
+                trace::warn("watch.bad-line", std::to_string(line.size()) + " bytes");
             }
         }
         state->live = false;

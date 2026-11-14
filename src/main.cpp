@@ -29,6 +29,7 @@
 #define timegm _mkgmtime // the same, under msvc's name
 #endif
 #include <format>
+#include <fstream>
 #include <iomanip>
 #include <sstream>
 
@@ -187,7 +188,11 @@ void App::setup() {
     trace::event("start", std::format("data={}", dir.string()));
     traceEnvironment(dir);
     acp::setLogger([](acp::LogLevel level, const std::string& message) {
-        trace::event(level >= acp::LogLevel::Warn ? "acp-warn" : "acp", message.substr(0, 300));
+        if (level >= acp::LogLevel::Warn) {
+            trace::warn("acp", message.substr(0, 300));
+        } else {
+            trace::event("acp", message.substr(0, 300));
+        }
     });
     dataFile = dir / "threads.json";
     data = Store::load(dataFile);
@@ -517,8 +522,12 @@ void App::hostLoop() {
         std::map<const Thread*, Seen> now;
         for (auto& t : data.threads) {
             {
+                const double polledAt = trace::nowMs();
                 trace::Span polled("poll", cut(t->title, 24), 5);
                 t->poll(); // every thread, shown or not
+                if (const double took = trace::nowMs() - polledAt; took > 5) {
+                    hostLastSlow = std::format("poll of '{}' ({:.0f} ms)", cut(t->title, 24), took);
+                }
             }
             changed |= t->takeChanged();
             for (auto& [id, value] : std::exchange(t->picked, {})) {
@@ -623,12 +632,130 @@ void App::stopHost() {
     }
 }
 
+#ifdef __APPLE__
+#include <mach/mach.h>
+#endif
+
+// resident memory of this process in MB, -1 where not known
+static long residentMb() {
+#ifdef __APPLE__
+    mach_task_basic_info info{};
+    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, reinterpret_cast<task_info_t>(&info), &count) == KERN_SUCCESS) {
+        return static_cast<long>(info.resident_size >> 20);
+    }
+#elif defined(__linux__)
+    if (std::ifstream statm("/proc/self/statm"); statm) {
+        long pages = 0, resident = 0;
+        statm >> pages >> resident;
+        return resident * sysconf(_SC_PAGESIZE) >> 20;
+    }
+#endif
+    return -1;
+}
+
+// the user's session as plain lines: what changed (act), and every minute how things stand (state, res).
+// the key or click behind a change is named. never text, only counts and names of things
+void App::traceState() {
+    if (!trace::enabled()) {
+        return;
+    }
+    const ImGuiIO& io = ImGui::GetIO();
+    const auto thread = [&](int i) -> const Thread* { return i >= 0 && i < static_cast<int>(data.threads.size()) ? data.threads[i].get() : nullptr; };
+    const auto via = [&] {
+        if (io.KeyCtrl || io.KeySuper) {
+            for (int k = ImGuiKey_A; k <= ImGuiKey_Z; ++k) {
+                if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(k), false)) {
+                    return std::format("{}+{}", io.KeySuper ? "Cmd" : "Ctrl", ImGui::GetKeyName(static_cast<ImGuiKey>(k)));
+                }
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_GraveAccent, false)) {
+                return std::format("{}+`", io.KeySuper ? "Cmd" : "Ctrl");
+            }
+        }
+        return std::string(ImGui::IsMouseClicked(ImGuiMouseButton_Left) ? "click" : "other");
+    };
+    struct Seen {
+        int current = -2, filter = -2, tab = 0;
+        bool terminal = false, files = false, hidden = false, settings = false, focused = true;
+    };
+    static Seen seen;
+    static double stateAt = -1e9; // the first frame snapshots
+    const bool focused = !io.AppFocusLost;
+    const bool settings = ImGui::IsPopupOpen("##settings");
+    bool snapshot = false;
+    static bool primed = false; // what is there at the start is state, not something the user did
+    if (!std::exchange(primed, true)) {
+        seen = {current, filterProject, files.tab, terminalOpen, files.open, data.sidebarHidden, settings, focused};
+    }
+    const auto changed = [&](const char* name, const std::string& detail) {
+        trace::act(name, detail + " via=" + via());
+    };
+    if (current != seen.current) {
+        const Thread* to = thread(current);
+        trace::act("thread-switch", std::format("from={} to={} host={} agent={} via={}", seen.current, current,
+                                                 to ? (to->host.empty() ? "local" : to->host) : "-", to ? to->agentId : "-", via()));
+        seen.current = current;
+    }
+    if (filterProject != seen.filter) {
+        changed("project-filter", std::format("project={}", filterProject));
+        seen.filter = filterProject;
+    }
+    if (terminalOpen != seen.terminal) {
+        changed("terminal", terminalOpen ? "opened" : "closed");
+        seen.terminal = terminalOpen;
+    }
+    if (files.open != seen.files || (files.open && files.tab != seen.tab)) {
+        changed(files.tab == 1 ? "changes-panel" : "files-panel", files.open ? "opened" : "closed");
+        seen.files = files.open;
+        seen.tab = files.tab;
+    }
+    if (data.sidebarHidden != seen.hidden) {
+        changed("sidebar", data.sidebarHidden ? "hidden" : "shown");
+        seen.hidden = data.sidebarHidden;
+    }
+    if (settings != seen.settings) {
+        changed("settings", settings ? "opened" : "closed");
+        seen.settings = settings;
+    }
+    if (focused != seen.focused) { // the user works by switching apps
+        trace::act("window", focused ? "focus-gained" : "focus-lost");
+        seen.focused = focused;
+        snapshot = true;
+    }
+    if (focused && (snapshot || trace::nowMs() - stateAt > 60'000)) {
+        stateAt = trace::nowMs();
+        int running = 0, idle = 0, starting = 0, watching = 0;
+        std::set<std::string> hosts;
+        for (const auto& t : data.threads) {
+            watching += t->watching();
+            if (t->hasAgent()) {
+                (t->starting() ? starting : t->busy() ? running : idle) += 1;
+            }
+            if (!t->host.empty() && Ssh::connected(t->host)) {
+                hosts.insert(t->host);
+            }
+        }
+        const Thread* shown = thread(current);
+        trace::line(std::format("state  window={:.0f}x{:.0f} sidebar={} panel={}{} threads={} selected={} host={} agents=running:{} idle:{} starting:{} focused={}",
+                                io.DisplaySize.x, io.DisplaySize.y, data.sidebarHidden ? "hidden" : "shown",
+                                files.open ? (files.tab == 1 ? "changes" : "files") : "none", terminalOpen ? "+terminal" : "",
+                                data.threads.size(), current, shown ? (shown->host.empty() ? "local" : shown->host) : "-", running, idle,
+                                starting, focused));
+        trace::line(std::format("res  rss={}MB agent-processes={} ssh-sessions={} watches={}", residentMb(), running + idle + starting,
+                                hosts.size(), watching));
+    }
+}
+
 void App::frame() {
     trace::Span frameSpan("slow-frame", "", 30);
     const double lockFrom = trace::nowMs();
+    const double frameFrom = lockFrom;
     std::lock_guard lock(hostMutex);
     if (const double waited = trace::nowMs() - lockFrom; waited > 8) {
-        trace::event("ui-waited-for-host", std::format("{:.1f} ms", waited));
+        // the host thread held the lock: its last slow step is the likely cause
+        trace::event("ui-waited-for-host", std::format("{:.1f} ms  cause: host thread's {}", waited, hostLastSlow));
+        frameSpan.note(std::format("cause=host-lock {:.0f} ms ({})", waited, hostLastSlow));
     }
     lastFrameMs = nowMs();
     for (int i = 0; !pressedSession.empty() && i < static_cast<int>(data.threads.size()); ++i) {
@@ -824,14 +951,18 @@ void App::frame() {
         } else if (imshell::BeginResizable("layout", lines)) {
             if (imshell::ResizablePanel({.size = &sidebarWidth, .min = 200, .fixed = true,
                                          .childFlags = ImGuiChildFlags_Borders})) {
+                const double from = trace::nowMs();
                 trace::Span s("ui.sidebar", "", 8);
                 dividerX = ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - 0.5f;
                 dividerTop = ImGui::GetWindowPos().y;
                 sidebar();
+                uiSidebarMs = trace::nowMs() - from;
             }
             if (imshell::ResizablePanel({.min = files.open ? 781.0f : 420.0f})) {
+                const double from = trace::nowMs();
                 trace::Span s("ui.thread-area", "", 8);
                 threadArea();
+                uiThreadMs = trace::nowMs() - from;
             }
             resized |= imshell::EndResizable();
             // the divider runs up through the title bar too
@@ -1059,6 +1190,11 @@ void App::frame() {
     transferCard();
     ui::RenderToasts();
     imshell::Alert::render(); // last: over everything
+    traceState();
+    if (trace::nowMs() - frameFrom > 100) { // a stall the user can feel: say where the time went
+        frameSpan.note(std::format("sidebar={:.0f}ms thread-area={:.0f}ms", uiSidebarMs, uiThreadMs));
+    }
+    uiSidebarMs = uiThreadMs = 0;
 }
 
 int main(int argc, char** argv) {

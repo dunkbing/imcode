@@ -834,6 +834,9 @@ namespace Ssh {
         } else if (fromKeychain && error.needsSecret) {
             Keychain::remove(keychain, host); // changed since: ask again
         }
+        if (!made) {
+            trace::warn("ssh.failed", host + ": " + error.message.substr(0, 200));
+        }
         return made;
     }
 

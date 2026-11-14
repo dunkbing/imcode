@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "trace.hpp"
 #include "home.hpp"
 #include "text.hpp"
 
@@ -44,6 +45,7 @@ namespace {
 } // namespace
 
 void App::paletteOpen(bool actions) {
+    trace::act("palette", actions ? "actions" : "open quickly");
     Palette& p = palette;
     p.wantOpen = true;
     p.step = actions ? Palette::Step::Actions : Palette::Step::Sources;

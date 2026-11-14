@@ -38,6 +38,7 @@ namespace {
     // a file on a host saved in ~/Downloads under a free name; what to tell the user
     // shortcut: read whole into memory (capped), no progress; stream it in chunks for big files
     std::string download(const std::string& host, const std::string& full, const std::string& name) {
+        trace::Span timed("files.download", std::format("host={} name={}", host, name));
         constexpr size_t cap = 512u << 20;
         const char* home = homeEnv();
         if (!home) {
@@ -73,6 +74,7 @@ namespace {
     // files from this machine copied into a folder of the project, here or on its host, each under a
     // free name; what to tell the user. shortcut: read whole into memory (capped), no progress
     std::string copyIn(const std::string& host, const std::string& dir, const std::string& rel, const std::vector<std::string>& paths) {
+        trace::Span timed("files.upload", std::format("host={} files={}", host.empty() ? "local" : host, paths.size()));
         constexpr size_t cap = 512u << 20;
         std::shared_ptr<Ssh::Session> session;
         std::set<std::string> taken;
@@ -651,6 +653,7 @@ void App::handleDrops() {
     }
     Files& f = files;
     auto paths = std::exchange(dropped, {});
+    trace::act("drop", std::format("files={} target={}", paths.size(), f.open && f.overTree && current >= 0 && f.tab == 0 ? "file-tree" : "conversation"));
     if (f.open && f.overTree && current >= 0 && f.tab == 0 && !f.downloadOp.isRunning()) {
         f.uploadDir = f.hoverDir;
         f.downloading = "Uploading " + fs::path(paths.front()).filename().string() + (paths.size() > 1 ? " and more..." : "...");

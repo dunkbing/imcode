@@ -356,6 +356,9 @@ struct App : imshell::Delegate {
     void paletteDraw();
 
     void sidebar();
+    double uiSidebarMs = 0, uiThreadMs = 0; // this frame's sidebar and thread area: the cause named for a slow frame
+    std::string hostLastSlow ="(nothing slow yet)"; // under hostMutex: what the host thread last spent time on
+    void traceState();    // the session as act/state/res lines in the trace log
     void sidebarButtons(); // project filter, add project, new thread: in the title bar
     bool barButton(const char* icon, bool on, bool hideIcon = false); // a flat title-bar button
     bool sidebarToggle(bool shown); // the sidebar glyph: a window with a left pane, filled while the list shows

@@ -351,6 +351,7 @@ void Thread::release() {
 }
 
 void Thread::retryResume() {
+    trace::act("agent-restart", "retry resume");
     retireAgent();
     replaying_ = false;
     keepHistory_ = false;
@@ -358,6 +359,7 @@ void Thread::retryResume() {
 }
 
 void Thread::startOver() {
+    trace::act("agent-restart", "start over in a new session");
     retireAgent();
     replaying_ = false;
     keepHistory_ = false;
@@ -566,6 +568,7 @@ void Thread::setConfig(const std::string& id, const std::string& value) {
 }
 
 void Thread::cancel() {
+    trace::act("cancel", std::format("busy={} queued={}", busy(), queue.size()));
     uploadDropped_ = uploadOp_.isRunning(); // the message waits for its files: not sent
     if (acp_) {
         acp_->cancelTurn();
@@ -822,13 +825,13 @@ void Thread::poll() {
                 trace::event("turn.ended", std::format("{} items={}", ev.text, items.size()));
                 break;
             case AcpEvent::Type::Error:
-                trace::event("agent.error", cut(ev.text, 200));
+                trace::warn("agent.error", cut(ev.text, 200));
                 break;
             case AcpEvent::Type::Exited:
-                trace::event("agent.exited", cut(ev.text, 200));
+                trace::warn("agent.exited", cut(ev.text, 200));
                 break;
             case AcpEvent::Type::ResumeFailed:
-                trace::event("agent.resume-failed", cut(ev.text, 200));
+                trace::warn("agent.resume-failed", cut(ev.text, 200));
                 break;
             case AcpEvent::Type::Permission:
                 trace::event("agent.permission", ev.permission.title);

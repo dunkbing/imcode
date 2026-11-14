@@ -21,6 +21,8 @@ namespace trace {
         inline std::FILE* file = nullptr;
         inline std::filesystem::path path; // trace.log
         inline std::string header;         // the env lines: written again in front of a cut copy
+        inline size_t written = 0;         // bytes in this file: past maxBytes it becomes trace.prev.log
+        inline constexpr size_t maxBytes = 5u << 20;
         inline const auto start = std::chrono::steady_clock::now();
         inline std::atomic<int> nextThread{0};
 
@@ -78,7 +80,19 @@ namespace trace {
         const double at = nowMs();
         const int tag = detail::threadTag();
         std::lock_guard lock(detail::mu);
-        std::fprintf(detail::file, "%9.1f t%d %.*s\n", at, tag, static_cast<int>(text.size()), text.data());
+        if (detail::written > detail::maxBytes) { // this file becomes trace.prev.log; the new one starts with the env lines
+            std::fclose(detail::file);
+            std::error_code ec;
+            std::filesystem::rename(detail::path, detail::path.parent_path() / "trace.prev.log", ec);
+            detail::file = std::fopen(detail::path.string().c_str(), "w");
+            detail::written = 0;
+            if (!detail::file) {
+                return;
+            }
+            detail::written += static_cast<size_t>(std::fprintf(detail::file, "%s", detail::header.c_str()));
+        }
+        detail::written += static_cast<size_t>(
+            std::fprintf(detail::file, "%9.1f t%d %.*s\n", at, tag, static_cast<int>(text.size()), text.data()));
         std::fflush(detail::file);
     }
 
@@ -88,6 +102,20 @@ namespace trace {
             return;
         }
         line(detail.empty() ? std::string(name) : std::format("{}  {}", name, detail));
+    }
+
+    // something the user did, by name: `grep "act "` gives the session as a story
+    inline void act(std::string_view name, std::string_view detail = {}) {
+        if (detail::file) {
+            line(std::format("act  {}  {}", name, detail));
+        }
+    }
+
+    // a failure or warning, in one greppable form: `grep WARN`
+    inline void warn(std::string_view kind, std::string_view detail = {}) {
+        if (detail::file) {
+            line(std::format("WARN  {}  {}", kind, detail));
+        }
     }
 
     // what this run is on, as key=value fields: kept, and put in front of a copy of the log that

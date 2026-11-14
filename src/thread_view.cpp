@@ -824,6 +824,7 @@ void App::composer(Thread& t, float width) {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
     if (ImGui::Button(ICON_FA_PAPERCLIP, ImVec2(button, button))) {
         imshell::OpenDialog({.multiple = true}, [this](const std::vector<std::string>& paths) {
+            trace::act("attach-file", std::format("files={} via=paperclip", paths.size()));
             attachments.insert(attachments.end(), paths.begin(), paths.end());
             imshell::requestFrames();
         });
@@ -1100,6 +1101,7 @@ void App::attachPoll() {
     if (due.empty()) {
         return;
     }
+    trace::act("attach-upload", std::format("host={} files={}", t->host, due.size()));
     uploadOp.start([host = t->host, due, stamp = std::chrono::steady_clock::now().time_since_epoch().count()] {
         Uploads out;
         Ssh::Error sshError;
