@@ -1210,16 +1210,28 @@ void App::threadBody(Thread& t) {
     {
         static const Thread* shown = nullptr;
         static std::chrono::steady_clock::time_point since;
+        static bool seen = false; // the first frame with something to read, and the first that can be typed in
+        static bool typable = false;
         static std::set<const Thread*> warmed;
         const auto now = std::chrono::steady_clock::now();
         if (shown != &t) {
             warmed.erase(shown);
             shown = &t;
             since = now;
+            seen = typable = false;
         } else if (now - since > std::chrono::seconds(1) && !t.hasAgent() && t.host.empty() && !t.sessionId.empty() &&
                    warmed.insert(&t).second) {
             trace::event("warm-on-dwell", t.title.substr(0, 24));
             t.wake();
+        }
+        const auto took = [&] { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - since).count(); };
+        if (!seen && !t.items.empty()) {
+            seen = true;
+            trace::event("thread.items-visible", std::format("{} items {:.0f} ms after it was shown", t.items.size(), took()));
+        }
+        if (!typable && t.hasAgent() && !t.starting() && !t.busy()) {
+            typable = true;
+            trace::event("thread.agent-ready", std::format("{:.0f} ms after it was shown", took()));
         }
     }
     // typing starts the agent, so its start-up overlaps with writing the message
