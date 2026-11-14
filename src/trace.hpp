@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <filesystem>
 #include <format>
 #include <mutex>
@@ -18,6 +19,7 @@ namespace trace {
     namespace detail {
         inline std::mutex mu;
         inline std::FILE* file = nullptr;
+        inline std::filesystem::path path; // trace.log
         inline const auto start = std::chrono::steady_clock::now();
         inline std::atomic<int> nextThread{0};
 
@@ -40,10 +42,30 @@ namespace trace {
         std::filesystem::rename(dir / "trace.log", dir / "trace.prev.log", ec);
         std::lock_guard lock(detail::mu);
         detail::file = std::fopen((dir / "trace.log").string().c_str(), "w");
+        detail::path = dir / "trace.log";
     }
 
     [[nodiscard]] inline bool enabled() {
         return detail::file != nullptr;
+    }
+
+    // the end of this run's log, from the start of a line: at most maxBytes, so it fits a clipboard
+    [[nodiscard]] inline std::string tail(size_t maxBytes) {
+        std::ifstream in(detail::path, std::ios::binary | std::ios::ate);
+        if (!in) {
+            return {};
+        }
+        const auto size = static_cast<size_t>(in.tellg());
+        const size_t from = size > maxBytes ? size - maxBytes : 0;
+        in.seekg(static_cast<std::streamoff>(from));
+        std::string text(size - from, '\0');
+        in.read(text.data(), static_cast<std::streamsize>(text.size()));
+        if (from > 0) { // began mid-line: drop that part
+            if (const size_t nl = text.find('\n'); nl != std::string::npos) {
+                text.erase(0, nl + 1);
+            }
+        }
+        return text;
     }
 
     inline void line(std::string_view text) {

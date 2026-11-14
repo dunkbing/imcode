@@ -1009,6 +1009,18 @@ void App::frame() {
                                               g.PlatformImeData.WantVisible, ImGui::GetIO().KeyCtrl, ImGui::GetIO().KeyShift,
                                               ImGui::GetIO().KeyAlt, ImGui::GetIO().KeySuper));
     }
+    {
+        // what ImGui believes is held while a text field has the keyboard, logged when it changes: a modifier or
+        // Enter that never came up shows here (the os's own state is not what ImGui keeps)
+        static std::string heldBefore;
+        const ImGuiIO& keys = ImGui::GetIO();
+        const std::string held = std::format("ctrl={} shift={} alt={} super={} enter={}", keys.KeyCtrl, keys.KeyShift,
+                                             keys.KeyAlt, keys.KeySuper, ImGui::IsKeyDown(ImGuiKey_Enter));
+        if (keys.WantTextInput && held != heldBefore) {
+            trace::event("key.state", held);
+        }
+        heldBefore = held;
+    }
     transferCard();
     ui::RenderToasts();
     imshell::Alert::render(); // last: over everything

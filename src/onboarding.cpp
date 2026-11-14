@@ -7,6 +7,7 @@
 #include "imshell/resizable.hpp"
 #include "colors.hpp"
 #include "imshell/updater.hpp"
+#include "trace.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -515,7 +516,35 @@ void App::settingsDraw() {
                 ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
             }
         }
-        ImGui::TextColored(colors.subtext0, "ImCode " IMCODE_VERSION "  " IMCODE_COMMIT);
+        {
+            // click to copy what to quote in a report: the version and the commit
+            const ImVec2 from = ImGui::GetCursorScreenPos();
+            ImGui::TextColored(colors.subtext0, "ImCode " IMCODE_VERSION "  " IMCODE_COMMIT);
+            ImGui::SameLine(0, Theme::Spacing::S);
+            ImGui::TextColored(colors.overlay0, ICON_FA_COPY);
+            if (ImGui::IsMouseHoveringRect(from, ImGui::GetItemRectMax())) { // the line and its icon are one target
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                ImGui::SetTooltip("Copy the version and commit");
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                    ImGui::SetClipboardText("ImCode " IMCODE_VERSION " " IMCODE_COMMIT);
+                    ui::Toast("Copied", ui::Tone::Success, 2);
+                }
+            }
+        }
+        ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
+        if (imshell::Button("Copy Trace Log", imshell::ButtonVariant::Secondary)) {
+            // the end of this run's log: timings and names only, never message text
+            const std::string log = trace::tail(1 << 20);
+            if (log.empty()) {
+                ui::Toast("The trace log is off or empty", ui::Tone::Warning, 3);
+            } else {
+                ImGui::SetClipboardText(log.c_str());
+                ui::Toast("Trace copied", ui::Tone::Success, 2);
+            }
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Copies the end of this run's trace log (at most the last 1 MB; timings and names, no message text)");
+        }
 #ifdef IMCODE_UPDATER
         ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
         const bool available = imshell::updater::Available();
