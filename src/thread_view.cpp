@@ -1385,7 +1385,8 @@ void App::threadBody(Thread& t) {
             shown = &t;
             since = now;
             seen = typable = false;
-        } else if (now - since > std::chrono::seconds(1) && !t.hasAgent() && t.host.empty() && !t.sessionId.empty() &&
+        } else if (now - since > (t.sessionId.empty() ? std::chrono::milliseconds(300) : std::chrono::seconds(1)) && !t.hasAgent() &&
+                   t.host.empty() && (!t.sessionId.empty() || t.title.empty()) &&
                    warmed.insert(&t).second) {
             trace::event("warm-on-dwell", t.title.substr(0, 24));
             t.wake();
