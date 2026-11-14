@@ -3,3 +3,4 @@ DEV="new;files"
 FILES="src/x.c a.txt"
 INPUT="25 dragover 1100 63"
 FRAMES=45
+STABLE=150

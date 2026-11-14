@@ -2,3 +2,4 @@
 DEV="new"
 FILES="a.txt"
 FRAMES=30
+STABLE=150

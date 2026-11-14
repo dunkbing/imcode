@@ -3,3 +3,4 @@ DEV="new"
 FILES="notes.txt"
 INPUT="20 drop 700 365 @DIR@/notes.txt;24 click 700 380;25 type look at this"
 FRAMES=300
+STABLE=150

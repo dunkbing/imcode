@@ -3,3 +3,4 @@ DEV="new"
 FILES="a.txt"
 INPUT="25 dragover 700 365"
 FRAMES=45
+STABLE=150

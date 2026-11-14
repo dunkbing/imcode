@@ -7,6 +7,7 @@
 # BUILD=<dir> picks the build folder (default build). a scenario is a file of variables:
 #   AGENT (the agent command: default the echo agent; tests/ui/silent-agent never answers; $root is the repo), OPTIONS (models the agent offered before),
 #   DEV (IMCODE_DEV), INPUT (IMCODE_INPUT: "<frame> click X Y;<frame> type text;..."), FRAMES, WINDOW,
+#   STABLE (more frames: the shot taken that many frames later must match the first, so nothing shifts or animates on),
 #   FILES (made in the project folder), HOST (a project on that ssh host: needs IMCODE_DEV_HOST
 #   and links ~/.ssh into the scratch HOME, so it is skipped by check), @DIR@ in INPUT = the folder
 set -eu
@@ -15,11 +16,12 @@ build=${BUILD:-$root/build}
 scn=$root/tests/ui/scenarios
 golden=$root/tests/ui/golden
 
-run() { # <name> <out.png>: one scenario
+run() { # <name> <out.png> [more frames]: one scenario
     name=$1
     out=$2
-    unset DEV INPUT FRAMES WINDOW FILES HOST OPTIONS AGENT
+    unset DEV INPUT FRAMES WINDOW FILES HOST OPTIONS AGENT STABLE
     . "$scn/$name.scn"
+    FRAMES=$(( ${FRAMES:-40} + ${3:-0} ))
     work=$(mktemp -d "${TMPDIR:-/tmp}/imcode-dev.XXXXXX")
     trap 'rm -rf "$work"' EXIT
     mkdir -p "$work/scn/p" "$work/home" "$work/data"
@@ -68,6 +70,18 @@ check)
             continue
         fi
         run "$name" "$shots/$name.png" || { failed=1; continue; }
+        # layout shifting: the same scenario run for more frames must look the same (a caret blink aside)
+        stable=$(sed -n 's/^STABLE=//p' "$scn/$name.scn" | tr -d '"')
+        if [ -n "$stable" ] && [ "$update" = no ]; then
+            run "$name" "$shots/$name-later.png" "$stable" || { failed=1; continue; }
+            moved=$(magick compare -metric AE -fuzz 2% "$shots/$name.png" "$shots/$name-later.png" null: 2>&1 || true)
+            moved=${moved%%[. ]*}
+            if [ "$moved" -gt 60 ] 2> /dev/null; then
+                mkdir -p "$build/ui-actual" && cp "$shots/$name-later.png" "$build/ui-actual/$name-later.png" && cp "$shots/$name.png" "$build/ui-actual/$name.png"
+                echo "FAIL $name: $moved pixels moved between the first shot and one $stable frames later (see $build/ui-actual/$name*.png)"
+                failed=1
+            fi
+        fi
         if [ "$update" = yes ]; then
             cp "$shots/$name.png" "$golden/$name.png"
             echo "updated $name"
@@ -77,7 +91,7 @@ check)
         else
             # a few pixels of tolerance: antialiasing, not layout
             diff=$(magick compare -metric AE -fuzz 2% "$shots/$name.png" "$golden/$name.png" null: 2>&1 || true)
-            diff=${diff%% *}
+            diff=${diff%%[. ]*}
             if [ "$diff" -le 200 ] 2> /dev/null; then
                 echo "ok   $name"
             else

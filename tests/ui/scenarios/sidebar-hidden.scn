@@ -3,3 +3,4 @@ DEV="new"
 FILES="a.txt"
 INPUT="10 click 93 19;25 click 900 500"
 FRAMES=40
+STABLE=150
