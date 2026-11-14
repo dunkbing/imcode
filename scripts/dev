@@ -8,6 +8,7 @@
 #   AGENT (the agent command: default the echo agent; tests/ui/silent-agent never answers; $root is the repo), OPTIONS (models the agent offered before),
 #   DEV (IMCODE_DEV), INPUT (IMCODE_INPUT: "<frame> click X Y;<frame> type text;..."), FRAMES, WINDOW,
 #   STABLE (more frames: the shot taken that many frames later must match the first, so nothing shifts or animates on),
+#   SERIES (the last n frames are kept: the divider must be one line, on the same pixel top to bottom, in every one, and what does not move must not change),
 #   FILES (made in the project folder), HOST (a project on that ssh host: needs IMCODE_DEV_HOST
 #   and links ~/.ssh into the scratch HOME, so it is skipped by check), @DIR@ in INPUT = the folder
 set -eu
@@ -19,7 +20,7 @@ golden=$root/tests/ui/golden
 run() { # <name> <out.png> [more frames]: one scenario
     name=$1
     out=$2
-    unset DEV INPUT FRAMES WINDOW FILES HOST OPTIONS AGENT STABLE
+    unset DEV INPUT FRAMES WINDOW FILES HOST OPTIONS AGENT STABLE SERIES
     . "$scn/$name.scn"
     FRAMES=$(( ${FRAMES:-40} + ${3:-0} ))
     work=$(mktemp -d "${TMPDIR:-/tmp}/imcode-dev.XXXXXX")
@@ -42,9 +43,53 @@ run() { # <name> <out.png> [more frames]: one scenario
     input=$(printf '%s' "${INPUT:-}" | sed "s#@DIR@#$work/scn/p#g")
     HOME=$work/home IMCODE_DATA_DIR=$work/data IMCODE_AGENT_CMD=${AGENT:-$build/external/acp-cpp/acp-echo-agent} \
         IMCODE_WINDOW=${WINDOW:-1300x700} IMCODE_SHOT=$work/shot.ppm IMCODE_SHOT_FRAMES=${FRAMES:-40} \
-        IMCODE_DEV=${DEV:-new} IMCODE_INPUT=$input "$build/imcode" > /dev/null 2>&1 || true
+        IMCODE_DEV=${DEV:-new} IMCODE_INPUT=$input IMCODE_SHOT_SERIES=${SERIES:-0} "$build/imcode" > /dev/null 2>&1 || true
     [ -s "$work/shot.ppm" ] || { echo "$name: no screenshot (is $build/imcode built?)" >&2; return 1; }
     magick "$work/shot.ppm" -define png:compression-level=9 -strip "${fmt:-}$out"
+    if [ "${SERIES:-0}" -gt 0 ] && [ "${checking:-no}" = yes ]; then
+        # the divider is one line: the same pixel on the title bar, the middle and the bottom, in every frame;
+        # the corners that do not move with it stay as they are
+        w=$(magick identify -format %w "$work/shot.ppm")
+        h=$(magick identify -format %h "$work/shot.ppm")
+        first="" last=""
+        for f in "$work"/shot.ppm.*.ppm; do
+            xs=""
+            for y in 6 $((h / 2)) $((h - 14)); do
+                x=$(magick "$f" -crop $((w - 380))x1+380+"$y" +repage -depth 8 txt:- | awk 'NR>1{split($1,a,","); split($2,v,/[(,)]/); if(v[2]+v[3]+v[4]>=110){print a[1]+380; exit}}')
+                xs="$xs ${x:-none}"
+            done
+            set -- $xs
+            if [ "$1" != "$2" ] || [ "$2" != "$3" ]; then
+                echo "FAIL $name: the divider is not one line in $(basename "$f"): x =$xs" >&2
+                return 1
+            fi
+            # the sidebar's tone reaches the line in the same frame: just left of it is the sidebar's, not the window's
+            for y in 6 $((h / 2)); do
+                tone=$(magick "$f" -crop 1x1+$(( $(echo $xs | cut -d' ' -f1) - 3 ))+"$y" +repage -depth 8 txt:- | awk 'NR>1{split($2,v,/[(,)]/); print v[2]+v[3]+v[4]}')
+                if [ "${tone:-0}" -gt 80 ]; then
+                    echo "FAIL $name: the sidebar's tone lags the divider in $(basename "$f")" >&2
+                    return 1
+                fi
+            done
+            [ -n "$first" ] || first=$1
+            last=$1
+            magick "$f" -crop 300x240+$((w - 300))+$((h - 300)) +repage "$work/corner.png"
+            magick "$f" -crop 300x80+$((w - 300))+0 +repage "$work/bar.png"
+            if [ ! -f "$work/corner0.png" ]; then
+                cp "$work/corner.png" "$work/corner0.png"
+                cp "$work/bar.png" "$work/bar0.png"
+            fi
+            moved=$(( $(magick compare -metric AE -fuzz 5% "$work/corner.png" "$work/corner0.png" null: 2>&1 | sed "s/[. ].*//") + $(magick compare -metric AE -fuzz 5% "$work/bar.png" "$work/bar0.png" null: 2>&1 | sed "s/[. ].*//") ))
+            if [ "$moved" -gt 60 ]; then
+                echo "FAIL $name: the title bar's right end or the composer's corner changed during the drag ($(basename "$f"): $moved pixels)" >&2
+                return 1
+            fi
+        done
+        if [ "$first" = "$last" ]; then
+            echo "FAIL $name: the divider did not move during the series" >&2
+            return 1
+        fi
+    fi
     rm -rf "$work"
     trap - EXIT
 }
@@ -60,6 +105,7 @@ shot)
     ;;
 check)
     fmt=PNG8:
+    checking=yes
     update=no
     [ "${2:-}" = "--update" ] && update=yes
     shots=$(mktemp -d "${TMPDIR:-/tmp}/imcode-dev-shots.XXXXXX")

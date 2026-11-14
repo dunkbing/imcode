@@ -1,0 +1,5 @@
+# a url, a long word, a code line, a wide table and a long tool title in the transcript: it never scrolls sideways
+DEV="new;wide"
+INPUT="60 hwheel 700 300 -6;70 hwheel 500 200 6;80 wheel 700 300 3"
+FRAMES=110
+STABLE=60

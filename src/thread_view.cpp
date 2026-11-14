@@ -1400,6 +1400,9 @@ void App::threadView(Thread& t) {
     ImGui::BeginChild("thread-view", ImVec2(0, 0), ImGuiChildFlags_None,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     threadBody(t);
+    if (ImGui::GetScrollMaxX() > 0) {
+        ImGui::SetScrollX(0); // the reach of the transcript over the padding is not a place to scroll to
+    }
     ImGui::EndChild();
 }
 
@@ -1546,8 +1549,14 @@ void App::threadBody(Thread& t) {
     // a composer taller than its one-box minimum grows over the end of the transcript rather than
     // shrinking it, so the text above does not move while typing (shortcut: not with queued rows or files)
     const float grown = queued > 0 ? 0.0f : composerHeight - (composerInputHeight("", width) + ImGui::GetFrameHeight() + 34);
-    ImGui::BeginChild("transcript", ImVec2(0, -(composerHeight - grown + Theme::Spacing::L + queued +
-                                                ImGui::GetFrameHeightWithSpacing())));
+    // the scrollbar is a thin strip at the panel's edge, in the margin beside the text: the child reaches
+    // over the window's padding to the pad the others keep, so the text is not narrowed by it (or pushed
+    // past it, which let the transcript scroll sideways)
+    const float reach = std::max(0.0f, Theme::Spacing::XL - pads.right);
+    ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, 8);
+    ImGui::BeginChild("transcript", ImVec2(ImGui::GetContentRegionAvail().x + reach,
+                                           -(composerHeight - grown + Theme::Spacing::L + queued +
+                                             ImGui::GetFrameHeightWithSpacing())));
     find.itemY.assign(t.items.size(), -1);
     // the hit being shown: a bar at its left
     const auto mark = [&](size_t i) {
@@ -1691,7 +1700,11 @@ void App::threadBody(Thread& t) {
     }
     const bool away = ImGui::GetScrollY() < ImGui::GetScrollMaxY() - 80;
     const ImVec2 viewAt = ImGui::GetWindowPos(), viewSize = ImGui::GetWindowSize();
+    if (ImGui::GetScrollMaxX() > 0) {
+        ImGui::SetScrollX(0); // never sideways: anything wider scrolls inside itself
+    }
     ImGui::EndChild();
+    ImGui::PopStyleVar();
     if (away && shownRevision >= 0) {
         // further up while there is more below: a way back to the newest. a small child of
         // its own over the transcript, so the text under it does not take the click

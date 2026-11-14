@@ -166,6 +166,9 @@ namespace {
             } else if (s.what == "wheel" && age == 0 && std::sscanf(s.args.c_str(), "%f %f %f", &x1, &y1, &x2) == 3) {
                 io.AddMousePosEvent(x1, y1); // wheel x y amount: a scroll there
                 io.AddMouseWheelEvent(0, x2);
+            } else if (s.what == "hwheel" && age == 0 && std::sscanf(s.args.c_str(), "%f %f %f", &x1, &y1, &x2) == 3) {
+                io.AddMousePosEvent(x1, y1); // hwheel x y amount: a sideways scroll there
+                io.AddMouseWheelEvent(x2, 0);
             } else if (s.what == "dragover" && age >= 0 && std::sscanf(s.args.c_str(), "%f %f", &x1, &y1) == 2) {
                 imshell::detail::dragOver(true, ImVec2(x1, y1)); // files held over x y from this frame on
             } else if (s.what == "drop") { // drop x y path: a file dropped there from the finder
@@ -260,6 +263,15 @@ int runHeadless(App& app, const char* out, int width, int height, int frames) {
         ImGui::Render();
         ImDrawData* draw = ImGui::GetDrawData();
         updateTextures(draw);
+        // IMCODE_SHOT_SERIES=<n>: the last n frames too, as <out>.<k>.ppm, to see what a drag does frame by frame
+        const int series = std::getenv("IMCODE_SHOT_SERIES") ? std::atoi(std::getenv("IMCODE_SHOT_SERIES")) : 0;
+        if (i >= frames - series && i < frames - 1) {
+            Canvas frame{canvas.width, canvas.height, std::vector<unsigned char>(static_cast<size_t>(canvas.width) * canvas.height * 3, 0)};
+            rasterize(draw, scale, frame);
+            std::ofstream one(std::string(out) + "." + std::to_string(i - (frames - series)) + ".ppm", std::ios::binary);
+            one << "P6\n" << frame.width << " " << frame.height << "\n255\n";
+            one.write(reinterpret_cast<const char*>(frame.rgb.data()), static_cast<std::streamsize>(frame.rgb.size()));
+        }
         if (i == frames - 1) {
             canvas.rgb.assign(static_cast<size_t>(canvas.width) * canvas.height * 3, 0);
             rasterize(draw, scale, canvas);

@@ -1,0 +1,5 @@
+# the sidebar's divider dragged with a long transcript: one line top to bottom in every frame, no lag
+DEV="new"
+INPUT="24 click 700 380;25 type Explain how the layout of the conversation panel works in a few sentences please, so that the answer wraps over more than one line when the panel is narrow.;40 key enter;80 type Explain how the layout of the conversation panel works in a few sentences please, so that the answer wraps over more than one line when the panel is narrow. Explain how the layout of the conversation panel works in a few sentences.;95 key enter;200 drag 280 300 560 300"
+FRAMES=225
+SERIES=27
