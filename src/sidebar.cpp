@@ -218,6 +218,12 @@ void App::sidebar() {
         const std::string when = ago(t.updatedAt);
         ImGui::SameLine(at.x + width - ImGui::CalcTextSize(when.c_str()).x - 8);
         ImGui::TextColored(colors.overlay1, "%s", when.c_str());
+        // one state, the most urgent first: waiting for the user, working, errored, finished and not seen yet
+        const char* state = t.needsAnswer() ? "needs you"
+                            : t.busy()      ? "working"
+                            : t.errored     ? "error"
+                            : (t.unread && i != current) ? "done"
+                                                         : nullptr;
         ImGui::SetCursorPos(ImVec2(at.x + 8, at.y + 4 + line + 3));
         if (renaming == i) {
             // the name, edited in place: enter keeps it, escape or a click elsewhere drops it
@@ -236,9 +242,28 @@ void App::sidebar() {
                 renaming = -1;
             }
         } else {
-            ImGui::PushTextWrapPos(at.x + width - 8);
-            ImGui::TextUnformatted(cut(t.title, 34).c_str());
-            ImGui::PopTextWrapPos();
+            // the title, then the state right after it: a long title is cut so the state fits
+            const float badgeWidth = state ? ImGui::CalcTextSize(state).x + 2 * Theme::Spacing::M + 6 : 0;
+            std::string title = cut(t.title, 34);
+            const float room = width - 16 - badgeWidth;
+            if (ImGui::CalcTextSize(title.c_str()).x > room) {
+                std::string head = title;
+                do {
+                    do {
+                        head.pop_back();
+                    } while (!head.empty() && (static_cast<unsigned char>(head.back()) & 0xC0) == 0x80);
+                } while (!head.empty() && ImGui::CalcTextSize((head + "...").c_str()).x > room);
+                title = head + "...";
+            }
+            ImGui::TextUnformatted(title.c_str());
+            if (state) {
+                ImGui::SameLine(0, 6);
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 2);
+                ui::Badge(state, t.needsAnswer() ? ui::Tone::Warning
+                                 : t.busy()      ? ui::Tone::Info
+                                 : t.errored     ? ui::Tone::Danger
+                                                 : ui::Tone::Success);
+            }
         }
         ImGui::SetCursorPos(ImVec2(at.x + 8, at.y + 4 + 2 * (line + 3)));
         const AcpAgentDef* def = AcpAgents::find(t.agentId);
@@ -276,19 +301,6 @@ void App::sidebar() {
             }
         }
         ImGui::PopStyleColor();
-        // one state, the most urgent first: waiting for the user, working, errored, finished and not seen yet
-        const char* state = t.needsAnswer() ? "needs you"
-                            : t.busy()      ? "working"
-                            : t.errored     ? "error"
-                            : (t.unread && i != current) ? "done"
-                                                         : nullptr;
-        if (state) {
-            ImGui::SameLine();
-            ui::Badge(state, t.needsAnswer() ? ui::Tone::Warning
-                             : t.busy()      ? ui::Tone::Info
-                             : t.errored     ? ui::Tone::Danger
-                                             : ui::Tone::Success);
-        }
         ImGui::SetCursorPos(next);
         ImGui::Dummy(ImVec2(0, 0)); // imgui wants an item after a cursor move
         ImGui::PopID();
