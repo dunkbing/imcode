@@ -530,35 +530,64 @@ bool App::filesPanel(Thread& t, bool beside) {
         ImGui::EndChild();
         return released;
     }
-    // no room for the file beside its tree: one at a time, as when the panel has the window
-    const bool alone = !beside || ImGui::GetContentRegionAvail().x < 400;
-    const bool showTree = !alone || f.treeOver || f.doc.path.empty();
+    // one view at a time in the same panel: the tree, or the file with a way back
+    (void)beside;
+    const bool showTree = f.treeOver || (f.doc.path.empty() && f.want.empty() && !f.readOp.isRunning());
     std::string opened;
 
     const auto fileView = [&] {
         if (f.doc.path.empty()) {
-            ImGui::TextColored(colors.overlay1, "Pick a file in the tree to read it here.");
-        } else {
-            // project > path/to/file, and what the button at the right needs
+            // asked for and on its way: still the viewer, with its way back
             const float button = ImGui::GetFrameHeight();
-            const size_t slash = f.doc.path.rfind('/');
+            if (imshell::IconButton(ICON_FA_ARROW_LEFT, imshell::ButtonVariant::Secondary, ImVec2(button, button))) {
+                f.treeOver = true;
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Back to files");
+            }
+            ImGui::TextColored(colors.overlay1, "Opening the file...");
+        } else {
+            // one row: the way back, then project > path/to/file, cut from the left so the file name stays
+            const float button = ImGui::GetFrameHeight();
+            if (imshell::IconButton(ICON_FA_ARROW_LEFT, imshell::ButtonVariant::Secondary, ImVec2(button, button))) {
+                f.treeOver = true;
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Back to files");
+            }
+            ImGui::SameLine();
             ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(colors.subtext0, "%s", fs::path(t.projectDir()).filename().string().c_str());
-            ImGui::SameLine();
-            ImGui::TextColored(colors.overlay0, ICON_FA_CHEVRON_RIGHT);
-            ImGui::SameLine();
-            ImGui::TextColored(colors.subtext0, "%s", f.doc.path.substr(0, slash + 1).c_str());
-            ImGui::SameLine(0, 0);
-            ImGui::TextUnformatted(f.doc.path.c_str() + slash + 1);
-            if (alone) {
-                ImGui::SameLine(ImGui::GetContentRegionMax().x - button);
-                if (imshell::IconButton(ICON_FA_FOLDER_TREE, imshell::ButtonVariant::Secondary,
-                                       ImVec2(button, button))) {
-                    f.treeOver = true;
+            const std::string project = fs::path(t.projectDir()).filename().string();
+            const float room = ImGui::GetContentRegionAvail().x;
+            const float gap = ImGui::GetStyle().ItemSpacing.x;
+            const auto width = [](const std::string& s) { return ImGui::CalcTextSize(s.c_str()).x; };
+            const float whole = width(project) + gap + width(ICON_FA_CHEVRON_RIGHT) + gap + width(f.doc.path);
+            if (whole <= room) {
+                const size_t slash = f.doc.path.rfind('/');
+                ImGui::TextColored(colors.subtext0, "%s", project.c_str());
+                ImGui::SameLine();
+                ImGui::TextColored(colors.overlay0, ICON_FA_CHEVRON_RIGHT);
+                ImGui::SameLine();
+                ImGui::TextColored(colors.subtext0, "%s", f.doc.path.substr(0, slash + 1).c_str());
+                ImGui::SameLine(0, 0);
+                ImGui::TextUnformatted(f.doc.path.c_str() + slash + 1);
+            } else {
+                // too long: the project goes, then the folders from the left, then the file name's own start
+                std::string shown = f.doc.path;
+                while (width("..." + shown) > room && shown.size() > 1) {
+                    size_t next = 1; // a whole character
+                    while (next < shown.size() && (static_cast<unsigned char>(shown[next]) & 0xC0) == 0x80) {
+                        ++next;
+                    }
+                    shown.erase(0, next);
                 }
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Back to the files");
+                shown = "..." + shown;
+                const size_t slash = shown.rfind('/');
+                ImGui::TextColored(colors.subtext0, "%s", shown.substr(0, slash == std::string::npos ? 0 : slash + 1).c_str());
+                if (slash != std::string::npos) {
+                    ImGui::SameLine(0, 0);
                 }
+                ImGui::TextUnformatted(shown.c_str() + (slash == std::string::npos ? 0 : slash + 1));
             }
             if (!f.doc.note.empty()) {
                 ImGui::TextColored(colors.yellow, "%s", f.doc.note.c_str());
@@ -598,29 +627,28 @@ bool App::filesPanel(Thread& t, bool beside) {
             ImGui::Spacing();
         }
         ImGui::BeginChild("rows");
+        if (std::exchange(f.restoreScroll, false)) {
+            ImGui::SetScrollY(f.treeScroll);
+        }
         if (f.filter[0]) {
             matches(f, opened);
         } else {
             tree(f, "", 0, opened);
         }
+        f.treeScroll = ImGui::GetScrollY();
         ImGui::EndChild();
     };
-    if (!alone) {
-        if (imshell::BeginResizable("split", {.line = ImGui::GetColorU32(colors.surface1),
-                                              .lit = ImGui::GetColorU32(colors.blue)})) {
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 6));
-            const bool file = imshell::ResizablePanel({.min = 200, .childFlags = ImGuiChildFlags_AlwaysUseWindowPadding});
-            ImGui::PopStyleVar();
-            if (file) {
-                fileView();
-            }
-            if (imshell::ResizablePanel({.size = &f.treeWidth, .min = 140, .fixed = true,
-                                         .childFlags = ImGuiChildFlags_Borders})) {
-                treeView();
-            }
-            released |= imshell::EndResizable();
-        }
-    } else if (showTree) {
+    // esc (nothing being typed, no terminal to take it) or cmd+[ goes back to the tree
+    if (!showTree && !ImGui::GetIO().WantTextInput && !ImGui::IsAnyItemActive() &&
+        !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel) &&
+        ((!terminalOpen && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ||
+         (ImGui::GetIO().KeySuper && ImGui::IsKeyPressed(ImGuiKey_LeftBracket, false)))) {
+        f.treeOver = true;
+    }
+    if (!showTree) {
+        f.restoreScroll = true;
+    }
+    if (showTree) {
         ImGui::BeginChild("tree", ImVec2(0, 0), ImGuiChildFlags_Borders);
         treeView();
         ImGui::EndChild();

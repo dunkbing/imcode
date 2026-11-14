@@ -185,6 +185,8 @@ struct App : imshell::Delegate {
         bool toTop = false;   // a new file: scroll back
         float width = 0;      // pixels beside the chat; 0: not sized yet
         float treeWidth = 220;
+        float treeScroll = 0;        // the tree's scroll, put back when the file goes
+        bool restoreScroll = false;
         Settle settle;
         int epoch = 0;        // bumps with the folder: what was loading for the old one is dropped
         std::string host, cwd;

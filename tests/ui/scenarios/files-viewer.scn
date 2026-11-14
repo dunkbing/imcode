@@ -1,0 +1,6 @@
+# a file opens in the files panel in place of the tree, with a way back
+DEV="new"
+FILES="a.txt src/main.cpp src/deep/folder/with/a/very/long/path/name/to/read_me.md"
+INPUT="24 click 700 380;25 type hi;40 key enter;60 click 1241 19;100 click 829 76"
+FRAMES=160
+STABLE=60
