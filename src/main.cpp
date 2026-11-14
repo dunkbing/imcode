@@ -988,6 +988,7 @@ void App::frame() {
         updateTold = true;
         ui::Toast(("ImCode " + imshell::updater::LatestVersion() + " is available: Settings to update").c_str(), ui::Tone::Info, 8);
     }
+    transferCard();
     ui::RenderToasts();
     imshell::Alert::render(); // last: over everything
 }

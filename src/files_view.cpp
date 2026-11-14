@@ -8,6 +8,7 @@
 #include "acp_host/agents.hpp"
 #include "acp_host/process_runner.hpp"
 #include "imshell/button.hpp"
+#include "imshell/components.hpp"
 #include "imshell/frames.hpp"
 #include "colors.hpp"
 #include "code_colors.hpp"
@@ -19,6 +20,7 @@
 #include <optional>
 
 using Theme = imshell::Theme;
+namespace ui = imshell::ui;
 namespace fs = std::filesystem;
 using Files = App::Files;
 
@@ -312,7 +314,6 @@ namespace {
                     // a file on a host: a copy in ~/Downloads
                     if (!f.host.empty() && ImGui::MenuItem(ICON_FA_DOWNLOAD "  Download", nullptr, false, !f.downloadOp.isRunning())) {
                         f.downloading = "Downloading " + entry.name + "...";
-                        f.downloadNote.clear();
                         f.downloadOp.start([host = f.host, full = under(f.cwd, path), name = entry.name] {
                             return download(host, full, name);
                         });
@@ -418,9 +419,9 @@ void App::filesPoll() {
         }
     });
     f.downloadOp.check([&](std::string note) {
-        f.downloadNote = std::move(note);
         f.downloading.clear();
-        f.downloadedAt = ImGui::GetTime();
+        const bool good = note.starts_with("Saved to ") || note.starts_with("Uploaded");
+        ui::Toast(note.c_str(), good ? ui::Tone::Success : ui::Tone::Danger, 8);
         if (f.uploadDir) {
             f.dirs.erase(*std::exchange(f.uploadDir, std::nullopt)); // listed again with the new file
             f.indexed = false;
@@ -570,14 +571,6 @@ bool App::filesPanel(Thread& t, bool beside) {
         ImGui::SetNextItemWidth(-FLT_MIN);
         ImGui::InputTextWithHint("##filter", ICON_FA_MAGNIFYING_GLASS "  Search files", f.filter,
                                  sizeof(f.filter));
-        // a download in flight, then what came of it for a few seconds
-        if (!f.downloading.empty() || (!f.downloadNote.empty() && ImGui::GetTime() - f.downloadedAt < 8)) {
-            ImGui::Spacing();
-            ImGui::PushTextWrapPos();
-            ImGui::TextColored(colors.overlay1, "%s", f.downloading.empty() ? f.downloadNote.c_str() : f.downloading.c_str());
-            ImGui::PopTextWrapPos();
-            imshell::requestFrames();
-        }
         ImGui::Spacing();
         ImGui::BeginChild("rows");
         if (f.filter[0]) {
@@ -637,7 +630,6 @@ void App::handleDrops() {
     auto paths = std::exchange(dropped, {});
     if (f.open && f.overTree && current >= 0 && f.tab == 0 && !f.downloadOp.isRunning()) {
         f.uploadDir = f.hoverDir;
-        f.downloadNote.clear();
         f.downloading = "Uploading " + fs::path(paths.front()).filename().string() + (paths.size() > 1 ? " and more..." : "...");
         f.downloadOp.start([host = f.host, dir = under(f.cwd, f.hoverDir), rel = f.hoverDir, paths = std::move(paths)] {
             return copyIn(host, dir, rel, paths);
@@ -646,4 +638,24 @@ void App::handleDrops() {
     }
     attachments.insert(attachments.end(), paths.begin(), paths.end());
     focusInput = true;
+}
+
+// a card over the window's bottom right while a download or upload runs: no layout space, and the
+// result then replaces it as a toast in the same corner
+void App::transferCard() {
+    if (files.downloading.empty()) {
+        return;
+    }
+    const Colors colors = themeColors();
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float margin = Theme::Spacing::L, pad = Theme::Spacing::M + Theme::Spacing::S;
+    const float width = std::min(320.0f, vp->WorkSize.x - margin * 2);
+    const ImVec2 text = ImGui::CalcTextSize(files.downloading.c_str(), nullptr, false, width - pad * 2);
+    const ImVec2 size(width, text.y + pad * 2);
+    const ImVec2 at(vp->WorkPos.x + vp->WorkSize.x - margin - width, vp->WorkPos.y + vp->WorkSize.y - margin - size.y);
+    ImDrawList* draw = ImGui::GetForegroundDrawList(vp);
+    draw->AddRectFilled(at, ImVec2(at.x + size.x, at.y + size.y), ImGui::GetColorU32(colors.mantle), Theme::Radius::Lg);
+    draw->AddRect(at, ImVec2(at.x + size.x, at.y + size.y), ImGui::GetColorU32(colors.surface1), Theme::Radius::Lg);
+    draw->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(at.x + pad, at.y + pad), ImGui::GetColorU32(colors.text),
+                  files.downloading.c_str(), nullptr, width - pad * 2);
 }

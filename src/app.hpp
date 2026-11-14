@@ -83,6 +83,7 @@ struct App : imshell::Delegate {
     std::vector<std::string> attachments; // files for the next message: picked, or dropped on the window
     std::vector<std::string> dropped;     // files dropped on the window, placed after the frame is drawn
     void handleDrops();
+    void transferCard(); // the transfer in flight, over the window
     char search[128] = {};
     // below 0 = bring the transcript to its end (for that many frames): a thread was opened or the user sent something.
     // what the agent writes does not move it (the user may be reading further up)
@@ -192,8 +193,7 @@ struct App : imshell::Delegate {
         AcpHost::AsyncOp<Listing> listOp, indexOp;
         AcpHost::AsyncOp<Doc> readOp;
         AcpHost::AsyncOp<std::string> downloadOp; // a remote file saved to Downloads: what to say about it
-        std::string downloading, downloadNote;   // the file in flight; the last result
-        double downloadedAt = 0;
+        std::string downloading; // what is in flight, shown as a card at the bottom right; the result is a toast
         bool overTree = false;     // this frame: the pointer is over the tree panel
         std::string hoverDir;      // ... and the folder its row is in (a folder row is itself), "" the root
         std::optional<std::string> uploadDir; // the folder an upload goes to ("" the root): listed again when it ends
