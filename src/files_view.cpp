@@ -308,6 +308,7 @@ namespace {
                 }
                 if (ImGui::IsItemHovered()) {
                     f.hoverDir = dir;
+                    f.hoverFolder = false;
                 }
                 if (ImGui::BeginPopupContextItem(("##menu" + path).c_str())) {
                     if (ImGui::MenuItem(ICON_FA_CLOCK_ROTATE_LEFT "  History of this file")) {
@@ -328,6 +329,9 @@ namespace {
             const bool folderRow = row(path, expanded ? ICON_FA_FOLDER_OPEN : ICON_FA_FOLDER, entry.name, depth, false);
             if (ImGui::IsItemHovered()) {
                 f.hoverDir = path;
+                f.hoverFolder = true;
+                f.hoverMin = ImGui::GetItemRectMin();
+                f.hoverMax = ImGui::GetItemRectMax();
             }
             if (folderRow) {
                 if (expanded) {
@@ -583,6 +587,9 @@ bool App::filesPanel(Thread& t, bool beside) {
     const auto treeView = [&] {
         f.overTree = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
         f.hoverDir.clear(); // over empty space a drop goes to the project folder
+        f.hoverFolder = false;
+        f.treeMin = ImGui::GetWindowPos();
+        f.treeMax = ImVec2(f.treeMin.x + ImGui::GetWindowWidth(), f.treeMin.y + ImGui::GetWindowHeight());
         if constexpr (kFileSearch) {
             ImGui::SetNextItemWidth(-FLT_MIN);
             ImGui::InputTextWithHint("##filter", ICON_FA_MAGNIFYING_GLASS "  Search files", f.filter, sizeof(f.filter));
@@ -654,6 +661,46 @@ void App::handleDrops() {
     }
     attachments.insert(attachments.end(), paths.begin(), paths.end());
     focusInput = true;
+}
+
+// files dragged over the window (imshell moves the pointer with the drag, so the hover state used for the
+// drop is already right): an outline on the tree, and on its folder row, or on the message box
+void App::dropIndicator() {
+    if (!imshell::DragActive()) {
+        return;
+    }
+    const Colors colors = themeColors();
+    const Files& f = files;
+    const bool tree = f.open && f.overTree && current >= 0 && f.tab == 0 && !f.downloadOp.isRunning();
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    const auto mark = [&](ImVec2 min, ImVec2 max, float rounding, const std::string& label) {
+        ImVec4 fill = colors.blue;
+        fill.w = 0.14f;
+        draw->AddRectFilled(min, max, ImGui::GetColorU32(fill), rounding);
+        draw->AddRect(min, max, ImGui::GetColorU32(colors.blue), rounding, 2.0f);
+        if (!label.empty()) {
+            const float wrap = max.x - min.x - Theme::Spacing::L * 2;
+            const ImVec2 size = ImGui::CalcTextSize(label.c_str(), nullptr, false, wrap);
+            draw->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(min.x + (max.x - min.x - size.x) * 0.5f, min.y + (max.y - min.y - size.y) * 0.5f),
+                          ImGui::GetColorU32(colors.text), label.c_str(), nullptr, wrap);
+        }
+    };
+    if (tree) {
+        if (f.hoverFolder) {
+            mark(ImVec2(f.treeMin.x + Theme::Spacing::S, f.hoverMin.y), ImVec2(f.treeMax.x - Theme::Spacing::S, f.hoverMax.y), Round::Row, "");
+        }
+        // the label sits at the bottom of the panel, out of the rows' way
+        mark(f.treeMin, f.treeMax, Round::Panel, "");
+        const std::string label = f.hoverDir.empty() ? "Drop to add to the project folder" : "Drop to add to " + f.hoverDir;
+        const float wrap = f.treeMax.x - f.treeMin.x - Theme::Spacing::L * 2;
+        const ImVec2 size = ImGui::CalcTextSize(label.c_str(), nullptr, false, wrap);
+        const ImVec2 at(f.treeMin.x + (f.treeMax.x - f.treeMin.x - size.x) * 0.5f, f.treeMax.y - size.y - Theme::Spacing::L);
+        draw->AddRectFilled(ImVec2(at.x - Theme::Spacing::M, at.y - Theme::Spacing::S), ImVec2(at.x + size.x + Theme::Spacing::M, at.y + size.y + Theme::Spacing::S),
+                            ImGui::GetColorU32(colors.mantle), Round::Row);
+        draw->AddText(ImGui::GetFont(), ImGui::GetFontSize(), at, ImGui::GetColorU32(colors.text), label.c_str(), nullptr, wrap);
+    } else if (composerFrame == ImGui::GetFrameCount()) {
+        mark(composerMin, composerMax, Round::Panel, "Drop to attach");
+    }
 }
 
 // a card over the window's bottom right while a download or upload runs: no layout space, and the

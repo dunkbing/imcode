@@ -971,6 +971,7 @@ void App::frame() {
     paletteDraw();
     machineDialog(false);
     handleDrops();
+    dropIndicator();
     importDialog();
     settingsDraw();
     graphDraw();

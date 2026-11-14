@@ -166,6 +166,8 @@ namespace {
             } else if (s.what == "wheel" && age == 0 && std::sscanf(s.args.c_str(), "%f %f %f", &x1, &y1, &x2) == 3) {
                 io.AddMousePosEvent(x1, y1); // wheel x y amount: a scroll there
                 io.AddMouseWheelEvent(0, x2);
+            } else if (s.what == "dragover" && age >= 0 && std::sscanf(s.args.c_str(), "%f %f", &x1, &y1) == 2) {
+                imshell::detail::dragOver(true, ImVec2(x1, y1)); // files held over x y from this frame on
             } else if (s.what == "drop") { // drop x y path: a file dropped there from the finder
                 int used = 0;
                 if (age == 0 && std::sscanf(s.args.c_str(), "%f %f %n", &x1, &y1, &used) >= 2) {

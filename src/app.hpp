@@ -84,6 +84,9 @@ struct App : imshell::Delegate {
     std::vector<std::string> attachments; // files for the next message: picked, or dropped on the window
     std::vector<std::string> dropped;     // files dropped on the window, placed after the frame is drawn
     void handleDrops();
+    void dropIndicator(); // while files are dragged over the window: an outline where they would land
+    ImVec2 composerMin, composerMax; // the message box, in the frame composerFrame
+    int composerFrame = -1;
     void transferCard(); // the transfer in flight, over the window
     char search[128] = {};
     // below 0 = bring the transcript to its end (for that many frames): a thread was opened or the user sent something.
@@ -200,6 +203,9 @@ struct App : imshell::Delegate {
         std::string downloading; // what is in flight, shown as a card at the bottom right; the result is a toast
         bool overTree = false;     // this frame: the pointer is over the tree panel
         std::string hoverDir;      // ... and the folder its row is in (a folder row is itself), "" the root
+        ImVec2 treeMin, treeMax;   // this frame: the tree panel, and the row of hoverDir when it is a folder row
+        bool hoverFolder = false;
+        ImVec2 hoverMin, hoverMax;
         std::optional<std::string> uploadDir; // the folder an upload goes to ("" the root): listed again when it ends
     } files;
 

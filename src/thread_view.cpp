@@ -552,6 +552,9 @@ void App::composer(Thread& t, float width) {
                       ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleVar();
+    composerMin = ImGui::GetWindowPos();
+    composerMax = ImVec2(composerMin.x + ImGui::GetWindowWidth(), composerMin.y + ImGui::GetWindowHeight());
+    composerFrame = ImGui::GetFrameCount();
     if (std::exchange(focusInput, false)) {
         ImGui::SetKeyboardFocusHere();
     }
