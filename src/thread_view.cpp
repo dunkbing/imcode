@@ -671,7 +671,7 @@ void App::composer(Thread& t, float width) {
         }
         const bool fileMode = !commandMode && word < text.size() && text[word] == '@';
         struct Row {
-            std::string label, detail, insert;
+            std::string label, detail, insert, attach; // attach: a local file that goes with the message
         };
         std::vector<Row> rows;
         auto matches = [](const std::string& hay, const std::string& needle) {
@@ -686,7 +686,7 @@ void App::composer(Thread& t, float width) {
                 for (const auto& command : t.commands) {
                     const bool starts = command.name.starts_with(text.substr(1));
                     if (starts == prefix && matches(command.name, text.substr(1)) && rows.size() < 8) {
-                        rows.push_back({"/" + command.name, command.description, "/" + command.name + " "});
+                        rows.push_back({"/" + command.name, command.description, "/" + command.name + " ", {}});
                     }
                 }
             }
@@ -701,9 +701,10 @@ void App::composer(Thread& t, float width) {
             }
             for (const auto& file : picker.filesFor == key ? picker.files : std::vector<std::string>{}) {
                 if (matches(file, text.substr(word + 1)) && rows.size() < 8) {
-                    // shortcut: a mention is sent as "@path" in the text, which agents read;
-                    // a resource link block when one needs the file attached
-                    rows.push_back({file.substr(file.find_last_of('/') + 1), file, text.substr(0, word) + "@" + file + " "});
+                    // shortcut: a file on another machine stays a "@path" in the text for the agent to read
+                    rows.push_back({file.substr(file.find_last_of('/') + 1), file,
+                                    t.host.empty() ? text.substr(0, word) : text.substr(0, word) + "@" + file + " ",
+                                    t.host.empty() ? t.cwd + "/" + file : std::string()});
                 }
             }
         }
@@ -748,6 +749,9 @@ void App::composer(Thread& t, float width) {
             ImGui::PopStyleVar(3);
             ImGui::PopStyleColor(2);
             if (accept >= 0) {
+                if (!rows[accept].attach.empty()) {
+                    attachments.push_back(rows[accept].attach);
+                }
                 picker.replace = rows[accept].insert;
                 picker.selected = 0;
                 focusInput = true; // a click on a row took the keyboard
