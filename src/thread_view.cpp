@@ -628,6 +628,11 @@ void App::composer(Thread& t, float width) {
             return 0;
         },
         &picker);
+    // to find why enter does nothing: every press while the field is active, and what it did
+    if (ImGui::IsItemActive() && ImGui::IsKeyPressed(ImGuiKey_Enter, false)) {
+        trace::event("composer.enter", std::format("returned={} len={} watching={} busy={} agent={}", send, std::strlen(input),
+                                                    t.watching(), t.busy(), t.hasAgent()));
+    }
     ImGui::EndDisabled();
     if (t.watching()) {
         send = false;
@@ -707,6 +712,13 @@ void App::composer(Thread& t, float width) {
                                     t.host.empty() ? t.cwd + "/" + file : std::string()});
                 }
             }
+        }
+        // to find why a picker is missing: logged once per text
+        if (static std::string seen; rows.empty() && (commandMode || fileMode) && seen != text) {
+            seen = text;
+            trace::event("picker.empty", std::format("mode={} commands={} files={} listed={} dismissed={} agent={}", commandMode ? "cmd" : "file",
+                                                      t.commands.size(), picker.files.size(), picker.filesFor == t.host + "\n" + t.cwd,
+                                                      text == picker.dismissed, t.hasAgent()));
         }
         if (!rows.empty()) {
             picker.selected = std::clamp(picker.selected + (ImGui::IsKeyPressed(ImGuiKey_DownArrow) ? 1 : 0) -
