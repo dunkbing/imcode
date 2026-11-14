@@ -974,7 +974,7 @@ void App::composer(Thread& t, float width) {
             choices(t, *model, filter);
         } else {
             ImGui::TextColored(colors.overlay1, "%s",
-                               t.starting() ? startLabel(t).c_str() : "This agent offers no models");
+                               t.starting() ? "Loading models..." : "This agent offers no models");
         }
         ImGui::EndChild();
         ImGui::SameLine();
@@ -1617,8 +1617,9 @@ void App::threadBody(Thread& t) {
     } else {
         turnSince.erase(&t);
     }
-    if (t.busy() || t.starting()) {
-        ui::Progress(-1, t.starting() ? startLabel(t).c_str() : working.c_str(), 200);
+    const std::string startText = startLabel(t); // asked every frame: it forgets the clock when the start is over
+    if (t.busy()) { // a start the user did not ask for (the agent warming up) shows nothing
+        ui::Progress(-1, t.starting() ? startText.c_str() : working.c_str(), 200);
         ImGui::Dummy(ImVec2(0, Theme::Spacing::M)); // clear of the child's bottom edge
     }
     ImGui::PopTextWrapPos();
