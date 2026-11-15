@@ -417,7 +417,7 @@ struct App : imshell::Delegate {
     struct {
         bool on = false;
         float left = 0, right = 0; // the conversation's text edges on screen
-        std::string project, title;
+        std::string project, title, note; // note: a status at the right end ("Reconnecting...")
     } crumb;
     void threadBody(Thread& t);
     void transcriptItem(Thread& t, Item& item, int index, float width);

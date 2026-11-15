@@ -791,6 +791,7 @@ void Thread::poll() {
         }
     }
     bool gone = false;
+    bool exited = false; // the agent died: what is on screen stays, and the next start resumes without a replay
     bool followAfter = false;
     bool next = false; // a turn ended: the queue moves on
     auto append = [this](Item::Kind kind, const std::string& text) {
@@ -979,6 +980,7 @@ void Thread::poll() {
             }
             add({.kind = Item::Kind::Info, .text = "Agent exited. The next message restarts it."});
             gone = true;
+            exited = true;
             break;
         case AcpEvent::Type::Usage:
             contextUsed = ev.used;
@@ -1027,7 +1029,7 @@ void Thread::poll() {
     if (gone) {
         retireAgent();
         replaying_ = false;
-        keepHistory_ = false;
+        keepHistory_ = exited && !sessionId.empty() && !items.empty(); // resumed later without replaying 400 messages
         queued_ = false;
         heldUser_.clear();
     }

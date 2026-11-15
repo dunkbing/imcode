@@ -135,7 +135,8 @@ public:
 
     [[nodiscard]] bool starting() const;    // the agent is coming up: no session yet
     [[nodiscard]] std::string startStep() const; // which part of coming up it is on
-    [[nodiscard]] bool busy() const;        // a turn is running, or waits for the session
+    [[nodiscard]] bool reconnecting() const { return acp_ && keepHistory_ && replaying_; } // restarting under what is on screen
+    [[nodiscard]] bool busy() const;       // a turn is running, or waits for the session
     [[nodiscard]] bool needsAnswer() const; // an unanswered permission or sign-in
     [[nodiscard]] bool newSession() const { // started new: its session id is not a saved conversation
         return newSession_;

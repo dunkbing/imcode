@@ -1386,6 +1386,7 @@ void App::threadHeader(const Thread& t) {
     crumb.right = at.x + ImGui::GetContentRegionAvail().x - pads.right;
     crumb.project = std::filesystem::path(t.projectDir()).filename().string();
     crumb.title = t.title.empty() ? "New thread" : t.title;
+    crumb.note = t.reconnecting() ? "Reconnecting..." : "";
 }
 
 void App::threadView(Thread& t) {

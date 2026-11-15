@@ -1088,7 +1088,13 @@ void App::frame() {
             // from the conversation's edge (after the buttons when they reach it) to short of the icons, the project
             // dropped first, then the title
             const float left = std::max(crumb.left, barLead);
-            const float right = std::min(crumb.right, bar.pos.x + bar.size.x - bar.rightInset - 112 - 12);
+            float right = std::min(crumb.right, bar.pos.x + bar.size.x - bar.rightInset - 112 - 12);
+            const float noteW = crumb.note.empty() ? 0.0f : ImGui::CalcTextSize(crumb.note.c_str()).x;
+            if (noteW > 0 && right - noteW - 24 > crumb.left) {
+                barList->AddText(ImVec2(right - noteW, bar.pos.y + (bar.size.y - ImGui::GetTextLineHeight()) * 0.5f),
+                                 ImGui::GetColorU32(colors.overlay1), crumb.note.c_str());
+                right -= noteW + 12;
+            }
             const float one = ImGui::CalcTextSize("0").x;
             const auto fit = [&](const std::string& text, float room) {
                 const size_t n = static_cast<size_t>(std::max(0.0f, room / one));
