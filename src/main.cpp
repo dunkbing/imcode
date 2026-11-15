@@ -756,11 +756,79 @@ void App::traceState() {
     }
 }
 
+// the host of the open thread (else a connected one) is tested off the ui thread; a dropped
+// connection is opened again and its threads' agents resume under what is on screen
+void App::linkCheck(const char* cause) {
+    if (linkBusy) {
+        return;
+    }
+    const Thread* shown = (current >= 0 && current < static_cast<int>(data.threads.size()) ? data.threads[current].get() : nullptr);
+    std::string host = shown ? shown->host : "";
+    for (const auto& t : data.threads) {
+        if (host.empty() && !t->host.empty() && Ssh::connected(t->host)) {
+            host = t->host;
+        }
+    }
+    if (host.empty()) {
+        return;
+    }
+    linkHost = host;
+    linkCause = cause;
+    linkStartMs = static_cast<long long>(trace::nowMs());
+    linkDone = false;
+    linkBusy = true;
+    std::thread([this, host] {
+        std::string error;
+        const bool ok = Ssh::check(host, error);
+        linkError = error;
+        linkOk = ok;
+        linkDone = true;
+    }).detach();
+}
+
+void App::linkPoll() {
+    if (linkBusy) {
+        imshell::requestFrames(std::chrono::milliseconds(200));
+    }
+    if (!linkDone.exchange(false)) {
+        return;
+    }
+    linkBusy = false;
+    trace::act("reconnect", std::format("cause={} host={} {} {}ms", linkCause, linkHost, linkOk ? "ready" : "failed: " + linkError,
+                                        static_cast<long long>(trace::nowMs()) - linkStartMs));
+    for (const auto& t : data.threads) {
+        if (t->host == linkHost) {
+            if (linkOk) {
+                t->resumeIfDropped();
+            } else if (current >= 0 && current < static_cast<int>(data.threads.size()) && t == data.threads[current]) {
+                ui::Toast(("Cannot reach " + linkHost + ": " + linkError).c_str(), ui::Tone::Danger, 6);
+            }
+        }
+    }
+}
+
 void App::frame() {
     trace::Span frameSpan("slow-frame", "", 30);
     const double lockFrom = trace::nowMs();
     const double frameFrom = lockFrom;
     std::lock_guard lock(hostMutex);
+    {
+        // a wake from sleep: the system clock moved on while the steady one stood still
+        using namespace std::chrono;
+        static auto drift = system_clock::now().time_since_epoch() - steady_clock::now().time_since_epoch();
+        static bool focusedBefore = true;
+        const auto now = system_clock::now().time_since_epoch() - steady_clock::now().time_since_epoch();
+        const bool woke = now - drift > seconds(10);
+        drift = now;
+        const bool focused = !ImGui::GetIO().AppFocusLost;
+        if (woke) {
+            linkCheck("wake");
+        } else if (focused && !focusedBefore) {
+            linkCheck("focus");
+        }
+        focusedBefore = focused;
+        linkPoll();
+    }
     if (const double waited = trace::nowMs() - lockFrom; waited > 8) {
         // the host thread held the lock: its last slow step is the likely cause
         trace::event("ui-waited-for-host", std::format("{:.1f} ms  cause: host thread's {}", waited, hostLastSlow));
@@ -1361,6 +1429,9 @@ void App::frame() {
     handleDrops();
     dropIndicator();
     importDialog();
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Comma)) { // cmd+, on mac
+        settingsWant = true;
+    }
     settingsDraw();
     graphDraw();
     logDraw();

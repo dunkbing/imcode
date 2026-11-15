@@ -1,0 +1,4 @@
+# cmd+, opens the settings dialog
+DEV="new"
+INPUT="10 key cmd+,"
+FRAMES=40

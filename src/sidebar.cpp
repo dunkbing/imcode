@@ -1,11 +1,13 @@
 #include "app.hpp"
 #include "text.hpp"
+#include "trace.hpp"
 #include "ssh.hpp"
 
 #include "imshell/button.hpp"
 #include "imshell/components.hpp"
 #include "colors.hpp"
 #include <algorithm>
+#include <chrono>
 #include <format>
 
 using Theme = imshell::Theme;
@@ -51,21 +53,35 @@ void App::sidebar() {
             order.push_back(i);
         }
     }
-    // what waits for the user first, then the newest
+    // pinned first, oldest pin first (a new message does not move a row); then what waits for the user, then the newest
     std::ranges::stable_sort(order, [&](int a, int b) {
         const Thread& x = *data.threads[a];
         const Thread& y = *data.threads[b];
+        if ((x.pinnedAt > 0) != (y.pinnedAt > 0)) {
+            return x.pinnedAt > 0;
+        }
+        if (x.pinnedAt > 0) {
+            return x.pinnedAt < y.pinnedAt;
+        }
         return x.needsAnswer() != y.needsAnswer() ? x.needsAnswer() : x.updatedAt > y.updatedAt;
     });
 
-    int open = -1, remove = -1, toggleArchive = -1, renamed = -1;
+    int open = -1, remove = -1, toggleArchive = -1, renamed = -1, togglePin = -1;
+    const bool anyPinned = !order.empty() && data.threads[order.front()]->pinnedAt > 0;
     static int focusedFor = -1; // the row whose field was given the keyboard
     bool renameFocus = renaming >= 0 && focusedFor != renaming;
     focusedFor = renaming;
     ImGui::BeginChild("threads", ImVec2(0, -(button + ImGui::GetStyle().ItemSpacing.y)));
     const float line = ImGui::GetTextLineHeight();
+    bool afterPinned = false;
     for (const int i : order) {
         const Thread& t = *data.threads[i];
+        // small labels over the two groups, only when there are pins
+        if (anyPinned && (i == order.front() || (!t.pinnedAt && !afterPinned))) {
+            afterPinned = !t.pinnedAt;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + Theme::Spacing::L);
+            ImGui::TextColored(colors.overlay0, "%s", t.pinnedAt ? "Pinned" : "Threads");
+        }
         ImGui::PushID(i);
         const ImVec2 at = ImGui::GetCursorPos();
         const float width = ImGui::GetContentRegionAvail().x - Theme::Spacing::L; // the panel's gap on the left, mirrored on the right
@@ -76,6 +92,9 @@ void App::sidebar() {
             History::prefetch(t.host, t.agentId, t.cwd, t.sessionId); // a short dwell: the click finds it warm
         }
         if (ImGui::BeginPopupContextItem("menu")) {
+            if (!t.archived && ImGui::MenuItem(t.pinnedAt ? ICON_FA_THUMBTACK "  Unpin" : ICON_FA_THUMBTACK "  Pin")) {
+                togglePin = i;
+            }
             if (ImGui::MenuItem("Rename")) {
                 renaming = i;
                 renameText = t.title;
@@ -107,7 +126,12 @@ void App::sidebar() {
         ImGui::SameLine(0, 6);
         ImGui::TextColored(colors.subtext0, "%s", projectName.c_str());
         const std::string when = ago(t.updatedAt);
-        ImGui::SameLine(at.x + width - ImGui::CalcTextSize(when.c_str()).x - 8);
+        const float whenX = at.x + width - ImGui::CalcTextSize(when.c_str()).x - 8;
+        if (t.pinnedAt) {
+            ImGui::SameLine(whenX - ImGui::CalcTextSize(ICON_FA_THUMBTACK).x - 6);
+            ImGui::TextColored(colors.overlay1, ICON_FA_THUMBTACK);
+        }
+        ImGui::SameLine(whenX);
         ImGui::TextColored(colors.overlay1, "%s", when.c_str());
         // one state, the most urgent first: waiting for the user, working, errored, finished and not seen yet
         const char* state = t.needsAnswer() ? "needs you"
@@ -202,8 +226,16 @@ void App::sidebar() {
         renaming = -1;
         save();
     }
+    if (togglePin >= 0) {
+        Thread& t = *data.threads[togglePin];
+        t.pinnedAt = t.pinnedAt ? 0 : static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                                 std::chrono::system_clock::now().time_since_epoch()).count());
+        trace::act("thread-pin", std::format("pinned={}", t.pinnedAt > 0));
+        save();
+    }
     if (toggleArchive >= 0) {
         data.threads[toggleArchive]->archived = !data.threads[toggleArchive]->archived;
+        data.threads[toggleArchive]->pinnedAt = 0; // archiving unpins
         if (toggleArchive == current) {
             current = -1; // out of the list it was opened from
         }

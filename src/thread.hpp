@@ -62,6 +62,7 @@ public:
     std::string title;     // first prompt, shortened; then the agent's own, unless renamed
     bool renamed = false;  // the user named it: the agent's title no longer replaces it
     bool archived = false; // out of the list, kept
+    long long pinnedAt = 0; // unix ms it was pinned (0 = not): pinned threads head the list, oldest pin first
     std::string cwd;       // absolute, on the host
     std::string root;      // the project's folder when cwd is a worktree of it; else empty
     bool wantWorktree = false; // the first message makes a worktree and works there
@@ -165,6 +166,14 @@ public:
 
 private:
     bool ensureStarted();
+public:
+    // an agent that went away with the connection starts again under what is on screen
+    void resumeIfDropped() {
+        if (!host.empty() && keepHistory_ && !hasAgent() && !sessionId.empty()) {
+            ensureStarted();
+        }
+    }
+private:
     Item* findTool(const std::string& id);
     // a path the agent named, as the project sees it; unchanged when outside it
     [[nodiscard]] std::string underProject(std::string path) const;

@@ -890,6 +890,25 @@ namespace Ssh {
         return it != cache.end() && it->second->alive();
     }
 
+    bool check(const std::string& host, std::string& error) {
+        std::shared_ptr<Session> held;
+        {
+            std::lock_guard lock(cacheMutex);
+            if (const auto it = cache.find(host); it != cache.end()) {
+                held = it->second;
+            }
+        }
+        // a channel round trip: a connection the network dropped fails here and is marked dead
+        if (held && held->alive()) {
+            std::string failed;
+            held->exec("true", nullptr, failed);
+        }
+        Error sshError;
+        const bool ok = session(host, "", sshError) != nullptr;
+        error = sshError.message;
+        return ok;
+    }
+
     std::vector<std::string> configHosts() {
         std::vector<std::string> out;
         const char* config = std::getenv("IMCODE_SSH_CONFIG");

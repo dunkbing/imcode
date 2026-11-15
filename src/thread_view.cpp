@@ -1387,7 +1387,10 @@ void App::threadHeader(const Thread& t) {
     crumb.right = at.x + ImGui::GetContentRegionAvail().x - pads.right;
     crumb.project = std::filesystem::path(t.projectDir()).filename().string();
     crumb.title = t.title.empty() ? "New thread" : t.title;
-    crumb.note = t.reconnecting() ? "Reconnecting..." : t.refreshing() ? "Updating..." : "";
+    crumb.note = (linkBusy && linkHost == t.host) ? "Reconnecting to " + t.host + "..."
+                 : t.reconnecting()               ? "Reconnecting..."
+                 : t.refreshing()                 ? "Updating..."
+                                                  : "";
 }
 
 void App::threadView(Thread& t) {
@@ -1553,6 +1556,10 @@ void App::threadBody(Thread& t) {
     ImGui::BeginChild("transcript", ImVec2(ImGui::GetContentRegionAvail().x + reach,
                                            -(composerHeight - grown + Theme::Spacing::L + queued +
                                              ImGui::GetFrameHeightWithSpacing())));
+    // selecting text in the transcript leaves the input, so the copy chord is not taken by the field (a plain click keeps it)
+    if (ImGui::IsWindowHovered() && (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 4) || ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) && ImGui::GetIO().WantTextInput) {
+        ImGui::ClearActiveID();
+    }
     find.itemY.assign(t.items.size(), -1);
     if (t.loadingHistory()) {
         // a remote thread's transcript is on its way: say so at once, in the place the first rows will take

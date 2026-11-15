@@ -183,7 +183,7 @@ namespace {
             } else if (s.what == "type" && age == 0) {
                 io.AddInputCharactersUTF8(s.args.c_str());
             } else if (s.what == "key" && (age == 0 || age == 1)) {
-                if (s.args == "cmd+f") {
+                if (s.args == "cmd+f" || s.args == "cmd+,") {
 #if defined(__APPLE__)
                     io.AddKeyEvent(ImGuiMod_Super, age == 0);
 #else
@@ -196,6 +196,7 @@ namespace {
                 const ImGuiKey key = s.args == "enter"       ? ImGuiKey_Enter
                                      : s.args == "shift+tab" ? ImGuiKey_Tab
                                      : s.args == "cmd+f"     ? ImGuiKey_F
+                                     : s.args == "cmd+,"     ? ImGuiKey_Comma
                                      : s.args == "esc"       ? ImGuiKey_Escape
                                      : s.args == "tab"       ? ImGuiKey_Tab
                                      : s.args == "down"      ? ImGuiKey_DownArrow

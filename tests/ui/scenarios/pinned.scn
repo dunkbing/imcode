@@ -1,0 +1,4 @@
+# pinned threads head the list, oldest pin first; the rest by recency
+DEV="none"
+THREADS='{"cwd":"/tmp","agent":"claude-code","host":"","title":"Pinned first","session":"a1","updated":0,"pinned":5},{"cwd":"/tmp","agent":"claude-code","host":"","title":"Pinned second, newer activity","session":"a2","updated":0,"pinned":9},{"cwd":"/tmp","agent":"claude-code","host":"","title":"A normal thread","session":"a3","updated":0}'
+FRAMES=30

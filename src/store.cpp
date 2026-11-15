@@ -55,6 +55,7 @@ namespace Store {
             thread->root = row.value("root", "");
             thread->renamed = row.value("renamed", false);
             thread->archived = row.value("archived", false);
+            thread->pinnedAt = row.value("pinned", 0LL);
             thread->updatedAt = row.value("updated", 0LL);
             thread->ownWriteAt = row.value("own", 0LL);
             addProject({thread->host, thread->projectDir()}); // a thread is never without its folder
@@ -79,6 +80,7 @@ namespace Store {
                                {"root", t->root},
                                {"renamed", t->renamed},
                                {"archived", t->archived},
+                               {"pinned", t->pinnedAt},
                                {"updated", t->updatedAt},
                                {"own", t->ownWriteAt}});
         }

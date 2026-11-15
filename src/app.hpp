@@ -258,6 +258,13 @@ struct App : imshell::Delegate {
     std::mutex hostMutex;
     std::condition_variable_any hostWake;
     std::thread host;
+    // reconnect check (focus, wake): the host being tested, and its result for the ui thread
+    std::string linkHost, linkCause;
+    long long linkStartMs = 0;
+    std::atomic<bool> linkBusy{false}, linkDone{false}, linkOk{false};
+    std::string linkError; // written before linkDone
+    void linkCheck(const char* cause);
+    void linkPoll();
     std::atomic<bool> hostStop{false};
     std::atomic<long long> lastFrameMs{0}; // no frame for a while = nobody is looking
     void hostLoop();

@@ -53,6 +53,9 @@ namespace Ssh {
                                      Error& error);
     // there is a live connection to host: session() will not block on the network
     bool connected(const std::string& host);
+    // tests the connection with a round trip and, when it went away, opens a new one. blocks;
+    // false with the reason in error when the host cannot be reached
+    bool check(const std::string& host, std::string& error);
 
     // what was typed for a host, as session() takes it: "ssh -p 2222 me@box" (a command
     // copied from a terminal) becomes "me@box:2222". other options are dropped

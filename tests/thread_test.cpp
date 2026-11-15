@@ -53,13 +53,14 @@ int main(int argc, char** argv) {
     saved.threads.push_back(std::make_unique<Thread>("/x", "codex", "me@box"));
     saved.threads.back()->title = "t";
     saved.threads.back()->sessionId = t.sessionId;
+    saved.threads.back()->pinnedAt = 77;
     Store::save(file, saved);
     const Store::Data loaded = Store::load(file);
     std::filesystem::remove(file);
     const bool stored =
         !t.sessionId.empty() && loaded.threads.size() == 1 && loaded.threads[0]->cwd == "/x" &&
         loaded.threads[0]->agentId == "codex" && loaded.threads[0]->host == "me@box" &&
-        loaded.threads[0]->title == "t" && loaded.threads[0]->sessionId == t.sessionId &&
+        loaded.threads[0]->title == "t" && loaded.threads[0]->sessionId == t.sessionId && loaded.threads[0]->pinnedAt == 77 &&
         loaded.projects == std::vector<Store::Project>{{"", "/empty"}, {"me@box", "/x"}};
     // remembered choices: applied when offered and different, dropped when not offered, kept
     // while their option has not arrived
