@@ -810,6 +810,7 @@ void App::frame() {
         barList->AddRectFilled(bar.pos, ImVec2(bar.pos.x + 1, bar.pos.y + bar.size.y), ImGui::GetColorU32(colors.mantle));
         barList->AddRectFilled(ImVec2(display.x - 1, bar.pos.y), ImVec2(display.x, bar.pos.y + bar.size.y), ImGui::GetColorU32(colors.mantle));
     }
+    float barLead = 0; // where the buttons on the left end, with their gap
     if (data.onboarded) {
         // the thread list's toggle, then the filter, add project and new thread: they stay when the list is hidden
         const bool listShown = narrow ? sidebarOpen : !data.sidebarHidden;
@@ -827,6 +828,7 @@ void App::frame() {
         ImGui::SameLine(0, 6);
         sidebarButtons();
         ImGui::SameLine(0, 12);
+        barLead = ImGui::GetCursorScreenPos().x;
     }
     ImGui::AlignTextToFramePadding();
     if (data.onboarded && current >= 0) {
@@ -885,6 +887,7 @@ void App::frame() {
     } else {
         const bool list = !narrow || sidebarOpen || current < 0;
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() - kPanelTopShift);
+        crumb.on = false;
         bool resized = false; // a panel was dragged to a new size: saved when let go
         float dividerX = 0, dividerTop = 0, dividerBottom = 0; // the sidebar's right edge, top and bottom: the line goes on past both
         float sidebarEdge = 0; // where the sidebar ends (0 = none)
@@ -1079,6 +1082,35 @@ void App::frame() {
         }
         if (resized) {
             save();
+        }
+        if (crumb.on) {
+            // project / title on the bar's row over the conversation: drawn text, so a drag on it moves the window;
+            // from the conversation's edge (after the buttons when they reach it) to short of the icons, the project
+            // dropped first, then the title
+            const float left = std::max(crumb.left, barLead);
+            const float right = std::min(crumb.right, bar.pos.x + bar.size.x - bar.rightInset - 112 - 12);
+            const float one = ImGui::CalcTextSize("0").x;
+            const auto fit = [&](const std::string& text, float room) {
+                const size_t n = static_cast<size_t>(std::max(0.0f, room / one));
+                return text.size() > n ? (n > 2 ? cut(text, n - 2) + ".." : std::string()) : text;
+            };
+            const std::string head = crumb.project + " / ";
+            std::string title = fit(crumb.title, right - left - head.size() * one);
+            const bool both = title.size() >= std::min<size_t>(crumb.title.size(), 12);
+            if (!both) {
+                title = fit(crumb.title, right - left);
+            }
+            const float y = bar.pos.y + (bar.size.y - ImGui::GetTextLineHeight()) * 0.5f;
+            float x = left;
+            barList->PushClipRect(ImVec2(left, bar.pos.y), ImVec2(std::max(left, right), bar.pos.y + bar.size.y), true);
+            if (both) {
+                barList->AddText(ImVec2(x, y), ImGui::GetColorU32(colors.subtext0), crumb.project.c_str());
+                x += ImGui::CalcTextSize(crumb.project.c_str()).x + ImGui::CalcTextSize(" ").x;
+                barList->AddText(ImVec2(x, y), ImGui::GetColorU32(colors.overlay0), "/");
+                x += ImGui::CalcTextSize("/ ").x;
+            }
+            barList->AddText(ImVec2(x, y), ImGui::GetColorU32(colors.text), title.c_str());
+            barList->PopClipRect();
         }
     }
     // cmd/ctrl+shift+p: quick actions

@@ -1377,27 +1377,20 @@ static Pads panelPads() {
     return {at.x <= own + 1 ? kPanelPad - own : kPanelPad, at.x + ImGui::GetWindowWidth() >= edge - own - 1 ? kPanelPad - own : kPanelPad};
 }
 
-// the project and the title, along the top of the conversation
+// the project and the title: where they go on the title bar, set here and drawn once the layout is known
 void App::threadHeader(const Thread& t) {
-    const Colors colors = themeColors();
-    const float avail = ImGui::GetContentRegionAvail().x;
     const Pads pads = panelPads();
-    ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + pads.left, ImGui::GetCursorPosY()));
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(colors.subtext0, "%s", std::filesystem::path(t.projectDir()).filename().string().c_str());
-    ImGui::SameLine();
-    ImGui::TextColored(colors.overlay0, "/");
-    ImGui::SameLine();
-    // as much of the title as fits
-    const float room = avail - pads.right - ImGui::GetCursorPosX();
-    const size_t fits = static_cast<size_t>(std::max(0.0f, room / ImGui::CalcTextSize("0").x));
-    const std::string title = t.title.empty() ? "New thread" : t.title;
-    ImGui::TextUnformatted(title.size() > fits ? (cut(title, fits > 2 ? fits - 2 : 0) + "..").c_str() : title.c_str());
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    crumb.on = true;
+    crumb.left = at.x + pads.left;
+    crumb.right = at.x + ImGui::GetContentRegionAvail().x - pads.right;
+    crumb.project = std::filesystem::path(t.projectDir()).filename().string();
+    crumb.title = t.title.empty() ? "New thread" : t.title;
 }
 
 void App::threadView(Thread& t) {
     threadHeader(t);
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y); // the text sits close under the header
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 10); // the first row under the title bar, a small fixed gap
     ImGui::BeginChild("thread-view", ImVec2(0, 0), ImGuiChildFlags_None,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     threadBody(t);

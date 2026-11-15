@@ -413,7 +413,12 @@ struct App : imshell::Delegate {
     void agentIconAt(const std::string& agentId, ImVec2 min, float size); // drawn only, no item
 
     void threadView(Thread& t);
-    void threadHeader(const Thread& t); // project and title above the conversation
+    void threadHeader(const Thread& t); // project and title for the title bar, over the conversation
+    struct {
+        bool on = false;
+        float left = 0, right = 0; // the conversation's text edges on screen
+        std::string project, title;
+    } crumb;
     void threadBody(Thread& t);
     void transcriptItem(Thread& t, Item& item, int index, float width);
     // onHunk (changes dialog): a button per hunk, called with its number and 's'tage, 'u'nstage or 'd'iscard
