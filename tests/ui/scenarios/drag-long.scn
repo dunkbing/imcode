@@ -1,0 +1,6 @@
+# the divider dragged over a long transcript (markdown, code, table, tool cards): the text must not jump or blink between frames
+DEV="new;wide;long"
+INPUT="120 drag 280 300 560 300"
+FRAMES=160
+SERIES=40
+INK=15

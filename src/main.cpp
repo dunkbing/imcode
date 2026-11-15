@@ -1062,6 +1062,33 @@ void App::frame() {
         trace::event(ImGui::IsMouseClicked(ImGuiMouseButton_Left) ? "click" : "right-click",
                      std::format("{:.0f},{:.0f} in {}", io.MousePos.x, io.MousePos.y, over ? over->Name : "-"));
     }
+    if (trace::enabled()) {
+        // a splitter drag: which one, how far, and the cadence of the frames drawn meanwhile
+        struct Drag {
+            bool on = false;
+            std::string name;
+            ImVec2 from;
+            float side = 0, tree = 0, worst = 0;
+            int frames = 0;
+        };
+        static Drag drag;
+        const ImGuiWindow* over = ImGui::GetCurrentContext()->HoveredWindow;
+        const std::string hovered = over ? over->Name : "";
+        if (!drag.on && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+            (hovered.find("handle") != std::string::npos || hovered.find("divider") != std::string::npos)) {
+            drag = {true, hovered, io.MousePos, sidebarWidth, files.treeWidth, 0, 0};
+        }
+        if (drag.on) {
+            ++drag.frames;
+            drag.worst = std::max(drag.worst, io.DeltaTime * 1000.0f);
+            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                trace::act("splitter-drag", std::format("{} moved={:.0f}px sidebar {:.0f}->{:.0f} tree {:.0f}->{:.0f} frames={} slowest={:.1f}ms",
+                                                         drag.name, io.MousePos.x - drag.from.x, drag.side, sidebarWidth,
+                                                         drag.tree, files.treeWidth, drag.frames, drag.worst));
+                drag.on = false;
+            }
+        }
+    }
     if (data.onboarded && (io.KeySuper || io.KeyCtrl) && io.KeyShift &&
         ImGui::IsKeyPressed(ImGuiKey_P, false)) {
         paletteOpen(true);
@@ -1091,7 +1118,7 @@ void App::frame() {
             data.threads[current]->send(all.substr(at + 6, all.find(';', at + 1) - at - 6),
                                         std::exchange(attachments, {}));
         }
-        if (frames == 40 && all.find(";wide;") != std::string::npos && current >= 0) {
+        for (int rep = 0, reps = all.find(";long;") != std::string::npos ? 25 : 1; frames == 40 && rep < reps && (all.find(";wide;") != std::string::npos || reps > 1) && current >= 0; ++rep) {
             // things that are wider than a panel: a code line, a table, a url, one long word, a tool card
             Thread& t = *data.threads[current];
             Item user;

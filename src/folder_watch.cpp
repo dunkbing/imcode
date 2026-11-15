@@ -60,6 +60,7 @@ namespace {
 
     // the first line a command prints, after reading it to its end
     std::string firstLine(Ssh::Session& session, const std::string& command) {
+        trace::Span traced_("watch.step", command.substr(0, 60), 100); // start to last line, when slow
         std::string failed;
         const auto channel = session.exec(command, nullptr, failed);
         std::string line, first;
@@ -73,6 +74,7 @@ namespace {
 
     // the helper running on a host, over ssh: put there once (named by its contents), then started
     std::unique_ptr<acp::Transport> openRemote(const std::string& host, const std::string& cwd) {
+        trace::event("watch.start", host + " " + cwd);
         Ssh::Error error;
         const auto session = Ssh::session(host, "", error);
         if (!session) {

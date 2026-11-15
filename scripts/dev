@@ -8,6 +8,7 @@
 #   AGENT (the agent command: default the echo agent; tests/ui/silent-agent never answers; $root is the repo), OPTIONS (models the agent offered before),
 #   DEV (IMCODE_DEV), INPUT (IMCODE_INPUT: "<frame> click X Y;<frame> type text;..."), FRAMES, WINDOW,
 #   STABLE (more frames: the shot taken that many frames later must match the first, so nothing shifts or animates on),
+#   INK (with SERIES: the least ink the transcript area has in any frame, so a blank frame fails),
 #   SERIES (the last n frames are kept: the divider must be one line, on the same pixel top to bottom, in every one, and what does not move must not change),
 #   FILES (made in the project folder), HOST (a project on that ssh host: needs IMCODE_DEV_HOST
 #   and links ~/.ssh into the scratch HOME, so it is skipped by check), @DIR@ in INPUT = the folder
@@ -20,7 +21,7 @@ golden=$root/tests/ui/golden
 run() { # <name> <out.png> [more frames]: one scenario
     name=$1
     out=$2
-    unset DEV INPUT FRAMES WINDOW FILES HOST OPTIONS AGENT STABLE SERIES
+    unset DEV INPUT FRAMES WINDOW FILES HOST OPTIONS AGENT STABLE SERIES INK
     . "$scn/$name.scn"
     FRAMES=$(( ${FRAMES:-40} + ${3:-0} ))
     work=$(mktemp -d "${TMPDIR:-/tmp}/imcode-dev.XXXXXX")
@@ -71,6 +72,14 @@ run() { # <name> <out.png> [more frames]: one scenario
                     return 1
                 fi
             done
+            if [ -n "${INK:-}" ]; then
+                # the transcript never blinks: some text is in the panel in every frame (a blank frame has ~0)
+                ink=$(magick "$f" -crop 560x350+$((w - 600))+120 +repage -colorspace Gray -threshold 35% -format '%[fx:int(mean*1000)]' info:)
+                if [ "$ink" -lt "$INK" ]; then
+                    echo "FAIL $name: the transcript is blank or nearly in $(basename "$f") (ink $ink < $INK)" >&2
+                    return 1
+                fi
+            fi
             [ -n "$first" ] || first=$1
             last=$1
             magick "$f" -crop 300x240+$((w - 300))+$((h - 300)) +repage "$work/corner.png"

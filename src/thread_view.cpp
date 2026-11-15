@@ -1397,6 +1397,7 @@ void App::threadHeader(const Thread& t) {
 
 void App::threadView(Thread& t) {
     threadHeader(t);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y); // the text sits close under the header
     ImGui::BeginChild("thread-view", ImVec2(0, 0), ImGuiChildFlags_None,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     threadBody(t);
@@ -1567,7 +1568,6 @@ void App::threadBody(Thread& t) {
                                                       ImGui::GetColorU32(colors.yellow), 2);
         }
     };
-    ImGui::Dummy(ImVec2(0, Theme::Spacing::M));
     ImGui::Indent(left);
     ImGui::PushTextWrapPos(left + width);
     // only the rows near the view are drawn; the others are a gap of their last measured height
@@ -1578,10 +1578,8 @@ void App::threadBody(Thread& t) {
     };
     static std::map<const Thread*, RowHeights> rowHeights;
     RowHeights& rows = rowHeights[&t];
-    if (rows.width != width) { // wrapping changed: every height is stale
-        rows.h.clear();
-        rows.width = width;
-    }
+    // a new width keeps the old heights as estimates: clearing them made every row a guess each frame of a drag
+    rows.width = width;
     rows.h.resize(t.items.size(), 0.0f);
     float guess = 120.0f;
     {

@@ -594,6 +594,7 @@ namespace Ssh {
         std::mutex cacheMutex;
         std::map<std::string, std::shared_ptr<Session>> cache;
         std::map<std::string, std::string> secrets;
+        std::map<std::string, std::shared_ptr<std::mutex>> connecting; // one connect per host at a time
     } // namespace
 
     Session::~Session() {
@@ -749,6 +750,7 @@ namespace Ssh {
     std::unique_ptr<acp::Transport> Session::exec(const std::string& command,
                                                   std::function<void(const std::string&)> onStderr,
                                                   std::string& error) {
+        trace::Span traced_("ssh.exec", command.substr(0, 60), 100); // opening the channel and starting the command, when slow
         LIBSSH2_CHANNEL* channel =
             retry(*impl, [&] { return libssh2_channel_open_session(impl->session); });
         if (!channel) {
@@ -805,6 +807,17 @@ namespace Ssh {
         trace::Span traced_("ssh.session", host, 5);
         std::string useSecret = secret;
         bool fromKeychain = false;
+        // threads that find no session at once (the tail, the watch, git) wait for one connect rather than each making their own
+        std::shared_ptr<std::mutex> turn;
+        {
+            std::lock_guard lock(cacheMutex);
+            auto& slot = connecting[host];
+            if (!slot) {
+                slot = std::make_shared<std::mutex>();
+            }
+            turn = slot;
+        }
+        std::lock_guard connectTurn(*turn);
         {
             std::lock_guard lock(cacheMutex);
             if (const auto it = cache.find(host); it != cache.end() && it->second->alive()) {

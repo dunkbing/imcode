@@ -67,7 +67,7 @@ namespace Round {
 } // namespace Round
 
 // the panels start this far above the main window's padding, so the conversation header sits close to the top; sidebar() adds it back inside
-constexpr float kPanelTopShift = 10;
+constexpr float kPanelTopShift = 16;
 
 struct App : imshell::Delegate {
     imshell::App* shell = nullptr; // the window: uploads textures
