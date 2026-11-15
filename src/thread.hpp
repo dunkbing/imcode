@@ -4,6 +4,8 @@
 #include "acp_host/client.hpp"
 #include "acp_host/host.hpp"
 #include "diff.hpp"
+#include "history.hpp"
+#include "trace.hpp"
 #include <map>
 #include <memory>
 #include <optional>
@@ -136,6 +138,10 @@ public:
     [[nodiscard]] bool starting() const;    // the agent is coming up: no session yet
     [[nodiscard]] std::string startStep() const; // which part of coming up it is on
     [[nodiscard]] bool reconnecting() const { return acp_ && keepHistory_ && replaying_; } // restarting under what is on screen
+    // a remote thread with nothing to show yet: its transcript is on its way
+    [[nodiscard]] bool loadingHistory() const { return items.empty() && !host.empty() && (tailOp_.isRunning() || connectOp_.isRunning() || (acp_ && replaying_)); }
+    [[nodiscard]] bool refreshing() const { return tailCached_ && tailOp_.isRunning(); } // the cache is shown, the host is asked
+    [[nodiscard]] double loadingMs() const { return tailAt_ > 0 ? trace::nowMs() - tailAt_ : 0; }
     [[nodiscard]] bool busy() const;       // a turn is running, or waits for the session
     [[nodiscard]] bool needsAnswer() const; // an unanswered permission or sign-in
     [[nodiscard]] bool newSession() const { // started new: its session id is not a saved conversation
@@ -187,7 +193,12 @@ private:
     // what a remote turn changed, measured off the ui thread
     AcpHost::AsyncOp<std::optional<Item>> changesOp_;
     AcpHost::AsyncOp<std::string> snapOp_; // the folder before a local turn, read off the ui thread
-    AcpHost::AsyncOp<std::string> tailOp_; // a remote thread's transcript end, read over ssh while the agent is not started yet
+    AcpHost::AsyncOp<History::Tail> tailOp_; // a remote thread's transcript end, read over ssh while the agent is not started yet
+    History::Tail tailHave_;                  // what the local cache held
+    bool tailCached_ = false;                 // the cache was shown: the answer only appends or replaces
+    size_t tailItems_ = 0;                    // how many items the tail made
+    double tailAt_ = 0;                       // when the read began (ms)
+    void showTail(const std::string& text, bool older);
     bool tailTried_ = false;
     std::string uploadText_;
     std::vector<std::string> uploadFiles_;

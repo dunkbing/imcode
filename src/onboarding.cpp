@@ -547,6 +547,14 @@ void App::settingsDraw() {
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Copies the end of this run's trace log (at most the last 1 MB) with its machine and build header. It holds what you did by name (switching threads, sending, panels), timings, errors, memory use and counts: never message text, file contents, tokens or paths beyond file names");
         }
+        ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
+        if (imshell::Button("Clear Remote Cache", imshell::ButtonVariant::Secondary)) {
+            History::clearCache();
+            ui::Toast("Remote conversation cache cleared", ui::Tone::Success, 2);
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Threads on another machine open from a copy of the end of their transcript kept in this app's data folder (remote-cache, at most 50 MB, oldest dropped first). It is the same text as the file on that machine, so it holds your messages and the agent's replies: clear it here, or delete the folder");
+        }
 #ifdef IMCODE_UPDATER
         ImGui::Dummy(ImVec2(0, Theme::Spacing::S));
         const bool available = imshell::updater::Available();

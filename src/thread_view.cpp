@@ -1,4 +1,5 @@
 #include "app.hpp"
+#include "imshell/spinner.hpp"
 #include "home.hpp"
 #include "remote.hpp"
 #include "ssh.hpp"
@@ -1386,7 +1387,7 @@ void App::threadHeader(const Thread& t) {
     crumb.right = at.x + ImGui::GetContentRegionAvail().x - pads.right;
     crumb.project = std::filesystem::path(t.projectDir()).filename().string();
     crumb.title = t.title.empty() ? "New thread" : t.title;
-    crumb.note = t.reconnecting() ? "Reconnecting..." : "";
+    crumb.note = t.reconnecting() ? "Reconnecting..." : t.refreshing() ? "Updating..." : "";
 }
 
 void App::threadView(Thread& t) {
@@ -1553,6 +1554,15 @@ void App::threadBody(Thread& t) {
                                            -(composerHeight - grown + Theme::Spacing::L + queued +
                                              ImGui::GetFrameHeightWithSpacing())));
     find.itemY.assign(t.items.size(), -1);
+    if (t.loadingHistory()) {
+        // a remote thread's transcript is on its way: say so at once, in the place the first rows will take
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        imshell::SpinnerOverlay(ImGui::GetWindowDrawList(), ImVec2(at.x + left + 7, at.y + ImGui::GetTextLineHeight() * 0.5f + 5), 7, 2,
+                                ImGui::GetColorU32(colors.overlay1));
+        ImGui::SetCursorPos(ImVec2(left + 24, ImGui::GetCursorPosY() + 2));
+        ImGui::TextColored(colors.overlay1, t.loadingMs() > 15000 ? "Still waiting for %s..." : "Loading conversation from %s...", t.host.c_str());
+        imshell::requestFrames(std::chrono::milliseconds(100));
+    }
     // the hit being shown: a bar at its left
     const auto mark = [&](size_t i) {
         if (find.open && find.at < static_cast<int>(find.hits.size()) && find.hits[find.at] == i) {

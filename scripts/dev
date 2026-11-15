@@ -10,6 +10,7 @@
 #   STABLE (more frames: the shot taken that many frames later must match the first, so nothing shifts or animates on),
 #   DIVIDER (left, or right for the files panel's: where the series check looks), INK (with SERIES: the least ink the transcript area has in any frame, so a blank frame fails),
 #   SERIES (the last n frames are kept: the divider must be one line, on the same pixel top to bottom, in every one, and what does not move must not change),
+#   THREADS (saved thread rows, json) with MACHINE (the working machine) and REMOTE_MS (the host it answers after that long, with nothing),
 #   SETUP (a shell snippet run in the project folder first), FILES (made in the project folder), HOST (a project on that ssh host: needs IMCODE_DEV_HOST
 #   and links ~/.ssh into the scratch HOME, so it is skipped by check), @DIR@ in INPUT = the folder
 set -eu
@@ -21,7 +22,7 @@ golden=$root/tests/ui/golden
 run() { # <name> <out.png> [more frames]: one scenario
     name=$1
     out=$2
-    unset DEV INPUT FRAMES WINDOW FILES HOST OPTIONS AGENT STABLE SERIES INK SETUP DIVIDER
+    unset DEV INPUT FRAMES WINDOW FILES HOST OPTIONS AGENT STABLE SERIES INK SETUP DIVIDER THREADS MACHINE REMOTE_MS
     . "$scn/$name.scn"
     FRAMES=$(( ${FRAMES:-40} + ${3:-0} ))
     work=$(mktemp -d "${TMPDIR:-/tmp}/imcode-dev.XXXXXX")
@@ -42,9 +43,9 @@ run() { # <name> <out.png> [more frames]: one scenario
     [ -n "$host" ] && cwd=${IMCODE_DEV_CWD:-/tmp}
     opts=${OPTIONS:-}
     [ -n "$opts" ] || opts="{}"
-    echo '{"onboarded":true,"options":'"$opts"',"agents":[],"machines":[],"machine":"","projects":[{"host":"'"$host"'","cwd":"'"$cwd"'"}],"threads":[],"last":""}' > "$work/data/threads.json"
+    echo '{"onboarded":true,"options":'"$opts"',"agents":[],"machines":['"${MACHINE:+\"$MACHINE\"}"'],"machine":"'"${MACHINE:-}"'","projects":[{"host":"'"$host"'","cwd":"'"$cwd"'"}],"threads":['"${THREADS:-}"'],"last":""}' > "$work/data/threads.json"
     input=$(printf '%s' "${INPUT:-}" | sed "s#@DIR@#$work/scn/p#g")
-    HOME=$work/home IMCODE_DATA_DIR=$work/data IMCODE_AGENT_CMD=${AGENT:-$build/external/acp-cpp/acp-echo-agent} \
+    HOME=$work/home IMCODE_DATA_DIR=$work/data IMCODE_DEV_REMOTE_MS=${REMOTE_MS:-} IMCODE_AGENT_CMD=${AGENT:-$build/external/acp-cpp/acp-echo-agent} \
         IMCODE_WINDOW=${WINDOW:-1300x700} IMCODE_SHOT=$work/shot.ppm IMCODE_SHOT_FRAMES=${FRAMES:-40} \
         IMCODE_DEV=${DEV:-new} IMCODE_INPUT=$input IMCODE_SHOT_SERIES=${SERIES:-0} "$build/imcode" > /dev/null 2>&1 || true
     [ -s "$work/shot.ppm" ] || { echo "$name: no screenshot (is $build/imcode built?)" >&2; return 1; }

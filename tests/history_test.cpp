@@ -58,6 +58,95 @@ int main() {
         std::printf("FAILED: remote parse, %zu found\n", fromHost.size());
         return 1;
     }
+    // a remote transcript cached here: the first read fetches, the next asks only for what grew (a local shell
+    // stands for the host, with a pause like a slow link)
+    {
+        const fs::path far = fs::temp_directory_path() / "imcode-history-far";
+        const fs::path cache = fs::temp_directory_path() / "imcode-history-cache";
+        fs::remove_all(far);
+        fs::remove_all(cache);
+        fs::create_directories(far / ".claude/projects/-srv-app");
+        const fs::path file = far / ".claude/projects/-srv-app/s9.jsonl";
+        const auto line = [](const char* who, const char* text) {
+            return std::string(R"({"type":"user","message":{"role":"user","content":")") + text + R"("}})" + (who ? "\n" : "\n");
+        };
+        std::ofstream(file, std::ios::binary) << line("u", "first") << line("u", "second");
+        int asked = 0;
+        History::setCacheDir(cache);
+        History::setRunner([&](const std::string&, const std::string& script) {
+            ++asked;
+            std::string quote = "'";
+            for (const char c : script) {
+                quote += c == '\'' ? std::string("'\\''") : std::string(1, c);
+            }
+            FILE* p = popen(("sleep 0.2; HOME='" + far.string() + "' sh -c " + quote + "' 2>/dev/null").c_str(), "r");
+            std::string out, row;
+            char buf[4096];
+            while (p && fgets(buf, sizeof buf, p)) {
+                row += buf;
+                if (row.ends_with('\n')) { // as ssh's readLine gives it: a newline after every line
+                    out += row;
+                    row.clear();
+                }
+            }
+            out += row.empty() ? "" : row + "\n";
+            if (p) {
+                pclose(p);
+            }
+            return out;
+        });
+        if (History::cachedTail("h", "claude-code", "/srv/app", "s9").ok) {
+            std::printf("FAILED: a cache before any read\n");
+            return 1;
+        }
+        const auto first = History::refreshTail("h", "claude-code", "/srv/app", "s9", {}, 4096);
+        const auto hit = History::cachedTail("h", "claude-code", "/srv/app", "s9");
+        if (!first.ok || !first.replaced || History::parse("claude-code", first.text).size() != 2 || !hit.ok || hit.text != first.text ||
+            hit.size != first.size) {
+            std::printf("FAILED: first read ok=%d replaced=%d cache=%d\n", first.ok, first.replaced, hit.ok);
+            return 1;
+        }
+        std::ofstream(file, std::ios::binary | std::ios::app) << line("u", "third") << R"({"type":"user","mess)"; // and a line half written
+        const auto more = History::refreshTail("h", "claude-code", "/srv/app", "s9", hit, 4096);
+        const auto entries = History::parse("claude-code", more.delta);
+        if (!more.ok || more.replaced || entries.size() != 1 || entries[0].text != "third" || more.text != hit.text + more.delta ||
+            more.size != static_cast<long long>(more.text.size()) + (hit.size - static_cast<long long>(hit.text.size()))) {
+            std::printf("FAILED: append replaced=%d delta=%zu entries=%zu size=%lld\n", more.replaced, more.delta.size(), entries.size(),
+                        more.size);
+            return 1;
+        }
+        // the unfinished line is finished: only that line comes
+        std::ofstream(file, std::ios::binary | std::ios::trunc) << line("u", "first") << line("u", "second") << line("u", "third") << line("u", "fourth");
+        const auto done = History::refreshTail("h", "claude-code", "/srv/app", "s9", more, 4096);
+        if (done.replaced || History::parse("claude-code", done.delta).size() != 1) {
+            std::printf("FAILED: finishing a line gave %zu bytes, replaced=%d\n", done.delta.size(), done.replaced);
+            return 1;
+        }
+        // smaller than what was cached: read again from the end
+        std::ofstream(file, std::ios::binary | std::ios::trunc) << line("u", "other");
+        const auto fresh = History::refreshTail("h", "claude-code", "/srv/app", "s9", done, 4096);
+        if (!fresh.replaced || History::parse("claude-code", fresh.text).size() != 1) {
+            std::printf("FAILED: a shorter file was not replaced\n");
+            return 1;
+        }
+        // the limit: old entries go first
+        for (int i = 0; i < 3; ++i) {
+            std::ofstream(cache / ("old" + std::to_string(i) + ".tail")) << std::string(20 * 1024 * 1024, 'x');
+        }
+        History::refreshTail("h", "claude-code", "/srv/app", "s9", {}, 4096);
+        std::uintmax_t total = 0;
+        for (const auto& e : fs::directory_iterator(cache)) {
+            total += e.file_size();
+        }
+        if (total > 50ull * 1024 * 1024 || !History::cachedTail("h", "claude-code", "/srv/app", "s9").ok) {
+            std::printf("FAILED: the cache holds %ju bytes\n", total);
+            return 1;
+        }
+        History::setRunner(nullptr);
+        History::setCacheDir({});
+        fs::remove_all(far);
+        fs::remove_all(cache);
+    }
     // a conversation read as its cli writes it: the cwd's folder named the way claude does
     std::string folder = cwd;
     for (char& c : folder) {

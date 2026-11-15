@@ -72,6 +72,9 @@ void App::sidebar() {
         if (rowButton("##thread", i == current, line * 3 + 14, 0, Round::Row, Theme::Spacing::L)) {
             open = i;
         }
+        if (!t.host.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+            History::prefetch(t.host, t.agentId, t.cwd, t.sessionId); // a short dwell: the click finds it warm
+        }
         if (ImGui::BeginPopupContextItem("menu")) {
             if (ImGui::MenuItem("Rename")) {
                 renaming = i;

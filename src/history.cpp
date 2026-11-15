@@ -5,6 +5,13 @@
 #include "text.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <condition_variable>
+#include <ctime>
+#include <deque>
+#include <format>
+#include <iterator>
+#include <thread>
 #include <cctype>
 #include <chrono>
 #include <cstdlib>
@@ -406,17 +413,213 @@ namespace History {
         return found;
     }
 
-    std::string remoteTail(const std::string& host, const std::string& agentId, const std::string& cwd, const std::string& sessionId,
-                           size_t bytes) {
+    namespace {
+        std::function<std::string(const std::string&, const std::string&)> runner; // tests: a local shell instead of ssh
+        fs::path cacheDir;
+        std::atomic<int> foreground{0}; // fetches the user is waiting for: the prefetch queue steps aside
+        constexpr std::uintmax_t kCacheLimit = 50ull * 1024 * 1024;
+
+        std::string runRemote(const std::string& host, const std::string& script) {
+            return runner ? runner(host, script) : runOn(host, script);
+        }
+
+        fs::path cacheFile(const std::string& host, const std::string& session) {
+            std::uint64_t hash = 1469598103934665603ULL;
+            for (const unsigned char c : host + "\n" + session) {
+                hash = (hash ^ c) * 1099511628211ULL;
+            }
+            return cacheDir / (std::format("{:016x}", hash) + ".tail");
+        }
+
+        // where the session's file is on the host; empty when this agent is not read this way
+        std::string remoteFile(const std::string& agentId, const std::string& cwd, const std::string& session) {
+            std::string folder = cwd;
+            for (char& c : folder) {
+                c = std::isalnum(static_cast<unsigned char>(c)) ? c : '-';
+            }
+            const bool safe = std::ranges::all_of(session, [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '-'; });
+            if (agentId != "claude-code" || session.empty() || !safe) {
+                return {};
+            }
+            return "$HOME/.claude/projects/" + folder + "/" + session + ".jsonl";
+        }
+
+        // the cache stays under its limit: the least recently used files go first
+        void trimCache() {
+            std::error_code ec;
+            std::vector<std::pair<fs::file_time_type, fs::path>> files;
+            std::uintmax_t total = 0;
+            for (const auto& e : fs::directory_iterator(cacheDir, ec)) {
+                if (e.is_regular_file(ec)) {
+                    files.emplace_back(e.last_write_time(ec), e.path());
+                    total += e.file_size(ec);
+                }
+            }
+            std::ranges::sort(files);
+            for (size_t i = 0; total > kCacheLimit && i < files.size(); ++i) {
+                total -= fs::file_size(files[i].second, ec);
+                fs::remove(files[i].second, ec);
+            }
+        }
+
+        void store(const std::string& host, const std::string& session, const Tail& tail) {
+            if (cacheDir.empty() || tail.text.empty()) {
+                return;
+            }
+            std::error_code ec;
+            fs::create_directories(cacheDir, ec);
+            const fs::path file = cacheFile(host, session);
+            const fs::path temp = file.string() + ".tmp";
+            {
+                std::ofstream out(temp, std::ios::binary | std::ios::trunc);
+                out << "imcode-tail 1 " << tail.size << " " << std::time(nullptr) << "\n" << tail.text;
+            }
+            fs::rename(temp, file, ec);
+            trimCache();
+        }
+    } // namespace
+
+    void setCacheDir(const std::filesystem::path& dir) {
+        cacheDir = dir;
+    }
+
+    void clearCache() {
+        std::error_code ec;
+        if (!cacheDir.empty()) {
+            fs::remove_all(cacheDir, ec);
+        }
+    }
+
+    void setRunner(std::function<std::string(const std::string&, const std::string&)> run) {
+        runner = std::move(run);
+    }
+
+    Tail cachedTail(const std::string& host, const std::string& agentId, const std::string& cwd, const std::string& session) {
+        Tail tail;
+        if (cacheDir.empty() || remoteFile(agentId, cwd, session).empty()) {
+            return tail;
+        }
+        const fs::path file = cacheFile(host, session);
+        std::ifstream in(file, std::ios::binary);
+        std::string magic, version;
+        long long size = -1, wrote = 0;
+        if (!(in >> magic >> version >> size >> wrote) || magic != "imcode-tail" || version != "1" || in.get() != '\n') {
+            return tail;
+        }
+        tail.text.assign(std::istreambuf_iterator<char>(in), {});
+        if (tail.text.empty() || tail.text.back() != '\n') {
+            tail.text.clear();
+            return tail;
+        }
+        tail.size = size;
+        tail.ageSeconds = std::max(0LL, static_cast<long long>(std::time(nullptr)) - wrote);
+        tail.ok = true;
+        std::error_code ec;
+        fs::last_write_time(file, fs::file_time_type::clock::now(), ec); // used lately
+        return tail;
+    }
+
+    Tail refreshTail(const std::string& host, const std::string& agentId, const std::string& cwd, const std::string& session,
+                     const Tail& have, size_t bytes, bool background) {
         trace::Span traced_("history.remote-tail", host, 0);
-        std::string folder = cwd;
-        for (char& c : folder) {
-            c = std::isalnum(static_cast<unsigned char>(c)) ? c : '-';
+        Tail out;
+        const std::string path = remoteFile(agentId, cwd, session);
+        if (path.empty()) {
+            return out;
         }
-        const bool safe = std::ranges::all_of(sessionId, [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '-'; });
-        if (agentId != "claude-code" || sessionId.empty() || !safe) {
-            return {};
+        struct Waiting {
+            bool on;
+            explicit Waiting(bool b) : on(!b) { foreground += on; }
+            ~Waiting() { foreground -= on; }
+        } waiting(background);
+        const long long off = have.ok ? have.size : -1;
+        // the size first; then what grew since `off` (when it fits), else the end of the file
+        const std::string script = "f=\"" + path + "\"; s=$(stat -c %s \"$f\" 2>/dev/null || stat -f %z \"$f\" 2>/dev/null) || exit 0; echo \"$s\";"
+                                   " O=" + std::to_string(off) + "; N=" + std::to_string(bytes) + ";"
+                                   " if [ \"$O\" -ge 0 ] && [ \"$s\" -ge \"$O\" ] && [ $((s-O)) -le \"$N\" ]; then"
+                                   " [ \"$s\" -gt \"$O\" ] && tail -c +$((O+1)) \"$f\"; else tail -c \"$N\" \"$f\"; fi";
+        const std::string reply = runRemote(host, script);
+        const size_t nl = reply.find('\n');
+        if (nl == std::string::npos) {
+            return out;
         }
-        return runOn(host, "tail -c " + std::to_string(bytes) + " \"$HOME/.claude/projects/" + folder + "/" + sessionId + ".jsonl\" 2>/dev/null");
+        const long long size = std::atoll(reply.c_str());
+        std::string body = reply.substr(nl + 1);
+        out.replaced = off < 0 || size < off || size - off > static_cast<long long>(bytes);
+        // runOn ends every line with a newline: one more than the file has when its last line is unfinished
+        const long long expected = out.replaced ? std::min<long long>(size, static_cast<long long>(bytes)) : size - off;
+        if (static_cast<long long>(body.size()) == expected + 1) {
+            body.pop_back();
+        }
+        // only whole lines are kept: the offset stops before an unfinished one, which the next read gets whole
+        const size_t last = body.rfind('\n');
+        const size_t keep = last == std::string::npos ? 0 : last + 1;
+        const long long partial = static_cast<long long>(body.size() - keep);
+        body.resize(keep);
+        out.size = size - partial;
+        out.ok = true;
+        out.delta = out.replaced ? std::string() : body;
+        out.text = out.replaced ? std::move(body) : have.text + body;
+        if (out.text.size() > bytes) { // the front goes, from a line start
+            const size_t from = out.text.find('\n', out.text.size() - bytes);
+            out.text = from == std::string::npos ? std::string() : out.text.substr(from + 1);
+        }
+        store(host, session, out);
+        return out;
+    }
+
+    namespace {
+        struct Job {
+            std::string host, agentId, cwd, session;
+        };
+        struct Queue {
+            std::mutex mutex;
+            std::condition_variable wake;
+            std::deque<Job> jobs;
+            std::map<std::string, std::chrono::steady_clock::time_point> asked; // one try per session in a while
+            bool running = false;
+        };
+
+        void work(Queue* q) {
+            for (;;) {
+                Job job;
+                {
+                    std::unique_lock lock(q->mutex);
+                    q->wake.wait(lock, [&] { return !q->jobs.empty(); });
+                    job = std::move(q->jobs.front());
+                    q->jobs.pop_front();
+                }
+                while (foreground > 0) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
+                const Tail have = cachedTail(job.host, job.agentId, job.cwd, job.session);
+                const double from = trace::nowMs();
+                const Tail got = refreshTail(job.host, job.agentId, job.cwd, job.session, have, 512 * 1024, true);
+                trace::event("history.prefetch", std::format("{} {} ok={} {} bytes {:.0f} ms", job.host, job.session.substr(0, 8), got.ok,
+                                                              got.text.size(), trace::nowMs() - from));
+            }
+        }
+    } // namespace
+
+    void prefetch(const std::string& host, const std::string& agentId, const std::string& cwd, const std::string& session) {
+        if (cacheDir.empty() || remoteFile(agentId, cwd, session).empty()) {
+            return;
+        }
+        static Queue* q = new Queue; // lives to the end of the process: its thread is detached
+        const std::string key = host + "\n" + session;
+        const auto now = std::chrono::steady_clock::now();
+        {
+            const std::lock_guard lock(q->mutex);
+            auto [it, fresh] = q->asked.try_emplace(key, now);
+            if (!fresh && now - it->second < std::chrono::seconds(60)) {
+                return;
+            }
+            it->second = now;
+            q->jobs.push_back({host, agentId, cwd, session});
+            if (!std::exchange(q->running, true)) {
+                std::thread(work, q).detach();
+            }
+        }
+        q->wake.notify_one();
     }
 } // namespace History

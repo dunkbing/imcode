@@ -1,5 +1,7 @@
 #pragma once
 
+#include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -34,10 +36,27 @@ namespace History {
     // bytes a call (a line longer than that is skipped)
     // the entries in transcript text (whole lines)
     std::vector<Entry> parse(const std::string& agentId, const std::string& lines);
-    // the last `bytes` of a session's transcript on a host, over ssh (blocks; empty when there is none).
-    // shortcut: Claude Code only, Codex rollouts sit under dated folders
-    std::string remoteTail(const std::string& host, const std::string& agentId, const std::string& cwd, const std::string& sessionId,
-                           size_t bytes);
+    // a remote session's transcript end, kept on this machine (the same text as the file there) so a thread
+    // opens at once and is brought up to date over ssh afterwards. shortcut: Claude Code only, Codex
+    // rollouts sit under dated folders
+    struct Tail {
+        std::string text;      // whole lines: the end of the file
+        long long size = -1;   // the offset in the remote file where `text` ends
+        std::string delta;     // refresh: what was appended to the cached text (empty when `replaced`)
+        bool replaced = false; // refresh: `text` is a fresh read, not the cache plus `delta`
+        bool ok = false;       // there is a cache entry / the host answered
+        long long ageSeconds = -1;
+    };
+    void setCacheDir(const std::filesystem::path& dir); // unset: nothing is cached
+    void clearCache();                                   // deletes what was kept
+    void setRunner(std::function<std::string(const std::string& host, const std::string& script)> run); // tests: no ssh
+    Tail cachedTail(const std::string& host, const std::string& agentId, const std::string& cwd, const std::string& sessionId);
+    // asks the host for the file's size, then only the bytes after `have.size` (or the last `bytes` when it shrank
+    // or grew past that), and writes the cache (50 MB in all, least recently used out). blocks
+    Tail refreshTail(const std::string& host, const std::string& agentId, const std::string& cwd, const std::string& sessionId,
+                     const Tail& have, size_t bytes, bool background = false);
+    // the same later, one at a time on a thread of its own, after any fetch the user waits for
+    void prefetch(const std::string& host, const std::string& agentId, const std::string& cwd, const std::string& sessionId);
     inline constexpr size_t maxRead = 2 * 1024 * 1024;
     std::vector<Entry> readFrom(const std::string& agentId, const std::string& path, size_t& offset);
     // seconds since the file was last written; a large number when it is not there

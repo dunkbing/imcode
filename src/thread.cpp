@@ -268,8 +268,44 @@ void Thread::open() {
         // a remote thread: the end of its transcript is read over ssh and shown at once, then the agent resumes
         // without replaying it (that takes seconds per hundred messages, over the same pipe)
         tailTried_ = true;
-        tailOp_.start([host = host, agent = agentId, cwd = cwd, id = sessionId] { return History::remoteTail(host, agent, cwd, id, kRemoteTail); });
+        tailAt_ = trace::nowMs();
+        tailItems_ = 0;
+        // the cache first: what was read last time is on screen in this frame, then brought up to date
+        tailHave_ = History::cachedTail(host, agentId, cwd, sessionId);
+        tailCached_ = false;
+        if (tailHave_.ok) {
+            const double from = trace::nowMs();
+            showTail(tailHave_.text, tailHave_.text.size() >= kRemoteTail);
+            tailCached_ = !items.empty();
+            trace::event("thread.tail-cache", std::format("hit age={}s {} bytes {} items parsed in {:.0f} ms", tailHave_.ageSeconds,
+                                                         tailHave_.text.size(), items.size(), trace::nowMs() - from));
+        } else {
+            trace::event("thread.tail-cache", "miss");
+        }
+        tailOp_.start([host = host, agent = agentId, cwd = cwd, id = sessionId, have = tailHave_] {
+            return History::refreshTail(host, agent, cwd, id, have, kRemoteTail);
+        });
     }
+}
+
+void Thread::showTail(const std::string& text, bool older) {
+    const auto entries = History::parse(agentId, text);
+    if (entries.empty()) {
+        return;
+    }
+    if (older) {
+        add({.kind = Item::Kind::Info, .text = "Earlier messages are not shown."});
+    }
+    for (const auto& e : entries) {
+        add({.kind = e.kind == History::Entry::Kind::User        ? Item::Kind::User
+                     : e.kind == History::Entry::Kind::Assistant ? Item::Kind::Assistant
+                                                                 : Item::Kind::Tool,
+             .text = e.kind == History::Entry::Kind::Tool ? "" : e.text,
+             .toolTitle = e.kind == History::Entry::Kind::Tool ? e.text : "",
+             .toolStatus = "completed"});
+    }
+    tailItems_ = items.size();
+    keepHistory_ = true; // on screen: the agent resumes the session without replaying it
 }
 
 bool Thread::writtenElsewhere() const {
@@ -747,23 +783,25 @@ void Thread::poll() {
         send(text, files);
         uploaded_ = {};
     });
-    tailOp_.check([this](std::string text) {
-        const auto entries = History::parse(agentId, text);
-        if (!acp_ && items.empty() && !entries.empty()) {
-            if (text.size() >= kRemoteTail) {
-                add({.kind = Item::Kind::Info, .text = "Earlier messages are not shown."});
+    tailOp_.check([this](History::Tail got) {
+        const bool alone = !acp_ && items.size() == tailItems_; // nothing was said meanwhile: the tail may change what is shown
+        const bool cached = std::exchange(tailCached_, false);
+        if (got.ok && alone) {
+            if (cached && !got.replaced) {
+                if (!got.delta.empty()) {
+                    showTail(got.delta, false);
+                }
+            } else {
+                if (cached) {
+                    items.clear();
+                    ++revision_;
+                }
+                showTail(got.text, got.text.size() >= kRemoteTail);
             }
-            for (const auto& e : entries) {
-                add({.kind = e.kind == History::Entry::Kind::User        ? Item::Kind::User
-                             : e.kind == History::Entry::Kind::Assistant ? Item::Kind::Assistant
-                                                                         : Item::Kind::Tool,
-                     .text = e.kind == History::Entry::Kind::Tool ? "" : e.text,
-                     .toolTitle = e.kind == History::Entry::Kind::Tool ? e.text : "",
-                     .toolStatus = "completed"});
-            }
-            keepHistory_ = true; // on screen: the agent resumes the session without replaying it
-            trace::event("thread.remote-tail", std::format("{} entries, {} bytes", entries.size(), text.size()));
         }
+        trace::event("thread.tail-refresh", std::format("{} {} ms {} bytes new, {} items", cached ? (got.replaced ? "cache replaced" : "cache + delta") : "no cache",
+                                                       static_cast<long>(trace::nowMs() - tailAt_), got.replaced ? got.text.size() : got.delta.size(),
+                                                       items.size()));
         ensureStarted();
     });
     connectOp_.check([this](std::string error) {

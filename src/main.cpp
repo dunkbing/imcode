@@ -19,6 +19,7 @@
 #include "imshell/notifications.hpp"
 #include "imshell/updater.hpp"
 #include <algorithm>
+#include <thread>
 #include <tuple>
 #include <chrono>
 #include <cctype>
@@ -185,6 +186,13 @@ void App::setup() {
     const char* dataDir = std::getenv("IMCODE_DATA_DIR");
     const std::filesystem::path dir = dataDir ? dataDir : imshell::DataDir("imcode");
     AcpRegistry::setInstallRoot(dir / "agents");
+    History::setCacheDir(dir / "remote-cache");
+    if (const char* ms = std::getenv("IMCODE_DEV_REMOTE_MS"); ms && *ms) { // ui checks: a host that answers nothing, slowly
+        History::setRunner([wait = std::atoi(ms)](const std::string&, const std::string&) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(wait));
+            return std::string();
+        });
+    }
     trace::open(dir);
     trace::event("start", std::format("data={}", dir.string()));
     traceEnvironment(dir);
@@ -782,6 +790,24 @@ void App::frame() {
     filesPoll();
     watchPoll();
     attachPoll();
+    // a host the app is connected to: its newest threads are read quietly, one at a time, so a click finds them warm
+    {
+        static std::set<std::string> warmed;
+        for (const auto& t : data.threads) {
+            if (!t->host.empty() && Ssh::connected(t->host) && warmed.insert(t->host).second) {
+                std::vector<const Thread*> mine;
+                for (const auto& o : data.threads) {
+                    if (o->host == t->host && !o->title.empty() && !o->archived) {
+                        mine.push_back(o.get());
+                    }
+                }
+                std::ranges::sort(mine, [](const Thread* a, const Thread* b) { return a->updatedAt > b->updatedAt; });
+                for (size_t k = 0; k < std::min<size_t>(5, mine.size()); ++k) {
+                    History::prefetch(mine[k]->host, mine[k]->agentId, mine[k]->cwd, mine[k]->sessionId);
+                }
+            }
+        }
+    }
 
     const Colors colors = themeColors();
     // without a window the bar is a plain strip, with room where the os buttons would be

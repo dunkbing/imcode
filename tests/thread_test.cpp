@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <thread>
 
 int main(int argc, char** argv) {
@@ -99,6 +100,37 @@ int main(int argc, char** argv) {
             std::printf("  %d: %s\n", static_cast<int>(item.kind), item.text.c_str());
         }
         return 1;
+    }
+    // a remote thread opens from its cache in the first frame, then the slow host's answer is appended
+    {
+        const auto cache = std::filesystem::temp_directory_path() / "imcode-thread-cache";
+        std::filesystem::remove_all(cache);
+        History::setCacheDir(cache);
+        const auto row = [](const char* text) { return std::string(R"({"type":"user","message":{"role":"user","content":")") + text + "\"}}\n"; };
+        const std::string alpha = row("alpha"), beta = row("beta");
+        History::setRunner([&](const std::string&, const std::string&) { return std::to_string(alpha.size()) + "\n" + alpha; });
+        History::refreshTail("far", "claude-code", "/srv/app", "s7", {}, 4096); // an earlier visit
+        History::setRunner([&](const std::string&, const std::string&) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(400)); // a slow link
+            return std::to_string(alpha.size() + beta.size()) + "\n" + beta;
+        });
+        Thread r("/srv/app", "claude-code", "far");
+        r.sessionId = "s7";
+        r.open();
+        const bool first = r.items.size() == 1 && r.items[0].text == "alpha" && r.refreshing(); // before any poll
+        const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (r.items.size() < 2 && std::chrono::steady_clock::now() < until) {
+            r.poll();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        const bool then = r.items.size() >= 2 && r.items[1].text == "beta";
+        History::setRunner(nullptr);
+        History::setCacheDir({});
+        std::filesystem::remove_all(cache);
+        if (!first || !then) {
+            std::printf("FAILED: remote cache first=%d then=%d items=%zu\n", first, then, r.items.size());
+            return 1;
+        }
     }
     std::printf("ok\n");
     return 0;

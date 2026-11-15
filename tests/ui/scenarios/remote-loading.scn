@@ -1,0 +1,7 @@
+# a remote thread with no cache yet: a loading line at once, never a blank panel
+DEV="none"
+MACHINE="fake"
+THREADS='{"cwd":"/srv/app","agent":"claude-code","host":"fake","title":"Fix the login bug","session":"abc123","updated":1}'
+REMOTE_MS=2500
+INPUT="12 click 140 125"
+FRAMES=45
