@@ -1611,6 +1611,10 @@ void App::threadBody(Thread& t) {
     const float viewTop = ImGui::GetScrollY(), gapSpacing = ImGui::GetStyle().ItemSpacing.y;
     const float drawFrom = viewTop - overdraw, drawTo = viewTop + ImGui::GetWindowHeight() + overdraw;
     float shiftAbove = 0; // rows wholly above the view changed height: the view moves by it to stay on its text
+    // not at the end: rows above that changed height move the rows after them in this frame too (the scroll
+    // catches up next frame), so the text under the eye stays still while the width changes
+    const bool anchoring = !find.open && !find.jump && !t.replaying() && shownRevision >= 0 &&
+                           ImGui::GetScrollY() < ImGui::GetScrollMaxY() - 2;
     // by index: answering a sign-in can add an item and move the rest
     for (size_t i = 0; i < t.items.size(); ++i) {
         // finished tool calls in a row, with nothing to look at (no edits), fold into one line
@@ -1633,6 +1637,9 @@ void App::threadBody(Thread& t) {
             const float h = ImGui::GetCursorPosY() - y0;
             if (y0 + was <= viewTop) {
                 shiftAbove += h - was;
+                if (anchoring) {
+                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - (h - was));
+                }
             }
             rows.h[i] = h;
         };
