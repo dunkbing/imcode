@@ -316,9 +316,13 @@ void App::changesDraw(Changes& c, bool docked) {
     };
 
     if (c.listOp.isRunning() && c.list.empty()) {
+        ImGui::Indent(8); // clear of the panel edge
         ui::Progress(-1, "Reading the changes");
+        ImGui::Unindent(8);
     } else if (c.list.empty()) {
+        ImGui::Indent(8);
         ImGui::TextColored(colors.overlay1, c.from.empty() ? "Nothing has changed since the last commit." : "Nothing changed.");
+        ImGui::Unindent(8);
         commitBlock();
     } else if (imshell::BeginResizable("changes", {.axis = docked ? imshell::Axis::Vertical : imshell::Axis::Horizontal,
                                                    .size = ImVec2(0, docked ? -(barH > 0 ? barH + ImGui::GetStyle().ItemSpacing.y : 0) : 0),

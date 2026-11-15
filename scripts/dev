@@ -8,9 +8,9 @@
 #   AGENT (the agent command: default the echo agent; tests/ui/silent-agent never answers; $root is the repo), OPTIONS (models the agent offered before),
 #   DEV (IMCODE_DEV), INPUT (IMCODE_INPUT: "<frame> click X Y;<frame> type text;..."), FRAMES, WINDOW,
 #   STABLE (more frames: the shot taken that many frames later must match the first, so nothing shifts or animates on),
-#   INK (with SERIES: the least ink the transcript area has in any frame, so a blank frame fails),
+#   DIVIDER (left, or right for the files panel's: where the series check looks), INK (with SERIES: the least ink the transcript area has in any frame, so a blank frame fails),
 #   SERIES (the last n frames are kept: the divider must be one line, on the same pixel top to bottom, in every one, and what does not move must not change),
-#   FILES (made in the project folder), HOST (a project on that ssh host: needs IMCODE_DEV_HOST
+#   SETUP (a shell snippet run in the project folder first), FILES (made in the project folder), HOST (a project on that ssh host: needs IMCODE_DEV_HOST
 #   and links ~/.ssh into the scratch HOME, so it is skipped by check), @DIR@ in INPUT = the folder
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -21,7 +21,7 @@ golden=$root/tests/ui/golden
 run() { # <name> <out.png> [more frames]: one scenario
     name=$1
     out=$2
-    unset DEV INPUT FRAMES WINDOW FILES HOST OPTIONS AGENT STABLE SERIES INK
+    unset DEV INPUT FRAMES WINDOW FILES HOST OPTIONS AGENT STABLE SERIES INK SETUP DIVIDER
     . "$scn/$name.scn"
     FRAMES=$(( ${FRAMES:-40} + ${3:-0} ))
     work=$(mktemp -d "${TMPDIR:-/tmp}/imcode-dev.XXXXXX")
@@ -31,6 +31,8 @@ run() { # <name> <out.png> [more frames]: one scenario
         mkdir -p "$work/scn/p/$(dirname "$f")"
         echo "$f" > "$work/scn/p/$f"
     done
+    # SETUP: a shell snippet run in the project folder first (a git repo with a change, say)
+    [ -z "${SETUP:-}" ] || (cd "$work/scn/p" && HOME=$work/home sh -c "$SETUP" > /dev/null 2>&1)
     host=""
     if [ -n "${HOST:-}" ]; then
         host=${IMCODE_DEV_HOST:?"this scenario needs IMCODE_DEV_HOST=<user@host>"}
@@ -53,10 +55,13 @@ run() { # <name> <out.png> [more frames]: one scenario
         w=$(magick identify -format %w "$work/shot.ppm")
         h=$(magick identify -format %h "$work/shot.ppm")
         first="" last=""
+        # DIVIDER=right: the files panel's (its colour is on the right of the line; the sidebar's end stays still)
+        from=380 side=-3 corner=$((w - 300)) inkx=$((w - 600))
+        [ "${DIVIDER:-left}" != right ] || { from=$((w / 2)) side=3 corner=0 inkx=700; }
         for f in "$work"/shot.ppm.*.ppm; do
             xs=""
             for y in 6 $((h / 2)) $((h - 14)); do
-                x=$(magick "$f" -crop $((w - 380))x1+380+"$y" +repage -depth 8 txt:- | awk 'NR>1{split($1,a,","); split($2,v,/[(,)]/); if(v[2]+v[3]+v[4]>=110){print a[1]+380; exit}}')
+                x=$(magick "$f" -crop $((w - from))x1+"$from"+"$y" +repage -depth 8 txt:- | awk -v from="$from" -v rev="${DIVIDER:-left}" 'NR>1{split($1,a,","); split($2,v,/[(,)]/); if(v[2]+v[3]+v[4]>=110){hit=a[1]+from; if(rev!="right"){print hit; exit}}} END{if(rev=="right"&&hit)print hit}')
                 xs="$xs ${x:-none}"
             done
             set -- $xs
@@ -66,7 +71,7 @@ run() { # <name> <out.png> [more frames]: one scenario
             fi
             # the sidebar's tone reaches the line in the same frame: just left of it is the sidebar's, not the window's
             for y in 6 $((h / 2)); do
-                tone=$(magick "$f" -crop 1x1+$(( $(echo $xs | cut -d' ' -f1) - 3 ))+"$y" +repage -depth 8 txt:- | awk 'NR>1{split($2,v,/[(,)]/); print v[2]+v[3]+v[4]}')
+                tone=$(magick "$f" -crop 1x1+$(( $(echo $xs | cut -d' ' -f1) + side ))+"$y" +repage -depth 8 txt:- | awk 'NR>1{split($2,v,/[(,)]/); print v[2]+v[3]+v[4]}')
                 if [ "${tone:-0}" -gt 80 ]; then
                     echo "FAIL $name: the sidebar's tone lags the divider in $(basename "$f")" >&2
                     return 1
@@ -74,7 +79,7 @@ run() { # <name> <out.png> [more frames]: one scenario
             done
             if [ -n "${INK:-}" ]; then
                 # the transcript never blinks: some text is in the panel in every frame (a blank frame has ~0)
-                ink=$(magick "$f" -crop 560x350+$((w - 600))+120 +repage -colorspace Gray -threshold 35% -format '%[fx:int(mean*1000)]' info:)
+                ink=$(magick "$f" -crop 560x350+$((inkx))+120 +repage -colorspace Gray -threshold 35% -format '%[fx:int(mean*1000)]' info:)
                 if [ "$ink" -lt "$INK" ]; then
                     echo "FAIL $name: the transcript is blank or nearly in $(basename "$f") (ink $ink < $INK)" >&2
                     return 1
@@ -82,8 +87,8 @@ run() { # <name> <out.png> [more frames]: one scenario
             fi
             [ -n "$first" ] || first=$1
             last=$1
-            magick "$f" -crop 300x240+$((w - 300))+$((h - 300)) +repage "$work/corner.png"
-            magick "$f" -crop 300x80+$((w - 300))+0 +repage "$work/bar.png"
+            magick "$f" -crop 300x240+$((corner))+$((h - 300)) +repage "$work/corner.png"
+            magick "$f" -crop 300x80+$((corner))+0 +repage "$work/bar.png"
             if [ ! -f "$work/corner0.png" ]; then
                 cp "$work/corner.png" "$work/corner0.png"
                 cp "$work/bar.png" "$work/bar0.png"

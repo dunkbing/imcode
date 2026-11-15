@@ -19,6 +19,7 @@
 #include "imshell/notifications.hpp"
 #include "imshell/updater.hpp"
 #include <algorithm>
+#include <tuple>
 #include <chrono>
 #include <cctype>
 #include <cmath>
@@ -804,8 +805,10 @@ void App::frame() {
     // the sidebar's colour behind its part of the bar: laid down now, its right edge set once this frame's width is known
     ImDrawList* barList = ImGui::GetWindowDrawList();
     const int barTone = data.onboarded ? barList->VtxBuffer.Size : -1;
+    const int barRightTone = data.onboarded ? barList->VtxBuffer.Size + 4 : -1; // the files panel's, from its left edge on
     if (data.onboarded) {
         barList->AddRectFilled(bar.pos, ImVec2(bar.pos.x + 1, bar.pos.y + bar.size.y), ImGui::GetColorU32(colors.mantle));
+        barList->AddRectFilled(ImVec2(display.x - 1, bar.pos.y), ImVec2(display.x, bar.pos.y + bar.size.y), ImGui::GetColorU32(colors.mantle));
     }
     if (data.onboarded) {
         // the thread list's toggle, then the filter, add project and new thread: they stay when the list is hidden
@@ -873,8 +876,10 @@ void App::frame() {
     if (data.onboarded) {
         surface->PushClipRectFullScreen();
         surface->AddRectFilled(content.pos, ImVec2(content.pos.x + 1, content.pos.y + content.size.y), ImGui::GetColorU32(colors.mantle));
+        surface->AddRectFilled(ImVec2(display.x - 1, content.pos.y), ImVec2(display.x, content.pos.y + content.size.y), ImGui::GetColorU32(colors.mantle));
         surface->PopClipRect();
     }
+    const int surfaceRightTone = surfaceTone >= 0 ? surfaceTone + 4 : -1;
     if (!data.onboarded) {
         onboarding();
     } else {
@@ -883,6 +888,7 @@ void App::frame() {
         bool resized = false; // a panel was dragged to a new size: saved when let go
         float dividerX = 0, dividerTop = 0, dividerBottom = 0; // the sidebar's right edge, top and bottom: the line goes on past both
         float sidebarEdge = 0; // where the sidebar ends (0 = none)
+        float filesX = 0, filesTop = 0, filesBottom = 0; // the files panel's left edge, top and bottom (0 = not shown)
         const imshell::ResizableOptions lines{.line = ImGui::GetColorU32(themeColors().surface1),
                                               .lit = ImGui::GetColorU32(themeColors().blue)};
         // the thread: the chat (the terminal under it) and the files beside it, or the files
@@ -939,6 +945,9 @@ void App::frame() {
                 // the chat keeps 420 (its status line fits), the files 360
                 if (imshell::BeginResizable("beside", lines)) {
                     if (imshell::ResizablePanel({.min = 420})) {
+                        filesX = ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - 0.5f;
+                        filesTop = ImGui::GetWindowPos().y;
+                        filesBottom = filesTop + ImGui::GetWindowHeight();
                         work();
                     }
                     if (imshell::ResizablePanel({.size = &files.width, .min = 360})) {
@@ -987,19 +996,27 @@ void App::frame() {
                 uiThreadMs = trace::nowMs() - from;
             }
             resized |= imshell::EndResizable();
-            // the divider: one line from the top edge to the bottom, over the piece imshell draws between
-            // the panels (same pixel, same colour, lit the same), and its hit area along the whole length
-            const float scale = std::max(1.0f, ImGui::GetIO().DisplayFramebufferScale.x);
-            const float edge = dividerX + 0.5f;
-            const ImVec2 mouse = ImGui::GetIO().MousePos;
-            static bool grabbed = false; // a press on the line, until it is let go
+        }
+        // a divider: one line from the top edge to the bottom, over the piece imshell draws between the
+        // panels (same pixel, same colour, lit the same), with its hit area along the whole length. one
+        // for the sidebar's edge and one for the files panel's; dir is +1 when the panel grows to the right
+        struct Splitter {
+            bool grabbed = false; // a press on the line, until it is let go
+            float from = 0, start = 0;
+        };
+        static Splitter splits[2];
+        const float scale = std::max(1.0f, ImGui::GetIO().DisplayFramebufferScale.x);
+        const ImVec2 mouse = ImGui::GetIO().MousePos;
+        const auto splitter = [&](int n, float edgeX, float top, float bottom, float& width, float dir, float lo, float hi) {
+            Splitter& s = splits[n];
+            const float edge = edgeX + 0.5f;
             const bool over = ImGui::IsMouseHoveringRect(ImVec2(edge - 4, 0), ImVec2(edge + 4, display.y), false);
             if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-                grabbed = false;
+                s.grabbed = false;
             } else if (over && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-                grabbed = true;
+                s.grabbed = true;
             }
-            const bool lit = grabbed || (over && !ImGui::IsMouseDown(ImGuiMouseButton_Left));
+            const bool lit = s.grabbed || (over && !ImGui::IsMouseDown(ImGuiMouseButton_Left));
             ImDrawList* draw = ImGui::GetWindowDrawList();
             draw->PushClipRectFullScreen();
             const float at = std::floor(edge * scale) / scale;
@@ -1007,8 +1024,7 @@ void App::frame() {
                                 lit ? lines.lit : lines.line);
             draw->PopClipRect();
             // the ends beside the panels (the title bar, under the thread) are not imshell's handle
-            static float dragFrom = 0, dragWidth = 0;
-            const auto end = [&](const char* id, float from, float to) {
+            const auto end = [&](const std::string& id, float from, float to) {
                 if (to - from < 1) {
                     return;
                 }
@@ -1017,21 +1033,20 @@ void App::frame() {
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(0, 0));
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
-                ImGui::Begin(id, nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
-                                              ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove |
-                                              ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing);
+                ImGui::Begin(id.c_str(), nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
+                                                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove |
+                                                      ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing);
                 ImGui::InvisibleButton("##drag", ImVec2(8, to - from));
                 if (ImGui::IsItemHovered() || ImGui::IsItemActive()) {
                     ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
                 }
                 if (ImGui::IsItemActivated()) {
-                    dragFrom = mouse.x;
-                    dragWidth = sidebarWidth;
-                    grabbed = true;
+                    s.from = mouse.x;
+                    s.start = width;
+                    s.grabbed = true;
                 }
                 if (ImGui::IsItemActive()) {
-                    const float room = display.x - (files.open ? 781.0f : 420.0f) - 1;
-                    sidebarWidth = std::round(std::clamp(dragWidth + mouse.x - dragFrom, 200.0f, std::max(200.0f, room)));
+                    width = std::round(std::clamp(s.start + dir * (mouse.x - s.from), lo, std::max(lo, hi)));
                     imshell::requestFrames(std::chrono::milliseconds(100));
                 }
                 if (ImGui::IsItemDeactivated()) {
@@ -1040,15 +1055,26 @@ void App::frame() {
                 ImGui::End();
                 ImGui::PopStyleVar(3);
             };
-            end("##divider-top", 0, dividerTop);
-            end("##divider-bottom", dividerBottom, display.y);
+            end(std::format("##divider{}-top", n), 0, top);
+            end(std::format("##divider{}-bottom", n), bottom, display.y);
+        };
+        if (!narrow && dividerX > 0) {
+            splitter(0, dividerX, dividerTop, dividerBottom, sidebarWidth, 1, 200, display.x - (files.open ? 781.0f : 420.0f) - 1);
         }
-        // the sidebar's colour ends where this frame's divider is, not where last frame's was
-        for (const auto [list, tone] : {std::pair{barList, barTone}, std::pair{surface, surfaceTone}}) {
+        float filesEdge = display.x; // where the files panel's colour starts (nothing when it is closed)
+        if (!narrow && files.open && filesX > 0) {
+            filesEdge = filesX + 0.5f;
+            splitter(1, filesX, filesTop, filesBottom, files.width, -1, 360, display.x - (data.sidebarHidden ? 0 : sidebarWidth) - 420.0f - 1);
+        }
+        // the panels' colours end where this frame's dividers are, not where last frame's were
+        for (const auto [list, tone, rightTone] : {std::tuple{barList, barTone, barRightTone}, std::tuple{surface, surfaceTone, surfaceRightTone}}) {
             if (list && tone >= 0) {
                 const float right = std::max(sidebarEdge, list->VtxBuffer[static_cast<size_t>(tone)].pos.x);
                 list->VtxBuffer[static_cast<size_t>(tone) + 1].pos.x = right;
                 list->VtxBuffer[static_cast<size_t>(tone) + 2].pos.x = right;
+                const float left = std::min(filesEdge, display.x - 1);
+                list->VtxBuffer[static_cast<size_t>(rightTone)].pos.x = left;
+                list->VtxBuffer[static_cast<size_t>(rightTone) + 3].pos.x = left;
             }
         }
         if (resized) {

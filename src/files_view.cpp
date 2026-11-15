@@ -727,7 +727,7 @@ void App::dropIndicator() {
         const ImVec2 size = ImGui::CalcTextSize(label.c_str(), nullptr, false, wrap);
         const ImVec2 at(f.treeMin.x + (f.treeMax.x - f.treeMin.x - size.x) * 0.5f, f.treeMax.y - size.y - Theme::Spacing::L);
         draw->AddRectFilled(ImVec2(at.x - Theme::Spacing::M, at.y - Theme::Spacing::S), ImVec2(at.x + size.x + Theme::Spacing::M, at.y + size.y + Theme::Spacing::S),
-                            ImGui::GetColorU32(colors.mantle), Round::Row);
+                            ImGui::GetColorU32(colors.surface0), Round::Row);
         draw->AddText(ImGui::GetFont(), ImGui::GetFontSize(), at, ImGui::GetColorU32(colors.text), label.c_str(), nullptr, wrap);
     } else if (composerFrame == ImGui::GetFrameCount()) {
         mark(composerMin, composerMax, Round::Panel, "Drop to attach");

@@ -1,0 +1,7 @@
+# the changes tab of the right panel, with a changed and a new file: on the panel's tone, the line between it and the conversation full height
+DEV="new"
+FILES="a.txt src/main.cpp"
+SETUP="git init -q && git add -A && git -c user.email=a@b -c user.name=a commit -qm first && printf 'one\ntwo\nthree\n' > a.txt && printf 'x\n' > b.txt"
+INPUT="24 click 700 380;25 type hi;40 key enter;60 click 1274 19;100 click 900 80"
+FRAMES=160
+STABLE=60

@@ -1,0 +1,8 @@
+# the files panel's divider dragged: one line from the top edge to the bottom in every frame, its colour reaches it in the same frame, the transcript never blanks
+DEV="new;wide;long"
+FILES="a.txt src/main.cpp"
+INPUT="60 click 1241 19;120 drag 782 300 1000 300"
+FRAMES=170
+SERIES=40
+DIVIDER=right
+INK=15
