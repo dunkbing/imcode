@@ -1579,8 +1579,28 @@ void App::threadBody(Thread& t) {
                                                       ImGui::GetColorU32(colors.yellow), 2);
         }
     };
+    // a divider being dragged: the text keeps the width it had and reflows once when it is let go, so a
+    // frame is not a relayout of every row and the text does not trail the scroll (the right side crops)
+    static bool dividerDown = false;
+    static float frozenWidth = 0;
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        const ImGuiWindow* over = ImGui::GetCurrentContext()->HoveredWindow;
+        const std::string name = over ? over->Name : "";
+        dividerDown = name.find("handle") != std::string::npos || name.find("divider") != std::string::npos;
+    } else if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        dividerDown = false;
+    }
+    if (!dividerDown) {
+        frozenWidth = 0;
+    } else if (frozenWidth <= 0) {
+        frozenWidth = width;
+    }
+    const float rowWidth = dividerDown ? frozenWidth : width;
+    if (dividerDown) {
+        imshell::requestFrames(); // the end of the drag is drawn
+    }
     ImGui::Indent(left);
-    ImGui::PushTextWrapPos(left + width);
+    ImGui::PushTextWrapPos(left + rowWidth);
     // only the rows near the view are drawn; the others are a gap of their last measured height
     // (an estimate until drawn once). a row is an item or a fold of tool calls, keyed by its first item
     struct RowHeights {
@@ -1590,7 +1610,7 @@ void App::threadBody(Thread& t) {
     static std::map<const Thread*, RowHeights> rowHeights;
     RowHeights& rows = rowHeights[&t];
     // a new width keeps the old heights as estimates: clearing them made every row a guess each frame of a drag
-    rows.width = width;
+    rows.width = rowWidth;
     rows.h.resize(t.items.size(), 0.0f);
     float guess = 120.0f;
     {
@@ -1646,7 +1666,7 @@ void App::threadBody(Thread& t) {
         if (end - i >= 3) {
             auto& open = openGroups[&t];
             const bool shown = open.contains(i);
-            if (toolGroupRow(t, i, end, width, shown)) {
+            if (toolGroupRow(t, i, end, rowWidth, shown)) {
                 if (shown) {
                     open.erase(i);
                 } else {
@@ -1657,7 +1677,7 @@ void App::threadBody(Thread& t) {
                 find.itemY[k] = ImGui::GetCursorPosY(); // folded: the line stands for them
                 if (shown) {
                     mark(k);
-                    transcriptItem(t, t.items[k], static_cast<int>(k), width);
+                    transcriptItem(t, t.items[k], static_cast<int>(k), rowWidth);
                 }
             }
             measured();
@@ -1666,7 +1686,7 @@ void App::threadBody(Thread& t) {
         }
         find.itemY[i] = ImGui::GetCursorPosY();
         mark(i);
-        transcriptItem(t, t.items[i], static_cast<int>(i), width);
+        transcriptItem(t, t.items[i], static_cast<int>(i), rowWidth);
         measured();
     }
     // how long the turn has run
