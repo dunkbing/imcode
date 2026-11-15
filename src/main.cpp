@@ -756,6 +756,46 @@ void App::traceState() {
     }
 }
 
+// a burst of conversation width changes (a divider dragged): how many frames drew, the longest wait
+// between two, and the slowest, said once it stops. a long gap with a small cost is the frame pacing,
+// a large cost is the layout
+static void traceResize(double frameFrom, float width) {
+    static struct {
+        bool on = false;
+        float width = -1, from = 0;
+        double startedAt = 0, lastChange = 0, prevStart = 0, maxGap = 0, maxCost = 0, sumCost = 0;
+        int frames = 0, late = 0;
+    } r;
+    const double now = trace::nowMs();
+    const double gap = r.prevStart > 0 ? frameFrom - r.prevStart : 0;
+    r.prevStart = frameFrom;
+    if (width >= 0 && r.width >= 0 && std::abs(width - r.width) > 0.5f) {
+        if (!r.on) {
+            r = {.on = true, .width = r.width, .from = r.width, .startedAt = frameFrom, .prevStart = frameFrom};
+        }
+        r.lastChange = now;
+    }
+    if (width >= 0) {
+        r.width = width;
+    }
+    if (!r.on) {
+        return;
+    }
+    r.frames += 1;
+    r.maxGap = std::max(r.maxGap, gap);
+    r.late += gap > 25;
+    r.maxCost = std::max(r.maxCost, now - frameFrom);
+    r.sumCost += now - frameFrom;
+    if (now - r.lastChange < 300) {
+        imshell::requestFrames(std::chrono::milliseconds(300)); // so the end is seen
+        return;
+    }
+    trace::line(std::format("resize  width={:.0f}->{:.0f} over={:.0f}ms frames={} late(>25ms)={} max-gap={:.1f}ms max-cost={:.1f}ms avg-cost={:.2f}ms",
+                            r.from, r.width, r.lastChange - r.startedAt, r.frames, r.late, r.maxGap, r.maxCost,
+                            r.sumCost / std::max(1, r.frames)));
+    r.on = false;
+}
+
 // the host of the open thread (else a connected one) is tested off the ui thread; a dropped
 // connection is opened again and its threads' agents resume under what is on screen
 void App::linkCheck(const char* cause) {
@@ -1486,6 +1526,7 @@ void App::frame() {
         frameSpan.note(std::format("sidebar={:.0f}ms thread-area={:.0f}ms", uiSidebarMs, uiThreadMs));
     }
     uiSidebarMs = uiThreadMs = 0;
+    traceResize(frameFrom, crumb.on ? crumb.right - crumb.left : -1.0f);
 }
 
 int main(int argc, char** argv) {
