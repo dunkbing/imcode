@@ -174,6 +174,7 @@ struct App : imshell::Delegate {
             int widest = 0;               // index of the longest line
         };
         imshell::TextEditor editor; // shows doc
+        bool wrap = true;           // soft wrap in the viewer
         // the picture being shown, uploaded from doc.image
         // shortcut: its texture is not freed when another replaces it (imshell has no call for that yet)
         ImTextureID picture{};

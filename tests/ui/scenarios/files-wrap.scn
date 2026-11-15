@@ -1,0 +1,7 @@
+# a long line wraps in the file viewer (on by default)
+DEV="new"
+FILES="a.txt"
+SETUP="yes 'a very long line of words that should wrap inside the viewer panel instead of scrolling sideways, and the second line is short' | head -n 3 > a.txt"
+INPUT="24 click 700 380;25 type hi;40 key enter;60 click 1241 19;100 click 829 48"
+FRAMES=160
+STABLE=60

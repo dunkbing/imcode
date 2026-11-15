@@ -394,6 +394,7 @@ namespace {
             f.shownPath = f.doc.path;
             f.shownRev = f.docRev;
         }
+        f.editor.SetWordWrap(f.wrap);
         f.editor.Render("##code", ImVec2(0, 0));
     }
 } // namespace
@@ -558,7 +559,7 @@ bool App::filesPanel(Thread& t, bool beside) {
             ImGui::SameLine();
             ImGui::AlignTextToFramePadding();
             const std::string project = fs::path(t.projectDir()).filename().string();
-            const float room = ImGui::GetContentRegionAvail().x;
+            const float room = ImGui::GetContentRegionAvail().x - button - ImGui::GetStyle().ItemSpacing.x; // the wrap toggle sits at the right
             const float gap = ImGui::GetStyle().ItemSpacing.x;
             const auto width = [](const std::string& s) { return ImGui::CalcTextSize(s.c_str()).x; };
             const float whole = width(project) + gap + width(ICON_FA_CHEVRON_RIGHT) + gap + width(f.doc.path);
@@ -588,6 +589,16 @@ bool App::filesPanel(Thread& t, bool beside) {
                     ImGui::SameLine(0, 0);
                 }
                 ImGui::TextUnformatted(shown.c_str() + (slash == std::string::npos ? 0 : slash + 1));
+            }
+            if (f.doc.image.empty()) {
+                ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - button);
+                if (imshell::IconButton(ICON_FA_ALIGN_LEFT, f.wrap ? imshell::ButtonVariant::Primary : imshell::ButtonVariant::Secondary,
+                                        ImVec2(button, button))) {
+                    f.wrap = !f.wrap;
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip(f.wrap ? "Wrap long lines: on" : "Wrap long lines: off");
+                }
             }
             if (!f.doc.note.empty()) {
                 ImGui::TextColored(colors.yellow, "%s", f.doc.note.c_str());
